@@ -18,7 +18,7 @@ import java.util.Locale
  * enforces a strict department & classification allowlist, and injects zero fake safety tags.
  */
 class MetMuseumCc0SourceAdapter(
-    private val httpClient: HttpClient = DefaultHttpsClient()
+    private val httpClient: HttpClient = DefaultHttpsClient.shared
 ) : WallpaperSourceAdapter {
 
     override val sourceId: String = "met_museum_cc0"

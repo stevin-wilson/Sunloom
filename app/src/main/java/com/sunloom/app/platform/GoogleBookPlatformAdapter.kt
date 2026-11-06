@@ -338,31 +338,30 @@ class GoogleBookPlatformAdapter(
         val sourceBitmap = decodeBitmapBounded(file, maxDecodeW, maxDecodeH)
             ?: return WallpaperStatus.FAILED_TEMPORARILY
 
-        val preparedBitmap = if (envelopePlan != null) {
-            prepareEnvelopeBitmap(source = sourceBitmap, plan = envelopePlan, fallbackDisplay = effectiveDisplay)
-        } else {
-            prepareNonStretchedBitmap(
-                source = sourceBitmap,
-                display = effectiveDisplay,
-                cropRect = record.evaluation.cropRect
-            )
-        }
+        var preparedBitmap: Bitmap? = null
+        val applied = try {
+            preparedBitmap = if (envelopePlan != null) {
+                prepareEnvelopeBitmap(source = sourceBitmap, plan = envelopePlan, fallbackDisplay = effectiveDisplay)
+            } else {
+                prepareNonStretchedBitmap(
+                    source = sourceBitmap,
+                    display = effectiveDisplay,
+                    cropRect = record.evaluation.cropRect
+                )
+            }
 
-        val flags = when (policy) {
-            LockWorkspacePolicy.SAME_ON_BOTH -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
-            LockWorkspacePolicy.WORKSPACE_ONLY -> WallpaperManager.FLAG_SYSTEM
-            LockWorkspacePolicy.LOCK_ONLY -> WallpaperManager.FLAG_LOCK
-        }
+            val flags = when (policy) {
+                LockWorkspacePolicy.SAME_ON_BOTH -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
+                LockWorkspacePolicy.WORKSPACE_ONLY -> WallpaperManager.FLAG_SYSTEM
+                LockWorkspacePolicy.LOCK_ONLY -> WallpaperManager.FLAG_LOCK
+            }
 
-        val applied = if (dryRunPreviewOnly) {
-            true
-        } else {
-            gateway.applyBitmapToDestination(preparedBitmap, flags)
+            if (dryRunPreviewOnly) true else gateway.applyBitmapToDestination(preparedBitmap, flags)
+        } finally {
+            // Always release native pixel memory, even if cropping or setBitmap throws.
+            if (preparedBitmap != null && preparedBitmap !== sourceBitmap) preparedBitmap.recycle()
+            sourceBitmap.recycle()
         }
-        if (preparedBitmap != sourceBitmap) {
-            preparedBitmap.recycle()
-        }
-        sourceBitmap.recycle()
 
         return if (applied) WallpaperStatus.APPLIED_SUCCESSFULLY else WallpaperStatus.FAILED_TEMPORARILY
     }

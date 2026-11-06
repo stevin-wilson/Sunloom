@@ -160,7 +160,9 @@ internal fun ReserveAndHistoryPane(
                             showLegibilityZones = false,
                             modifier = Modifier
                                 .width(120.dp)
-                                .aspectRatio(thumbnailAspect)
+                                .aspectRatio(thumbnailAspect),
+                            maxDecodeWidth = 480,
+                            maxDecodeHeight = 480
                         )
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

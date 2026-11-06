@@ -197,9 +197,24 @@ class MainViewModel(
     }
 
     fun updatePreferences(transform: (UserPreferences) -> UserPreferences) {
+        // Optimistic: reflect the change in the controls immediately (Doherty threshold) while the
+        // persisted save + reconcile runs; the gateway snapshot then replaces this state.
+        val previous = _uiState.value.preferences
+        val updated = transform(previous)
+        if (updated != previous) {
+            _uiState.value = _uiState.value.copy(preferences = updated)
+        }
         launchGatewayMutation { current ->
-            val updated = transform(current.preferences)
-            gateway.savePreferences(updated)
+            try {
+                gateway.savePreferences(updated)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                current.copy(
+                    preferences = previous,
+                    statusBannerMessage = "Couldn't save that setting. Your previous choice was kept."
+                )
+            }
         }
     }
 
@@ -691,14 +706,17 @@ class AndroidSunloomGateway(
     override suspend fun savePreferences(preferences: UserPreferences): SunloomUiState = withGatewayIo { repo ->
         val activeBefore = repo.getCurrentWallpaperId()
         val cleanPreferences = preferences.copy(dryRunPreviewOnly = false)
+        val previousPreferences = repo.loadPreferences()
+        // Schedule-only / toggle-only edits (the common case) skip the reserve-wide reconcile.
+        val reserveAffected = cleanPreferences.affectsReserve(previousPreferences)
         val connectedDisplays = platformAdapter.getConnectedDisplays()
         val display = platformAdapter.getPrimaryOrSharpestDisplayOrNull(connectedDisplays)
         repo.savePreferences(cleanPreferences)
-        if (display != null) {
+        if (display != null && reserveAffected) {
             repo.ensureSeedReserveLoadedForDisplays(connectedDisplays, cleanPreferences.displayPolicy)
             repo.reconcileReserveForDisplaySet(connectedDisplays, cleanPreferences)
         }
-        repo.enforceCacheLimit()
+        if (reserveAffected) repo.enforceCacheLimit()
         platformAdapter.syncPeriodicSchedule(
             autoEnabled = cleanPreferences.autoChangeEnabled,
             isPaused = cleanPreferences.isPaused,
@@ -706,7 +724,7 @@ class AndroidSunloomGateway(
             deferBatterySaver = cleanPreferences.deferOnBatterySaver,
             preferences = cleanPreferences
         )
-        if (display != null) {
+        if (display != null && reserveAffected) {
             reconcileActiveWallpaperForDisplay(repo, display, connectedDisplays, cleanPreferences, activeBefore)
             promoteNonSeedOverSeedIfNeeded(repo, cleanPreferences, display, connectedDisplays)
         }
@@ -989,3 +1007,17 @@ class AndroidSunloomGateway(
         )
     }
 }
+
+/**
+ * True when changing from [previous] to this affects which reserve items are eligible, which are
+ * active, or how much cache may be kept, i.e. when the heavy reserve reconcile must run. Pure
+ * schedule, location, network and lock-destination edits do not.
+ */
+internal fun UserPreferences.affectsReserve(previous: UserPreferences): Boolean =
+    isSetupCompleted != previous.isSetupCompleted ||
+        enabledCategories != previous.enabledCategories ||
+        enabledSources != previous.enabledSources ||
+        displayPolicy != previous.displayPolicy ||
+        allowBlurredFrameFill != previous.allowBlurredFrameFill ||
+        maxCacheBytes != previous.maxCacheBytes ||
+        baselineRestorePath != previous.baselineRestorePath

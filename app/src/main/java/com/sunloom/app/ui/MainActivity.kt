@@ -42,6 +42,8 @@ class MainActivity : ComponentActivity() {
 
     /** True while the system bars are hidden for unobstructed wallpaper viewing (F11). */
     private var isFullscreen by mutableStateOf(false)
+    private var lastNightMask = Int.MIN_VALUE
+    private var hasStartedBefore = false
     private val debouncedDisplayRunnable = Runnable {
         notifyDisplaysChangedNow()
     }
@@ -82,6 +84,7 @@ class MainActivity : ComponentActivity() {
             )
         }
         super.onCreate(savedInstanceState)
+        lastNightMask = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
 
         gateway = AndroidSunloomGateway(applicationContext)
         viewModel = ViewModelProvider(
@@ -168,7 +171,10 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         val displayManager = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
         displayManager?.registerDisplayListener(displayListener, mainHandler)
-        notifyDisplaysChangedNow()
+        // The ViewModel's initial load already probes displays on a cold start; only re-check
+        // when returning from the background, where a dock/undock may have been missed.
+        if (hasStartedBefore) notifyDisplaysChangedNow()
+        hasStartedBefore = true
     }
 
     override fun onStop() {
@@ -205,9 +211,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        if (::viewModel.isInitialized) {
+        if (!::viewModel.isInitialized) return
+        // Free-form window resizes fire this per frame; only a real Light/Dark flip needs the
+        // (expensive) snapshot reload. Size/density changes are covered by the debounced check.
+        val nightMask = newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        if (nightMask != lastNightMask) {
+            lastNightMask = nightMask
             viewModel.onSystemUiModeChanged()
-            scheduleDebouncedDisplayCheck()
         }
+        scheduleDebouncedDisplayCheck()
     }
 }

@@ -14,7 +14,7 @@ import java.util.Locale
  * enforces fail-closed `is_public_domain == true` (default false), and injects zero fake tags.
  */
 class ArtInstituteCc0SourceAdapter(
-    private val httpClient: HttpClient = DefaultHttpsClient()
+    private val httpClient: HttpClient = DefaultHttpsClient.shared
 ) : WallpaperSourceAdapter {
 
     override val sourceId: String = "artic_cc0"

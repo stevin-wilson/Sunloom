@@ -607,13 +607,13 @@ fun FirstRunSetupScreen(
 
                     if (sampleLight != null) {
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            WallpaperPreviewSurface(record = sampleLight, showLegibilityZones = false, modifier = Modifier.height(130.dp))
+                            WallpaperPreviewSurface(record = sampleLight, showLegibilityZones = false, modifier = Modifier.height(130.dp), maxDecodeWidth = 640, maxDecodeHeight = 400)
                             TruncatedTitleWithTooltip("Daytime: ${sampleLight.title}", style = MaterialTheme.typography.labelLarge)
                         }
                     }
                     if (sampleDark != null) {
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            WallpaperPreviewSurface(record = sampleDark, showLegibilityZones = false, modifier = Modifier.height(130.dp))
+                            WallpaperPreviewSurface(record = sampleDark, showLegibilityZones = false, modifier = Modifier.height(130.dp), maxDecodeWidth = 640, maxDecodeHeight = 400)
                             TruncatedTitleWithTooltip("Evening: ${sampleDark.title}", style = MaterialTheme.typography.labelLarge)
                         }
                     }
