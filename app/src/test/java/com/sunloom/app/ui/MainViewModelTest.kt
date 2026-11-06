@@ -283,6 +283,36 @@ class MainViewModelTest {
     }
 
     @Test
+    fun `removing several reserve items shares one undo and finalizes them together`() {
+        viewModel.removeManyFromReserveWithUndo(listOf("seed-1", "seed-2"))
+        val pending = viewModel.uiState.value.pendingDiscard
+        assertEquals(setOf("seed-1", "seed-2"), pending?.allRecordIds?.toSet())
+        assertEquals("2 wallpapers", pending?.title)
+        // Nothing is deleted until the undo window ends.
+        assertEquals(2, viewModel.uiState.value.libraryWallpapers.size)
+
+        viewModel.commitPendingDiscard()
+        assertEquals(0, viewModel.uiState.value.libraryWallpapers.size)
+    }
+
+    @Test
+    fun `undoing a batch removal restores the wallpaper that was active`() {
+        viewModel.removeManyFromReserveWithUndo(listOf("seed-2", "seed-1"))
+        // seed-1 was active, so the app moved on; undo must bring seed-1 back even though it is not the first id.
+        viewModel.undoPendingDiscard()
+        assertEquals(null, viewModel.uiState.value.pendingDiscard)
+        assertEquals("seed-1", viewModel.uiState.value.currentWallpaper?.id)
+        assertEquals(2, viewModel.uiState.value.libraryWallpapers.size)
+    }
+
+    @Test
+    fun `removing a single id through the batch api behaves like a normal removal`() {
+        viewModel.removeManyFromReserveWithUndo(listOf("seed-2"))
+        assertEquals("seed-2", viewModel.uiState.value.pendingDiscard?.recordId)
+        assertEquals(emptyList<String>(), viewModel.uiState.value.pendingDiscard?.additionalRecordIds)
+    }
+
+    @Test
     fun `deleteFromReserve removes specific item from reserve`() {
         assertEquals(2, viewModel.uiState.value.libraryWallpapers.size)
         viewModel.deleteFromReserve("seed-2")

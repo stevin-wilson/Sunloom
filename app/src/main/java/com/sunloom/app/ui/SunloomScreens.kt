@@ -76,6 +76,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.isShiftPressed
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import com.sunloom.app.domain.attribution.AttributionFormatter
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -178,6 +184,8 @@ fun SunloomApp(
     isFullscreen: Boolean = false,
     onToggleFullscreen: () -> Unit = {},
     onDropImages: (android.view.DragEvent) -> Boolean = { false },
+    onSaveAs: (com.sunloom.app.domain.model.WallpaperRecord) -> Unit = {},
+    onDeleteManyFromReserve: (Collection<String>) -> Unit = { ids -> ids.forEach(onDeleteFromReserve) },
     onUndoDiscard: () -> Unit = {},
     onCommitDiscard: () -> Unit = {},
     darkTheme: Boolean = isSystemInDarkTheme()
@@ -200,6 +208,19 @@ fun SunloomApp(
     val restoreRootFocus: () -> Unit = remember(rootFocusRequester) {
         { runCatching { rootFocusRequester.requestFocus() }; Unit }
     }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val attributionCopiedMessage = stringResource(R.string.attribution_copied)
+    val copyAttribution: (com.sunloom.app.domain.model.WallpaperRecord) -> Unit = { record ->
+        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+        clipboard?.setPrimaryClip(
+            android.content.ClipData.newPlainText(record.title, AttributionFormatter.format(record))
+        )
+        scope.launch { snackbarHostState.showSnackbar(attributionCopiedMessage) }
+    }
+    val wallpaperActions = remember(onSaveAs, copyAttribution, onDeleteManyFromReserve) {
+        WallpaperActions(onSaveAs, copyAttribution, onDeleteManyFromReserve)
+    }
     val dropTarget = remember(onDropImages) {
         object : DragAndDropTarget {
             override fun onDrop(event: DragAndDropEvent): Boolean = onDropImages(event.toAndroidDragEvent())
@@ -208,12 +229,14 @@ fun SunloomApp(
 
     CompositionLocalProvider(
         LocalShortcutGate provides shortcutGate,
-        LocalRestoreRootFocus provides restoreRootFocus
+        LocalRestoreRootFocus provides restoreRootFocus,
+        LocalWallpaperActions provides wallpaperActions
     ) {
     MaterialTheme(colorScheme = colorScheme) {
         Surface(
             modifier = Modifier
                 .fillMaxSize()
+                .busyCursor(uiState.isApplyingWallpaper || uiState.isSyncingOnline)
                 .focusRequester(rootFocusRequester)
                 .focusable()
                 .onKeyEvent { event ->
@@ -226,6 +249,25 @@ fun SunloomApp(
                             onSelectTab(tab)
                             return@onKeyEvent true
                         }
+                        val current = uiState.currentWallpaper
+                        when (
+                            ctrlActionFor(
+                                key = event.key,
+                                shift = event.isShiftPressed,
+                                textInputFocused = shortcutGate.isTextInputFocused,
+                                hasPendingUndo = uiState.pendingDiscard != null,
+                                hasCurrentWallpaper = current != null
+                            )
+                        ) {
+                            CtrlAction.UNDO -> { onUndoDiscard(); return@onKeyEvent true }
+                            CtrlAction.COPY_ATTRIBUTION -> { current?.let(copyAttribution); return@onKeyEvent true }
+                            CtrlAction.SAVE_AS -> { current?.let(onSaveAs); return@onKeyEvent true }
+                            CtrlAction.OPEN_SCHEDULE -> {
+                                onSelectTab(DesktopNavTab.DISPLAYS_AND_SCHEDULE)
+                                return@onKeyEvent true
+                            }
+                            null -> Unit
+                        }
                     }
                     if (event.type != KeyEventType.KeyUp || !isPlainKeyEvent(event)) {
                         return@onKeyEvent false
@@ -237,6 +279,12 @@ fun SunloomApp(
                         }
                         event.key == Key.Escape && isFullscreen -> {
                             onToggleFullscreen()
+                            true
+                        }
+                        // Esc backs out of whatever has focus (a text field, chip or button) to the
+                        // workspace, so single-key accelerators work again (Keyboard_Exit).
+                        event.key == Key.Escape && workspaceReady -> {
+                            restoreRootFocus()
                             true
                         }
                         // Single-key accelerators never fire while typing or before setup is complete.
@@ -319,7 +367,7 @@ fun SunloomApp(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                OutlinedButton(onClick = onRestoreSystemDefault) {
+                                OutlinedButton(onClick = onRestoreSystemDefault, modifier = Modifier.desktopControl(RoundedCornerShape(50))) {
                                     Text(stringResource(R.string.restore_system_default_wallpaper))
                                 }
                             }
@@ -423,7 +471,11 @@ private fun UndoSnackbarEffect(
         if (pending == null) return@LaunchedEffect
         val message = when (pending.kind) {
             DiscardKind.DISLIKE -> "Disliked '${pending.title}'"
-            DiscardKind.REMOVE -> "Removed '${pending.title}' from reserve"
+            DiscardKind.REMOVE -> if (pending.additionalRecordIds.isEmpty()) {
+                "Removed '${pending.title}' from reserve"
+            } else {
+                "Removed ${pending.title} from reserve"
+            }
         }
         val result = snackbarHostState.showSnackbar(
             message = message,
@@ -510,6 +562,15 @@ fun CityDropdownSelector(
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
                 .fillMaxWidth()
+                .onPreviewKeyEvent { event ->
+                    // First Esc clears the search text; the next one leaves the field (Keyboard_Exit).
+                    if (event.key == Key.Escape && query.isNotEmpty()) {
+                        if (event.type == KeyEventType.KeyUp) query = ""
+                        true
+                    } else {
+                        false
+                    }
+                }
                 .suppressShortcutsWhileFocused()
                 .testTag("city_dropdown_field")
         )
@@ -603,7 +664,7 @@ fun FirstRunSetupScreen(
                     }
                     Switch(
                         checked = draftPrefs.autoChangeEnabled,
-                        onCheckedChange = { draftPrefs = draftPrefs.copy(autoChangeEnabled = it) }
+                        onCheckedChange = { draftPrefs = draftPrefs.copy(autoChangeEnabled = it) }, modifier = Modifier.desktopControl(RoundedCornerShape(50))
                     )
                 }
 
@@ -619,7 +680,7 @@ fun FirstRunSetupScreen(
                             FilterChip(
                                 selected = draftPrefs.scheduleMode == mode,
                                 onClick = { draftPrefs = draftPrefs.copy(scheduleMode = mode) },
-                                label = { Text(mode.label) }
+                                label = { Text(mode.label) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
                             )
                         }
                     }
@@ -673,7 +734,7 @@ fun FirstRunSetupScreen(
                                 }
                                 draftPrefs = draftPrefs.copy(enabledCategories = next)
                             },
-                            label = { Text(cat.displayName) }
+                            label = { Text(cat.displayName) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
                         )
                     }
                 }
@@ -695,7 +756,7 @@ fun FirstRunSetupScreen(
                         FilterChip(
                             selected = draftPrefs.lockWorkspacePolicy == policy,
                             onClick = { draftPrefs = draftPrefs.copy(lockWorkspacePolicy = policy) },
-                            label = { Text(policy.label) }
+                            label = { Text(policy.label) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
                         )
                     }
                 }
@@ -740,7 +801,7 @@ fun FirstRunSetupScreen(
                 ) {
                     Button(
                         onClick = { onCompleteSetup(draftPrefs.copy(dryRunPreviewOnly = false)) },
-                        modifier = Modifier.testTag("enable_sunloom_button")
+                        modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("enable_sunloom_button")
                     ) {
                         Icon(SunloomIcons.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))

@@ -154,6 +154,7 @@ internal fun TodayCanvasPane(
                 if (restricted) {
                     HostRestrictionNotice()
                 }
+                val actions = LocalWallpaperActions.current
                 ContextMenuHost(
                     modifier = Modifier.fillMaxWidth(),
                     focusShape = RoundedCornerShape(16.dp),
@@ -170,6 +171,12 @@ internal fun TodayCanvasPane(
                                 "ctx_keep"
                             ) { dismiss(); onToggleKeep() }
                             ContextMenuItem("About this image\u2026", "ctx_about") { dismiss(); showAbout = true }
+                            ContextMenuItem(stringResource(R.string.copy_attribution), "ctx_copy_attribution") {
+                                dismiss(); actions.copyAttribution(current)
+                            }
+                            ContextMenuItem(stringResource(R.string.save_wallpaper_as), "ctx_save_as") {
+                                dismiss(); actions.saveAs(current)
+                            }
                             if (!restricted) {
                                 ContextMenuItem(stringResource(R.string.restore_original_wallpaper), "ctx_restore") { dismiss(); onRestoreOriginal() }
                             }
@@ -219,13 +226,21 @@ internal fun TodayCanvasPane(
 
                             if (current != null) {
                                 val previewAspect = primaryDisplayAspect(uiState, 0.75f, 2.6f)
-                                WallpaperPreviewSurface(
-                                    record = current,
-                                    showLegibilityZones = uiState.showLegibilityZonesOverlay,
+                                val zoomState = remember(current.id) { mutableStateOf(ZoomState()) }
+                                Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .aspectRatio(previewAspect)
-                                )
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .zoomablePreview(zoomState)
+                                        .testTag("today_preview")
+                                ) {
+                                    WallpaperPreviewSurface(
+                                        record = current,
+                                        showLegibilityZones = uiState.showLegibilityZonesOverlay,
+                                        modifier = Modifier.fillMaxSize().applyZoom(zoomState.value)
+                                    )
+                                }
                             }
 
                             Row(
@@ -462,8 +477,11 @@ internal fun ProvenanceLinkRow(label: String, displayText: String, url: String) 
                 modifier = Modifier
                     .testTag("source_page_link")
                     .then(if (url.startsWith("https://")) Modifier.handCursor() else Modifier)
-                    .desktopFocusRing(RoundedCornerShape(4.dp))
-                    // Grow the hit area to a comfortable 48dp target (Fitts) without changing the text.
+                    // The 48dp target IS the visual: the focus ring and hover tint are drawn by modifiers
+                    // OUTSIDE minimumInteractiveComponentSize, so they wrap the whole hit area and the
+                    // cursor target matches what the user sees (Cursor_Target_Size).
+                    .desktopFocusRing(RoundedCornerShape(8.dp))
+                    .then(if (url.startsWith("https://")) Modifier.desktopHover(RoundedCornerShape(8.dp)) else Modifier)
                     .minimumInteractiveComponentSize()
                     .clickable(
                         enabled = url.startsWith("https://"),

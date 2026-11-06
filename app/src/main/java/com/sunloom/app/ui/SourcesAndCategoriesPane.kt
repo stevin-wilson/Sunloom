@@ -115,7 +115,7 @@ internal fun SourcesAndCategoriesPane(
                         }
                         Switch(
                             checked = id in uiState.preferences.enabledSources,
-                            onCheckedChange = { onToggleSource(id) }
+                            onCheckedChange = { onToggleSource(id) }, modifier = Modifier.desktopControl(RoundedCornerShape(50))
                         )
                     }
                 }
@@ -133,7 +133,7 @@ internal fun SourcesAndCategoriesPane(
                     }
                     Switch(
                         checked = uiState.preferences.wifiOnlyDownloads,
-                        onCheckedChange = onToggleWifiOnly
+                        onCheckedChange = onToggleWifiOnly, modifier = Modifier.desktopControl(RoundedCornerShape(50))
                     )
                 }
 
@@ -153,7 +153,7 @@ internal fun SourcesAndCategoriesPane(
                     Switch(
                         checked = uiState.preferences.deferOnBatterySaver,
                         onCheckedChange = onToggleBatterySaverDeferral,
-                        modifier = Modifier.testTag("defer_battery_saver_switch")
+                        modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("defer_battery_saver_switch")
                     )
                 }
             }
@@ -174,11 +174,11 @@ internal fun SourcesAndCategoriesPane(
                         FilterChip(
                             selected = cat in uiState.preferences.enabledCategories,
                             onClick = { onToggleCategory(cat) },
-                            label = { Text(cat.displayName) }
+                            label = { Text(cat.displayName) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
                         )
                     }
                 }
-                Button(onClick = onSyncOnline, enabled = !uiState.isSyncingOnline, modifier = Modifier.testTag("sync_online_button")) {
+                Button(onClick = onSyncOnline, enabled = !uiState.isSyncingOnline, modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("sync_online_button")) {
                     Icon(SunloomIcons.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(if (uiState.isSyncingOnline) stringResource(R.string.syncing) else stringResource(R.string.sync_catalog_now))

@@ -52,8 +52,15 @@ data class PendingDiscard(
     val recordId: String,
     val title: String,
     val kind: DiscardKind,
-    val wasCurrent: Boolean
-)
+    val wasCurrent: Boolean,
+    /** Extra records removed in the same batch (multi-select). Empty for a single Dislike/Remove. */
+    val additionalRecordIds: List<String> = emptyList(),
+    /** The active wallpaper at the time of the action, restored by Undo (may be in [additionalRecordIds]). */
+    val currentRecordId: String? = null
+) {
+    /** Every record hidden from the UI while this action can still be undone. */
+    val allRecordIds: List<String> get() = listOf(recordId) + additionalRecordIds
+}
 
 data class SunloomUiState(
     val activeTab: DesktopNavTab = DesktopNavTab.TODAY_CANVAS,
@@ -213,6 +220,11 @@ class MainViewModel(
                 }
             }
         }
+    }
+
+    /** Shows a short result message in the status banner (used by one-shot platform actions like export). */
+    fun announce(message: String) {
+        _uiState.value = _uiState.value.copy(statusBannerMessage = message)
     }
 
     fun selectTab(tab: DesktopNavTab) {
@@ -437,11 +449,44 @@ class MainViewModel(
         beginDiscard(record.id, record.title, DiscardKind.REMOVE)
     }
 
-    private fun beginDiscard(recordId: String, title: String, kind: DiscardKind) {
+    /**
+     * Removes several reserve items at once (multi-select) behind a single timed Undo, matching the
+     * single-item flow of Article XII §3. Unknown ids are ignored.
+     */
+    fun removeManyFromReserveWithUndo(recordIds: Collection<String>) {
+        val known = _uiState.value.libraryWallpapers.filter { it.id in recordIds }
+        if (known.isEmpty()) return
+        if (known.size == 1) {
+            beginDiscard(known.first().id, known.first().title, DiscardKind.REMOVE)
+            return
+        }
+        beginDiscard(
+            recordId = known.first().id,
+            title = "${known.size} wallpapers",
+            kind = DiscardKind.REMOVE,
+            additionalRecordIds = known.drop(1).map { it.id }
+        )
+    }
+
+    private fun beginDiscard(
+        recordId: String,
+        title: String,
+        kind: DiscardKind,
+        additionalRecordIds: List<String> = emptyList()
+    ) {
         commitPendingDiscard() // only one undoable action at a time; finalize the previous one
-        val wasCurrent = _uiState.value.currentWallpaper?.id == recordId
+        val currentId = _uiState.value.currentWallpaper?.id
+        val wasCurrent = currentId != null && (currentId == recordId || currentId in additionalRecordIds)
         _uiState.value = _uiState.value.copy(
-            pendingDiscard = PendingDiscard(++nextDiscardToken, recordId, title, kind, wasCurrent)
+            pendingDiscard = PendingDiscard(
+                token = ++nextDiscardToken,
+                recordId = recordId,
+                title = title,
+                kind = kind,
+                wasCurrent = wasCurrent,
+                additionalRecordIds = additionalRecordIds,
+                currentRecordId = currentId
+            )
         )
         if (wasCurrent) launchGatewayMutation { gateway.applyNextWallpaper() }
     }
@@ -452,7 +497,11 @@ class MainViewModel(
         _uiState.value = _uiState.value.copy(pendingDiscard = null)
         when (pending.kind) {
             DiscardKind.DISLIKE -> launchGatewayMutation { gateway.rejectWallpaperForever(pending.recordId) }
-            DiscardKind.REMOVE -> launchGatewayMutation { gateway.deleteWallpaperFromReserve(pending.recordId) }
+            DiscardKind.REMOVE -> launchGatewayMutation { current ->
+                var state = current
+                for (id in pending.allRecordIds) state = gateway.deleteWallpaperFromReserve(id)
+                state
+            }
         }
     }
 
@@ -461,7 +510,7 @@ class MainViewModel(
         val pending = _uiState.value.pendingDiscard ?: return
         _uiState.value = _uiState.value.copy(pendingDiscard = null)
         if (pending.wasCurrent) {
-            launchGatewayMutation { gateway.applyWallpaper(pending.recordId) }
+            launchGatewayMutation { gateway.applyWallpaper(pending.currentRecordId ?: pending.recordId) }
         }
     }
 

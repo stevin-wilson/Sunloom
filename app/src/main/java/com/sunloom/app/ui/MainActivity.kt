@@ -34,6 +34,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.sunloom.app.BuildConfig
 import com.sunloom.app.R
+import com.sunloom.app.domain.model.WallpaperRecord
+import com.sunloom.app.platform.export.WallpaperExporter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -51,6 +55,20 @@ class MainActivity : ComponentActivity() {
     private var isFullscreen by mutableStateOf(false)
     private var lastNightMask = Int.MIN_VALUE
     private var hasStartedBefore = false
+
+    // Save as…: the approved rendition is written through the system file picker (Article VI §6).
+    private val exporter by lazy { WallpaperExporter(contentResolver, cacheDir) }
+    private var pendingExport: WallpaperRecord? = null
+    private var exportMimeType = "image/jpeg"
+    private val exportImageLauncher = registerForActivityResult(
+        object : ActivityResultContracts.CreateDocument("*/*") {
+            override fun createIntent(context: Context, input: String): Intent =
+                super.createIntent(context, input).setType(exportMimeType)
+        }
+    ) { uri -> onExportImageTargetChosen(uri) }
+    private val exportAttributionLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri -> onExportAttributionTargetChosen(uri) }
     private val debouncedDisplayRunnable = Runnable {
         notifyDisplaysChangedNow()
     }
@@ -155,6 +173,8 @@ class MainActivity : ComponentActivity() {
                 isFullscreen = isFullscreen,
                 onToggleFullscreen = { applyFullscreen(!isFullscreen) },
                 onDropImages = { dragEvent -> importDroppedImages(dragEvent) },
+                onSaveAs = { saveWallpaperAs(it) },
+                onDeleteManyFromReserve = { viewModel.removeManyFromReserveWithUndo(it) },
                 onPickLocalPhoto = { asBaseline ->
                     pickingAsBaselineRestore = asBaseline
                     photoPickerLauncher.launch(
@@ -188,6 +208,56 @@ class MainActivity : ComponentActivity() {
     private fun looksLikeImage(uri: Uri): Boolean {
         val type = runCatching { contentResolver.getType(uri) }.getOrNull()
         return type == null || type.startsWith("image/")
+    }
+
+    private fun saveWallpaperAs(record: WallpaperRecord) {
+        if (!exporter.isExportable(record)) {
+            viewModel.announce(getString(R.string.export_failed))
+            return
+        }
+        pendingExport = record
+        exportMimeType = exporter.mimeTypeFor(record)
+        exportImageLauncher.launch(exporter.suggestedImageName(record))
+    }
+
+    private fun onExportImageTargetChosen(uri: Uri?) {
+        val record = pendingExport
+        if (uri == null || record == null) {
+            pendingExport = null
+            return
+        }
+        lifecycleScope.launch {
+            val written = withContext(Dispatchers.IO) { exporter.writeImage(record, uri) }
+            when {
+                !written -> {
+                    pendingExport = null
+                    viewModel.announce(getString(R.string.export_failed))
+                }
+                exporter.requiresAttributionFile(record) -> {
+                    viewModel.announce(getString(R.string.export_attribution_prompt))
+                    exportAttributionLauncher.launch(exporter.suggestedAttributionName(record))
+                }
+                else -> {
+                    pendingExport = null
+                    viewModel.announce(getString(R.string.export_saved))
+                }
+            }
+        }
+    }
+
+    private fun onExportAttributionTargetChosen(uri: Uri?) {
+        val record = pendingExport
+        pendingExport = null
+        if (record == null) return
+        if (uri == null) {
+            // Image already saved; make clear the credit file is still owed for CC BY / CC BY-SA.
+            viewModel.announce(getString(R.string.export_attribution_prompt))
+            return
+        }
+        lifecycleScope.launch {
+            val written = withContext(Dispatchers.IO) { exporter.writeAttribution(record, uri) }
+            viewModel.announce(getString(if (written) R.string.export_saved else R.string.export_failed))
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -273,6 +343,11 @@ class MainActivity : ComponentActivity() {
                 KeyboardShortcutInfo(getString(R.string.shortcut_go_sources), KeyEvent.KEYCODE_3, KeyEvent.META_CTRL_ON),
                 KeyboardShortcutInfo(getString(R.string.shortcut_go_schedule), KeyEvent.KEYCODE_4, KeyEvent.META_CTRL_ON),
                 KeyboardShortcutInfo(getString(R.string.shortcut_go_storage), KeyEvent.KEYCODE_5, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_dislike), KeyEvent.KEYCODE_DEL, 0),
+                KeyboardShortcutInfo(getString(R.string.shortcut_undo), KeyEvent.KEYCODE_Z, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_copy_attribution), KeyEvent.KEYCODE_C, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_save_as), KeyEvent.KEYCODE_S, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_open_schedule), KeyEvent.KEYCODE_COMMA, KeyEvent.META_CTRL_ON),
                 KeyboardShortcutInfo(getString(R.string.shortcut_escape), KeyEvent.KEYCODE_ESCAPE, 0)
             )
         )
