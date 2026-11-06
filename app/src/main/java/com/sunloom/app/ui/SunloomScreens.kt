@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -626,6 +627,9 @@ fun FirstRunSetupScreen(
             .fillMaxSize()
             .desktopScrollbar(scrollState)
             .verticalScroll(scrollState)
+            // Keep setup a readable column on ultra-wide windows (UI_Secondary_Elements).
+            .wrapContentWidth(Alignment.CenterHorizontally)
+            .widthIn(max = 760.dp)
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
