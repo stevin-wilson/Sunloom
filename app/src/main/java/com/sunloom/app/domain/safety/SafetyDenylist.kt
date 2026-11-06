@@ -18,10 +18,12 @@ import java.util.Locale
  *   "Old Man of Storr", or "supernova explosion"). Prevents false rejections when NASA
  *   descriptions say "An astronaut aboard the ISS took this photograph..." while strictly
  *   blocking portraits, people, weapons, and logos/insignia as subjects.
+ * - L2c (Constitution v0.13, [findCompositeLayoutMatch]): single-scene guard that rejects
+ *   montages, collages, N x M array categories and labelled multi-panel figure plates.
  */
 object SafetyDenylist {
 
-    const val DENYLIST_VERSION = "2026.11.04-v3"
+    const val DENYLIST_VERSION = "2026.11.06-v4"
 
     private val DIACRITICS_REGEX = Regex("\\p{M}+")
     private val NON_LETTER_DIGIT_REGEX = Regex("[^a-z0-9]+")
@@ -158,6 +160,54 @@ object SafetyDenylist {
         "company emblem", "insignia", "mission patch", "patch", "coat of arms",
         "heraldry", "badge"
     ).map { normalizePhrase(it) }.toSet()
+
+    /**
+     * L2c (Constitution v0.13): single-scene guard. Terms matched against the title and the
+     * source-supplied categories only (never prose), so a description that merely mentions
+     * "montage" does not reject. Bare `array`, `composite`, `triptych`, `mosaic` and `figure` are
+     * deliberately absent: radio-telescope arrays, NASA composites, triptych paintings, mosaic art
+     * and "human figure" are legitimate wallpapers.
+     */
+    val COMPOSITE_LAYOUT_TERMS: Set<String> = listOf(
+        "montage", "photomontage", "collage"
+    ).map { normalizePhrase(it) }.toSet()
+
+    /** Grid categories such as "3x2 arrays" or "4 x 3 arrays" (normalized: "3x2 array"). */
+    private val GRID_ARRAY_REGEX = Regex("""(?:^| )\d+ ?x ?\d+ array(?: |$)""")
+
+    /** Figure-plate caption at the start of a description: "Figure 2.", "Fig. 3:". */
+    private val FIGURE_CAPTION_REGEX = Regex("""^\s*fig(?:ure|\.)?\s*\d""", RegexOption.IGNORE_CASE)
+
+    /** Panel labels "(A) ... (B)" within one description. */
+    private val PANEL_LABELS_REGEX = Regex("""\(\s*a\s*\)[\s\S]{0,400}\(\s*b\s*\)""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Returns a description of the first composite / multi-panel signal found (montage, collage,
+     * N x M array category, or a labelled figure plate), or null for a single-scene image.
+     */
+    fun findCompositeLayoutMatch(
+        title: String,
+        description: String,
+        rawCategoriesAndTags: List<String>
+    ): String? {
+        val tokens = buildList {
+            addAll(tokenizeAndStem(title))
+            add("|")
+            for (tag in rawCategoriesAndTags) {
+                addAll(tokenizeAndStem(tag))
+                add("|")
+            }
+        }
+        findMatchInTokenStream(tokens, COMPOSITE_LAYOUT_TERMS)?.let { return it }
+
+        for (tag in rawCategoriesAndTags) {
+            if (GRID_ARRAY_REGEX.containsMatchIn(normalizePhrase(tag))) return "grid array category '$tag'"
+        }
+
+        if (FIGURE_CAPTION_REGEX.containsMatchIn(description)) return "figure caption"
+        if (PANEL_LABELS_REGEX.containsMatchIn(description)) return "labelled panels (A)/(B)"
+        return null
+    }
 
     /**
      * Exact normalized & stemmed safe domain tokens for L2b verification.

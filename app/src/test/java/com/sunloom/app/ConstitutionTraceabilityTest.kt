@@ -16,6 +16,7 @@ class ConstitutionTraceabilityTest {
 
     /** Article sections whose coverage is mandatory. */
     private val tracedSections = listOf(
+        "VII.4",
         "XII.1", "XII.2", "XII.3", "XII.4",
         "XVIII.2", "XVIII.6"
     )

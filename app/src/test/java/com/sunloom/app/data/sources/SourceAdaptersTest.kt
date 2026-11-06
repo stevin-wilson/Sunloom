@@ -1,8 +1,11 @@
 package com.sunloom.app.data.sources
 
+import com.sunloom.app.Requirement
 import com.sunloom.app.domain.model.LicenseType
 import com.sunloom.app.domain.model.SafeCategory
 import com.sunloom.app.domain.model.SafetyClassification
+import com.sunloom.app.domain.model.SafetyVerdict
+import com.sunloom.app.domain.safety.SafetyGate
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -22,6 +25,69 @@ class SourceAdaptersTest {
         override suspend fun getBytes(url: String, maxBytes: Int): ByteArray {
             return ByteArray(16_384)
         }
+    }
+
+    @Requirement("VII.4")
+    @Test
+    fun `Wikimedia Nectarine Fruit Development montage parses but the safety gate rejects it while a single-scene botanical passes`() = runTest {
+        val json = """
+            {
+              "query": {
+                "pages": {
+                  "3766525": {
+                    "pageid": 3766525,
+                    "title": "File:Nectarine_Fruit_Development.jpg",
+                    "imageinfo": [
+                      {
+                        "width": 2440,
+                        "height": 2480,
+                        "url": "https://upload.wikimedia.org/wikipedia/commons/5/5e/Nectarine_Fruit_Development.jpg",
+                        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Nectarine_Fruit_Development.jpg",
+                        "extmetadata": {
+                          "Artist": { "value": "<a href=\"https://commons.wikimedia.org/wiki/User:Jjron\">jjron</a>" },
+                          "LicenseShortName": { "value": "CC BY-SA 3.0" },
+                          "UsageTerms": { "value": "Creative Commons Attribution-Share Alike 3.0" },
+                          "ImageDescription": { "value": "Nectarine (<i>Prunus persica</i>) fruit development over a 7&#189; month period." },
+                          "Categories": { "value": "Prunus persica|GFDL|License migration redundant|Self-published work|Featured pictures on Wikipedia, English|Featured pictures on Wikipedia, Turkish|Featured pictures on Wikipedia, Vietnamese|Montages of plants|3x2 arrays|Featured pictures of Rosales|Montages of food" }
+                        }
+                      }
+                    ]
+                  },
+                  "4100200": {
+                    "pageid": 4100200,
+                    "title": "File:Peach_Blossom_in_Orchard.jpg",
+                    "imageinfo": [
+                      {
+                        "width": 4000,
+                        "height": 2600,
+                        "url": "https://upload.wikimedia.org/wikipedia/commons/1/1a/Peach_Blossom_in_Orchard.jpg",
+                        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Peach_Blossom_in_Orchard.jpg",
+                        "extmetadata": {
+                          "Artist": { "value": "Flora Photographer" },
+                          "LicenseShortName": { "value": "CC BY-SA 4.0" },
+                          "ImageDescription": { "value": "Peach blossom in an orchard at sunrise." },
+                          "Categories": { "value": "Prunus persica|Featured pictures of Rosales|Orchards" }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+        """.trimIndent()
+
+        val candidates = WikimediaFeaturedSourceAdapter(FakeHttpClient(emptyMap()))
+            .parseResponse(json, SafeCategory.BOTANICAL_FLORA)
+        val montage = candidates.single { it.id == "wiki-3766525" }
+        val blossom = candidates.single { it.id == "wiki-4100200" }
+        assertTrue(montage.rawCategoriesAndTags.containsAll(listOf("Montages of plants", "3x2 arrays", "Montages of food")))
+
+        val gate = SafetyGate()
+        val montageVerdict = gate.evaluateMetadata(montage)
+        assertTrue("Expected montage Rejected, got $montageVerdict", montageVerdict is SafetyVerdict.Rejected)
+        assertEquals("COMPOSITE_OR_MULTI_PANEL_LAYOUT", (montageVerdict as SafetyVerdict.Rejected).reasonCode)
+        val blossomVerdict = gate.evaluateMetadata(blossom)
+        assertTrue("Expected single-scene botanical Approved, got $blossomVerdict", blossomVerdict is SafetyVerdict.Approved)
     }
 
     @Test

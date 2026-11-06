@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.sunloom.app.Requirement
 import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.DisplayProfile
 import com.sunloom.app.domain.model.LicenseType
@@ -209,6 +210,39 @@ class LocalLibraryRepositoryTest {
         assertNotNull(after)
         assertTrue(after!!.isRejected)
         assertTrue(repository.getCurrentWallpaperId() != "legacy-unsafe-wall")
+    }
+
+    @Requirement("VII.4")
+    @Test
+    fun `testGateVersionBumpEvictsCachedMontageAndReplacesItAsActiveWallpaper`() {
+        val seeds = repository.ensureSeedReserveLoaded(display)
+        val montage = seeds.first().copy(
+            id = "wiki-3766525",
+            title = "Nectarine Fruit Development",
+            description = "Nectarine (Prunus persica) fruit development over a 7\u00BD month period.",
+            rawCategoriesAndTags = listOf(
+                "Prunus persica", "Montages of plants", "3x2 arrays",
+                "Featured pictures of Rosales", "Montages of food"
+            ),
+            provenance = seeds.first().provenance.copy(
+                sourceId = "wikimedia_featured",
+                assetId = "wiki-3766525",
+                originalPageUrl = "https://commons.wikimedia.org/wiki/File:Nectarine_Fruit_Development.jpg",
+                creatorName = "jjron",
+                licenseType = LicenseType.CC_BY_SA,
+                safetyGateVersion = "v0.6.0:2026.11.04-v3:eval-v4:bl-v2"
+            )
+        )
+        repository.upsertWallpaper(montage)
+        repository.recordWallpaperApplied("wiki-3766525")
+
+        val evicted = repository.revalidateGateVersionIfNeeded(display)
+
+        assertTrue(evicted >= 1)
+        val after = repository.getWallpaperById("wiki-3766525")
+        assertNotNull(after)
+        assertTrue(after!!.isRejected)
+        assertTrue(repository.getCurrentWallpaperId() != "wiki-3766525")
     }
 
     @Test

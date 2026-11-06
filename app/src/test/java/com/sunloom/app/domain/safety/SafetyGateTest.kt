@@ -1,5 +1,6 @@
 package com.sunloom.app.domain.safety
 
+import com.sunloom.app.Requirement
 import com.sunloom.app.domain.model.CandidateAsset
 import com.sunloom.app.domain.model.ImageFormat
 import com.sunloom.app.domain.model.LicenseType
@@ -418,6 +419,138 @@ class SafetyGateTest {
             "L1:PASS;L2:PASS;L3:FAIL(CORRUPT_BITMAP_HEADER)",
             GateTrace.failedAt(layer = "L3", reasonCode = "CORRUPT_BITMAP_HEADER")
         )
+    }
+
+    // ---- Article VII §4 L2c: composite / multi-panel layout screen (Constitution v0.13) ----
+
+    private val nectarineCategories = listOf(
+        "Prunus persica", "GFDL", "License migration redundant", "Self-published work",
+        "Featured pictures on Wikipedia, English", "Featured pictures on Wikipedia, Turkish",
+        "Featured pictures on Wikipedia, Vietnamese", "Montages of plants", "3x2 arrays",
+        "Featured pictures of Rosales", "Montages of food"
+    )
+
+    private fun assertCompositeRejected(verdict: SafetyVerdict, label: String) {
+        assertTrue("Expected $label to be Rejected, got $verdict", verdict is SafetyVerdict.Rejected)
+        val rejected = verdict as SafetyVerdict.Rejected
+        assertEquals(label, "COMPOSITE_OR_MULTI_PANEL_LAYOUT", rejected.reasonCode)
+        assertEquals(label, "L2", rejected.failedLayer)
+    }
+
+    @Requirement("VII.4")
+    @Test
+    fun `testNectarineFruitDevelopmentMontageIsRejectedAtL2`() {
+        val nectarine = validCandidate(
+            title = "Nectarine Fruit Development",
+            description = "Nectarine (Prunus persica) fruit development over a 7½ month period. " +
+                "Early winter to midsummer, East Gippsland, Victoria, Australia.",
+            category = SafeCategory.BOTANICAL_FLORA,
+            tags = nectarineCategories
+        )
+        assertCompositeRejected(safetyGate.evaluateMetadata(nectarine), "Nectarine montage")
+    }
+
+    @Requirement("VII.4")
+    @Test
+    fun `testMontageCollageAndGridArrayCategoriesAreRejected`() {
+        val cases = mapOf(
+            "montage category" to listOf("Montages of plants", "flower"),
+            "photomontage category" to listOf("Photomontages", "landscape"),
+            "collage category" to listOf("Collages of flowers", "flower"),
+            "grid array category only" to listOf("3x2 arrays", "flower"),
+            "spaced grid array category" to listOf("4 x 3 arrays", "flower")
+        )
+        for ((label, tags) in cases) {
+            val candidate = validCandidate(
+                title = "Spring Flower Study",
+                description = "Several photographs of spring flowers.",
+                category = SafeCategory.BOTANICAL_FLORA,
+                tags = tags
+            )
+            assertCompositeRejected(safetyGate.evaluateMetadata(candidate), label)
+        }
+    }
+
+    @Requirement("VII.4")
+    @Test
+    fun `testMontageOrCollageInTitleIsRejected`() {
+        val candidate = validCandidate(
+            title = "Autumn Leaf Collage",
+            tags = listOf("leaf", "autumn")
+        )
+        assertCompositeRejected(safetyGate.evaluateMetadata(candidate), "collage title")
+    }
+
+    @Requirement("VII.4")
+    @Test
+    fun `testLabelledFigurePlateDescriptionIsRejected`() {
+        val plate = validCandidate(
+            title = "Peach Blossom Stages",
+            description = "Figure 2. Stages of peach blossom development: (A) bud swell, (B) full bloom, (C) petal fall.",
+            category = SafeCategory.BOTANICAL_FLORA,
+            tags = listOf("flower", "blossom")
+        )
+        assertCompositeRejected(safetyGate.evaluateMetadata(plate), "figure plate with (A)/(B) labels")
+
+        val labelledOnly = validCandidate(
+            title = "Peach Blossom Stages",
+            description = "Left (a) bud swell and right (b) full bloom of a peach tree in spring.",
+            category = SafeCategory.BOTANICAL_FLORA,
+            tags = listOf("flower", "blossom")
+        )
+        assertCompositeRejected(safetyGate.evaluateMetadata(labelledOnly), "(a)/(b) panel labels")
+    }
+
+    @Requirement("VII.4")
+    @Test
+    fun `testSingleSceneImagesWithSimilarWordsStillPass`() {
+        val controls = mapOf(
+            "featured botanical photo" to validCandidate(
+                title = "Prunus persica Blossom",
+                description = "A peach tree in full bloom.",
+                category = SafeCategory.BOTANICAL_FLORA,
+                tags = listOf("Prunus persica", "Featured pictures of Rosales", "blossom")
+            ),
+            "radio telescope array" to validCandidate(
+                title = "Very Large Array at Dusk",
+                description = "The antennas of the Very Large Array under a twilight sky.",
+                category = SafeCategory.SPACE_ASTRONOMY,
+                tags = listOf("Radio telescope arrays", "twilight", "sky")
+            ),
+            "hubble composite nebula" to validCandidate(
+                title = "Carina Nebula",
+                description = "A composite image combining visible and infrared exposures of the nebula.",
+                category = SafeCategory.SPACE_ASTRONOMY,
+                tags = listOf("nebula", "star", "space")
+            ),
+            "lone parenthetical (a)" to validCandidate(
+                title = "Pine Forest at Dawn",
+                description = "Taken from option (a) of the trail, looking east across the forest at dawn.",
+                tags = listOf("forest", "dawn")
+            ),
+            "panorama category" to validCandidate(
+                title = "Alpine Panorama at Sunrise",
+                description = "A wide view of the alpine ridge at sunrise.",
+                tags = listOf("Panoramics", "alpine", "sunrise")
+            ),
+            "prose mentioning montage" to validCandidate(
+                title = "Mountain Lake at Sunset",
+                description = "Unlike a montage, this is a single exposure of the mountain lake at sunset.",
+                tags = listOf("lake", "mountain", "sunset")
+            )
+        )
+        for ((label, candidate) in controls) {
+            val verdict = safetyGate.evaluateMetadata(candidate)
+            assertTrue("Expected $label to be Approved, got $verdict", verdict is SafetyVerdict.Approved)
+        }
+    }
+
+    @Requirement("VII.4")
+    @Test
+    fun `testCompositeScreenChangesTheCompositeGateVersion`() {
+        // Cached records carry the old gate version; a new denylist version forces revalidation (Schedule B §6).
+        assertTrue(SafetyDenylist.DENYLIST_VERSION != "2026.11.04-v3")
+        assertTrue(SafetyGate.COMPOSITE_GATE_VERSION.contains(SafetyDenylist.DENYLIST_VERSION))
     }
 
     @Test

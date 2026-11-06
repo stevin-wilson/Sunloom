@@ -52,7 +52,8 @@ object GateTrace {
  * - L1 (Eligibility & License): Verifies admitted & enabled source in SourceRegistry,
  *   allowlisted license (Article VI §5), and required creator attribution for CC BY / CC BY-SA
  *   works (Article VI §8, rejecting missing or "Unknown author").
- * - L2 (Metadata & Blocklist Screen): Verifies explicit SAFE classification, HTTPS transport
+ * - L2 (Metadata & Blocklist Screen, incl. L2c single-scene guard rejecting montages, collages and
+ *   figure plates): Verifies explicit SAFE classification, HTTPS transport
  *   from an admitted Schedule A host, versioned Unicode NFKD / stem-normalized denylist
  *   (SafetyDenylist Tier 1 & Tier 2), safe visual domain membership without injected tags,
  *   and asset ID / SHA-256 / perceptual dHash blocklists.
@@ -190,6 +191,21 @@ class SafetyGate {
             )
         }
         auditNotes.add("Passed L2 safety & public-display denylist gate ($COMPOSITE_GATE_VERSION)")
+
+        // L2c. Single-scene guard: reject montages, collages, N x M arrays and labelled figure plates
+        // (Article VII §2 & §4, Constitution v0.13)
+        val compositeMatch = SafetyDenylist.findCompositeLayoutMatch(
+            title = candidate.title,
+            description = candidate.description,
+            rawCategoriesAndTags = candidate.rawCategoriesAndTags
+        )
+        if (compositeMatch != null) {
+            return SafetyVerdict.Rejected(
+                reasonCode = "COMPOSITE_OR_MULTI_PANEL_LAYOUT",
+                explanation = "Asset is a montage, collage or multi-panel figure rather than a single scene (matched '$compositeMatch').",
+                failedLayer = "L2"
+            )
+        }
 
         // L2b. Internet candidates must have non-empty source tags and match a recognized safe visual domain
         if (!candidate.isUserLocal) {
