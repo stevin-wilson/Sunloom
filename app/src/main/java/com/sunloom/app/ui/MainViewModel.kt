@@ -293,9 +293,17 @@ class MainViewModel(
         launchGatewayMutation { gateway.applyNextWallpaper() }
     }
 
+    private val nextInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Coalesces rapid Next presses (button mashing / key repeat) into a single in-flight apply. */
     fun triggerNextWallpaperSmart() {
+        if (!nextInFlight.compareAndSet(false, true)) return
         viewModelScope.launch(workDispatcher) {
-            advanceToNextWallpaperSmart()
+            try {
+                advanceToNextWallpaperSmart()
+            } finally {
+                nextInFlight.set(false)
+            }
         }
     }
 
@@ -324,7 +332,8 @@ class MainViewModel(
             )
         }
         if (_uiState.value.unseenCurrentBrightnessCount <= 1 && !_uiState.value.isSyncingOnline) {
-            syncOnlineCatalogNow()
+            // Replenish in the background so local Next presses are never blocked by the network.
+            viewModelScope.launch(workDispatcher) { syncOnlineCatalogNow() }
         }
     }
 
@@ -885,12 +894,17 @@ class AndroidSunloomGateway(
         val connectedDisplays = platformAdapter.getConnectedDisplays()
         val display = platformAdapter.getPrimaryOrSharpestDisplayOrNull(connectedDisplays)
             ?: return@withGatewayIo buildSnapshot(repo, "Display dimensions unknown — connect an active display before syncing.")
+        var syncFailed = false
         val added = try {
             repo.refreshOnlineCatalog(display, connectedDisplays = connectedDisplays)
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (_: Throwable) {
+            syncFailed = true
             0
+        }
+        if (repo.lastSyncAttemptedSources > 0 && repo.lastSyncFailedSources >= repo.lastSyncAttemptedSources) {
+            syncFailed = true
         }
         val prefs = repo.loadPreferences()
         promoteNonSeedOverSeedIfNeeded(repo, prefs, display, connectedDisplays)
@@ -901,6 +915,8 @@ class AndroidSunloomGateway(
         }
         val msg = if (added > 0) {
             "Prepared $added new high-resolution wallpaper(s) for $targetLabel"
+        } else if (syncFailed) {
+            "Couldn't reach the online catalogs. Your saved reserve is still available; try again when you're connected."
         } else {
             "Reserve is up to date for $targetLabel"
         }

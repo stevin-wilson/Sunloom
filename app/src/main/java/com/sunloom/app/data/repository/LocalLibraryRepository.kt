@@ -1164,6 +1164,15 @@ class LocalLibraryRepository(
         return (darkPriority + remainder).take(maxSourcesPerSync)
     }
 
+    /** Sources the most recent [refreshOnlineCatalog] tried, and how many of them failed to fetch. */
+    @Volatile
+    var lastSyncAttemptedSources: Int = 0
+        private set
+
+    @Volatile
+    var lastSyncFailedSources: Int = 0
+        private set
+
     suspend fun refreshOnlineCatalog(
         display: DisplayProfile,
         maxSourcesPerSync: Int = DEFAULT_MAX_SOURCES_PER_SYNC,
@@ -1217,6 +1226,8 @@ class LocalLibraryRepository(
             }
         }
 
+        lastSyncAttemptedSources = selectedAdapters.size
+        lastSyncFailedSources = 0
         for (adapter in selectedAdapters) {
             coroutineContext.ensureActive()
             val reg = SourceRegistry.get(adapter.sourceId)
@@ -1243,6 +1254,7 @@ class LocalLibraryRepository(
                 if (isCancellationThrowable(err)) {
                     throw CancellationException(err.message).apply { initCause(err) }
                 }
+                lastSyncFailedSources++
                 recordSourceFetchFailure(adapter.sourceId, err)
                 continue
             }
