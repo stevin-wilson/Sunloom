@@ -120,12 +120,14 @@ class MainActivity : ComponentActivity() {
                 onNextWallpaper = { viewModel.triggerNextWallpaperSmart() },
                 onPreviousWallpaper = { viewModel.returnToPreviousWallpaper() },
                 onToggleKeep = { viewModel.toggleKeepCurrentWallpaper() },
-                onRejectForever = { viewModel.rejectCurrentWallpaperForever() },
+                onRejectForever = { viewModel.dislikeCurrentWithUndo() },
+                onUndoDiscard = { viewModel.undoPendingDiscard() },
+                onCommitDiscard = { viewModel.commitPendingDiscard() },
                 onTogglePause = { viewModel.togglePauseAutomation() },
                 onRestoreOriginal = { viewModel.restoreOriginalBaselineWallpaper() },
                 onRestoreSystemDefault = { viewModel.restoreSystemDefaultWallpaper() },
                 onApplySpecific = { viewModel.applySpecificWallpaper(it) },
-                onDeleteFromReserve = { viewModel.deleteFromReserve(it) },
+                onDeleteFromReserve = { viewModel.removeFromReserveWithUndo(it) },
                 onToggleKeepSpecific = { viewModel.toggleKeepSpecificWallpaper(it) },
                 onToggleLegibilityOverlay = { viewModel.toggleLegibilityOverlay() },
                 onSyncOnline = { viewModel.triggerOnlineSync() },
@@ -199,6 +201,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        // Don't leave an undoable action dangling if the window goes away.
+        if (::viewModel.isInitialized) viewModel.commitPendingDiscard()
         mainHandler.removeCallbacks(debouncedDisplayRunnable)
         val displayManager = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
         displayManager?.unregisterDisplayListener(displayListener)

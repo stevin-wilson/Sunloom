@@ -247,6 +247,42 @@ class MainViewModelTest {
     }
 
     @Test
+    fun `dislike with undo switches away now but only commits after the undo window`() {
+        viewModel.dislikeCurrentWithUndo()
+        val pending = viewModel.uiState.value.pendingDiscard
+        assertEquals("seed-1", pending?.recordId)
+        assertEquals(DiscardKind.DISLIKE, pending?.kind)
+        assertEquals("seed-2", viewModel.uiState.value.currentWallpaper?.id)
+        // Nothing is permanently excluded yet.
+        assertEquals(2, viewModel.uiState.value.libraryWallpapers.size)
+
+        viewModel.commitPendingDiscard()
+        assertEquals(null, viewModel.uiState.value.pendingDiscard)
+        assertEquals(1, viewModel.uiState.value.libraryWallpapers.size)
+    }
+
+    @Test
+    fun `undo after dislike restores the wallpaper and leaves the reserve intact`() {
+        viewModel.dislikeCurrentWithUndo()
+        viewModel.undoPendingDiscard()
+        assertEquals(null, viewModel.uiState.value.pendingDiscard)
+        assertEquals("seed-1", viewModel.uiState.value.currentWallpaper?.id)
+        assertEquals(2, viewModel.uiState.value.libraryWallpapers.size)
+    }
+
+    @Test
+    fun `starting a second discard finalizes the first`() {
+        viewModel.removeFromReserveWithUndo("seed-2")
+        assertEquals("seed-2", viewModel.uiState.value.pendingDiscard?.recordId)
+        assertEquals(2, viewModel.uiState.value.libraryWallpapers.size)
+
+        viewModel.dislikeCurrentWithUndo()
+        // seed-2 removal was committed; seed-1 dislike is now the pending one.
+        assertEquals("seed-1", viewModel.uiState.value.pendingDiscard?.recordId)
+        assertFalse(viewModel.uiState.value.libraryWallpapers.any { it.id == "seed-2" })
+    }
+
+    @Test
     fun `deleteFromReserve removes specific item from reserve`() {
         assertEquals(2, viewModel.uiState.value.libraryWallpapers.size)
         viewModel.deleteFromReserve("seed-2")

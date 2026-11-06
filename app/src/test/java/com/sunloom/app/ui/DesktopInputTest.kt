@@ -129,7 +129,7 @@ class DesktopInputTest {
     }
 
     @Test
-    fun `Delete opens the dislike confirmation instead of rejecting immediately`() {
+    fun `Delete dislikes immediately and relies on the undo snackbar instead of a blocking dialog`() {
         val counters = Counters()
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val snapshot = kotlinx.coroutines.runBlocking { AndroidSunloomGateway(context).loadInitialSnapshot() }
@@ -142,31 +142,10 @@ class DesktopInputTest {
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("next_wallpaper_button").performKeyInput { pressKey(Key.Delete) }
-
-        composeTestRule.onNodeWithTag("confirm_reject_dialog_button").assertExists()
-        assertEquals(0, counters.reject)
-    }
-
-    @Test
-    fun `Escape dismisses the dislike confirmation without rejecting`() {
-        val counters = Counters()
-        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
-        val snapshot = kotlinx.coroutines.runBlocking { AndroidSunloomGateway(context).loadInitialSnapshot() }
-        val state = snapshot.copy(
-            activeTab = DesktopNavTab.TODAY_CANVAS,
-            currentWallpaper = snapshot.currentWallpaper ?: snapshot.libraryWallpapers.first(),
-            preferences = snapshot.preferences.copy(isSetupCompleted = true)
-        )
-        setApp(state, counters)
-        composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("next_wallpaper_button").performKeyInput { pressKey(Key.Delete) }
-        composeTestRule.onNodeWithTag("confirm_reject_dialog_button").assertExists()
-
-        composeTestRule.onNodeWithTag("confirm_reject_dialog_button").performKeyInput { pressKey(Key.Escape) }
         composeTestRule.waitForIdle()
 
+        assertEquals(1, counters.reject)
         composeTestRule.onNodeWithTag("confirm_reject_dialog_button").assertDoesNotExist()
-        assertEquals(0, counters.reject)
     }
 
     @Test

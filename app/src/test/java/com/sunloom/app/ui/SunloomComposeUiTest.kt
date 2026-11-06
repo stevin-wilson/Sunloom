@@ -160,11 +160,8 @@ class SunloomComposeUiTest {
         }
         composeTestRule.waitForIdle()
 
-        // Clicking delete asks for confirmation first; only confirming triggers onDeleteFromReserve
+        // Clicking delete acts immediately (Undo is offered via snackbar rather than a blocking dialog)
         composeTestRule.onNodeWithTag("delete_reserve_item_$firstId").performScrollTo().performClick()
-        composeTestRule.waitForIdle()
-        org.junit.Assert.assertNull(deletedId)
-        composeTestRule.onNodeWithTag("confirm_delete_reserve_button").performClick()
         composeTestRule.waitForIdle()
         org.junit.Assert.assertEquals(firstId, deletedId)
 
@@ -375,7 +372,7 @@ class SunloomComposeUiTest {
         val promoted = kotlinx.coroutines.runBlocking { gateway.loadInitialSnapshot() }
         org.junit.Assert.assertEquals("artic-fine-art-1", promoted.currentWallpaper?.id)
 
-        // Verify clicking Dislike button opens confirmation dialog before invoking onRejectForever
+        // Verify clicking Dislike invokes onRejectForever directly (undo is offered via snackbar)
         var rejectConfirmed = false
         composeTestRule.setContent {
             SunloomApp(
@@ -404,10 +401,7 @@ class SunloomComposeUiTest {
 
         composeTestRule.onNodeWithTag("reject_wallpaper_button").performClick()
         composeTestRule.waitForIdle()
-        org.junit.Assert.assertFalse("Dislike must wait for confirmation dialog", rejectConfirmed)
-        composeTestRule.onNodeWithTag("confirm_reject_dialog_button").performClick()
-        composeTestRule.waitForIdle()
-        assertTrue("Confirming dialog must invoke onRejectForever", rejectConfirmed)
+        assertTrue("Dislike must invoke onRejectForever (undoable, no blocking dialog)", rejectConfirmed)
     }
 
     @Test

@@ -52,6 +52,15 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -167,9 +176,11 @@ fun SunloomApp(
     isFullscreen: Boolean = false,
     onToggleFullscreen: () -> Unit = {},
     onDropImages: (android.view.DragEvent) -> Boolean = { false },
+    onUndoDiscard: () -> Unit = {},
+    onCommitDiscard: () -> Unit = {},
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
-    var showKeyboardRejectConfirm by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
     val colorScheme = if (darkTheme) SunloomDarkPalette else SunloomLightPalette
     val shortcutGate = remember { ShortcutGate() }
     val rootFocusRequester = remember { FocusRequester() }
@@ -179,8 +190,8 @@ fun SunloomApp(
 
     // Give the root focus once the workspace is usable, and again after the reject dialog
     // closes, so single-key accelerators work without needing a click first.
-    LaunchedEffect(workspaceReady, showKeyboardRejectConfirm, uiState.activeTab) {
-        if (workspaceReady && !showKeyboardRejectConfirm) {
+    LaunchedEffect(workspaceReady, uiState.activeTab) {
+        if (workspaceReady) {
             runCatching { rootFocusRequester.requestFocus() }
         }
     }
@@ -242,7 +253,8 @@ fun SunloomApp(
                                 true
                             }
                             Key.Backspace, Key.Delete -> {
-                                showKeyboardRejectConfirm = true
+                                // Acts immediately; the snackbar below offers Undo (no blocking dialog).
+                                if (uiState.currentWallpaper != null) onRejectForever()
                                 true
                             }
                             else -> false
@@ -264,19 +276,12 @@ fun SunloomApp(
                       target = dropTarget
                   )
           ) {
-            if (showKeyboardRejectConfirm && uiState.currentWallpaper != null) {
-                ConfirmDestructiveDialog(
-                    title = "Dislike Wallpaper?",
-                    message = "Permanently exclude '${uiState.currentWallpaper.title}' from rotation and remove its cached file?",
-                    confirmLabel = "Dislike",
-                    confirmTestTag = "confirm_reject_dialog_button",
-                    onConfirm = {
-                        showKeyboardRejectConfirm = false
-                        onRejectForever()
-                    },
-                    onDismiss = { showKeyboardRejectConfirm = false }
-                )
-            }
+            UndoSnackbarEffect(
+                pending = uiState.pendingDiscard,
+                snackbarHostState = snackbarHostState,
+                onUndo = onUndoDiscard,
+                onCommit = onCommitDiscard
+            )
 
             when {
                 uiState.isStorageUnavailable -> {
@@ -355,7 +360,7 @@ fun SunloomApp(
                     onNextWallpaper = onNextWallpaper,
                     onPreviousWallpaper = onPreviousWallpaper,
                     onToggleKeep = onToggleKeep,
-                    onRequestRejectConfirm = { showKeyboardRejectConfirm = true },
+                    onRequestRejectConfirm = { if (uiState.currentWallpaper != null) onRejectForever() },
                     onTogglePause = onTogglePause,
                     onRestoreOriginal = onRestoreOriginal,
                     onRestoreSystemDefault = onRestoreSystemDefault,
@@ -384,9 +389,49 @@ fun SunloomApp(
                     )
                 }
             }
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = if (isCompactWindow()) 88.dp else 16.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite }
+            )
           }
         }
     }
+    }
+}
+
+@Composable
+private fun isCompactWindow(): Boolean =
+    WorkspaceWidthClass.from(LocalConfiguration.current.screenWidthDp.dp) == WorkspaceWidthClass.Compact
+
+/**
+ * Shows an "Undo" snackbar for a pending Dislike/Remove. Dismiss/timeout commits the action; the
+ * Undo action cancels it. Keyed by token so a new pending action replaces the old snackbar.
+ */
+@Composable
+private fun UndoSnackbarEffect(
+    pending: PendingDiscard?,
+    snackbarHostState: SnackbarHostState,
+    onUndo: () -> Unit,
+    onCommit: () -> Unit
+) {
+    val latestUndo = rememberUpdatedState(onUndo)
+    val latestCommit = rememberUpdatedState(onCommit)
+    LaunchedEffect(pending?.token) {
+        if (pending == null) return@LaunchedEffect
+        val message = when (pending.kind) {
+            DiscardKind.DISLIKE -> "Disliked '${pending.title}'"
+            DiscardKind.REMOVE -> "Removed '${pending.title}' from reserve"
+        }
+        val result = snackbarHostState.showSnackbar(
+            message = message,
+            actionLabel = "Undo",
+            withDismissAction = true,
+            duration = SnackbarDuration.Long
+        )
+        if (result == SnackbarResult.ActionPerformed) latestUndo.value() else latestCommit.value()
     }
 }
 
@@ -436,6 +481,8 @@ fun CityDropdownSelector(
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    val matches = remember(query) { filterCities(query, SolarCalculator.BUNDLED_CITIES) }
     val selectedCity = remember(selectedCityName) {
         SolarCalculator.BUNDLED_CITIES.firstOrNull {
             it.name.equals(selectedCityName, ignoreCase = true) ||
@@ -450,24 +497,37 @@ fun CityDropdownSelector(
         modifier = modifier
     ) {
         OutlinedTextField(
-            value = displayLabel,
-            onValueChange = {},
-            readOnly = true,
+            // Type to filter the 47 bundled cities (Hick's law); shows the current city when closed.
+            value = if (expanded) query else displayLabel,
+            onValueChange = {
+                query = it
+                expanded = true
+            },
             singleLine = true,
             label = { Text("City & time zone") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
             modifier = Modifier
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
                 .fillMaxWidth()
                 .suppressShortcutsWhileFocused()
                 .testTag("city_dropdown_field")
         )
         ExposedDropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onDismissRequest = {
+                expanded = false
+                query = ""
+            }
         ) {
-            SolarCalculator.BUNDLED_CITIES.forEach { city ->
+            if (matches.isEmpty()) {
+                DropdownMenuItem(
+                    text = { Text("No matching city. Try the custom coordinates option.") },
+                    onClick = {},
+                    enabled = false
+                )
+            }
+            matches.forEach { city ->
                 DropdownMenuItem(
                     text = {
                         Text(
@@ -479,6 +539,7 @@ fun CityDropdownSelector(
                     onClick = {
                         onSelectCity(city)
                         expanded = false
+                        query = ""
                     },
                     contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
                 )
@@ -743,6 +804,7 @@ fun DesktopWorkspaceScreen(
                         onToggleKeep = onToggleKeep,
                         onRequestRejectConfirm = onRequestRejectConfirm,
                         onRestoreOriginal = onRestoreOriginal,
+                        onSyncOnline = onSyncOnline,
                         isFullscreen = isFullscreen,
                         onToggleFullscreen = onToggleFullscreen
                     )
@@ -902,7 +964,7 @@ private fun TopStatusBanner(
                         contentDescription = null,
                         tint = if (isDaytime) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.tertiary
                     )
-                    Column {
+                    Column(modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
                         Text(
                             text = uiState.statusBannerMessage,
                             style = MaterialTheme.typography.bodyMedium,
@@ -939,9 +1001,19 @@ private fun TopStatusBanner(
                     }
                 }
             }
-            if (uiState.isSyncingOnline) {
+            if (uiState.isSyncingOnline || uiState.isApplyingWallpaper) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
         }
+    }
+}
+
+/** Case-insensitive, all-words match of [query] against each city's dropdown label; blank returns all. */
+internal fun filterCities(query: String, cities: List<CityCoordinates>): List<CityCoordinates> {
+    val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    if (words.isEmpty()) return cities
+    return cities.filter { city ->
+        val label = city.dropdownLabel.lowercase()
+        words.all { it in label }
     }
 }

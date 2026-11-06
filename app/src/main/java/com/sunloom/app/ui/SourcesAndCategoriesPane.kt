@@ -150,7 +150,8 @@ internal fun SourcesAndCategoriesPane(
                     }
                     Switch(
                         checked = uiState.preferences.deferOnBatterySaver,
-                        onCheckedChange = onToggleBatterySaverDeferral
+                        onCheckedChange = onToggleBatterySaverDeferral,
+                        modifier = Modifier.testTag("defer_battery_saver_switch")
                     )
                 }
             }

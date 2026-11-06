@@ -57,7 +57,6 @@ internal fun ReserveAndHistoryPane(
     val listState = rememberLazyListState()
     val restricted = uiState.isWallpaperChangeRestricted
     val thumbnailAspect = primaryDisplayAspect(uiState, 1.2f, 2.2f)
-    var pendingDelete by remember { mutableStateOf<WallpaperRecord?>(null) }
     var aboutRecord by remember { mutableStateOf<WallpaperRecord?>(null) }
     LazyColumn(
         state = listState,
@@ -99,14 +98,16 @@ internal fun ReserveAndHistoryPane(
                         OutlinedButton(onClick = onPickBaselineRestore) {
                             Icon(SunloomIcons.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Backup")
+                            Text("Restore Photo")
                         }
                     }
                 }
             }
         }
 
-        if (uiState.libraryWallpapers.isEmpty()) {
+        val hiddenId = uiState.pendingDiscard?.recordId
+        val visibleItems = if (hiddenId == null) uiState.libraryWallpapers else uiState.libraryWallpapers.filter { it.id != hiddenId }
+        if (visibleItems.isEmpty()) {
             item(key = "reserve_empty") {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -143,7 +144,7 @@ internal fun ReserveAndHistoryPane(
             }
         }
 
-        items(items = uiState.libraryWallpapers, key = { it.id }) { item ->
+        items(items = visibleItems, key = { it.id }) { item ->
             val isActive = uiState.currentWallpaper?.id == item.id
             ContextMenuHost(
                 modifier = Modifier.fillMaxWidth().testTag("reserve_card_${item.id}"),
@@ -168,9 +169,9 @@ internal fun ReserveAndHistoryPane(
                         aboutRecord = item
                     }
                     HorizontalDivider()
-                    ContextMenuItem("Remove from reserve\u2026", "ctx_delete_${item.id}", destructive = true) {
+                    ContextMenuItem("Remove from reserve", "ctx_delete_${item.id}", destructive = true) {
                         dismiss()
-                        pendingDelete = item
+                        onDeleteFromReserve(item.id)
                     }
                 }
             ) {
@@ -269,7 +270,7 @@ internal fun ReserveAndHistoryPane(
                             }
                             ShortcutTooltip("Delete from reserve") {
                                 IconButton(
-                                    onClick = { pendingDelete = item },
+                                    onClick = { onDeleteFromReserve(item.id) },
                                     modifier = Modifier.desktopControl(CircleShape).testTag("delete_reserve_item_${item.id}")
                                 ) {
                                     Icon(
@@ -286,19 +287,6 @@ internal fun ReserveAndHistoryPane(
         }
     }
 
-    pendingDelete?.let { record ->
-        ConfirmDestructiveDialog(
-            title = "Remove from reserve?",
-            message = "Remove '${record.title}' from your saved wallpapers and delete its cached file? This can't be undone.",
-            confirmLabel = "Remove",
-            confirmTestTag = "confirm_delete_reserve_button",
-            onConfirm = {
-                pendingDelete = null
-                onDeleteFromReserve(record.id)
-            },
-            onDismiss = { pendingDelete = null }
-        )
-    }
     aboutRecord?.let { record ->
         WallpaperAboutDialog(record = record, onDismiss = { aboutRecord = null })
     }

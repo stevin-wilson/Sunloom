@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -61,6 +63,7 @@ internal fun DisplaysAndSchedulePane(
 ) {
     val scrollState = rememberScrollState()
     var showCustomCoords by remember { mutableStateOf(false) }
+    var showResetConfirm by remember { mutableStateOf(false) }
     var customLatText by remember(uiState.preferences.latitude) {
         mutableStateOf("%.4f".format(uiState.preferences.latitude))
     }
@@ -111,6 +114,8 @@ internal fun DisplaysAndSchedulePane(
                         label = { Text("Custom coordinates") }
                     )
                     if (showCustomCoords) {
+                        val latError = coordinateError(customLatText, -90.0, 90.0)
+                        val lonError = coordinateError(customLonText, -180.0, 180.0)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -121,6 +126,9 @@ internal fun DisplaysAndSchedulePane(
                                 onValueChange = { customLatText = it },
                                 label = { Text("Latitude (-90..90)") },
                                 singleLine = true,
+                                isError = latError != null,
+                                supportingText = { latError?.let { Text(it) } },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 modifier = Modifier
                                     .weight(1f)
                                     .suppressShortcutsWhileFocused()
@@ -131,6 +139,9 @@ internal fun DisplaysAndSchedulePane(
                                 onValueChange = { customLonText = it },
                                 label = { Text("Longitude (-180..180)") },
                                 singleLine = true,
+                                isError = lonError != null,
+                                supportingText = { lonError?.let { Text(it) } },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 modifier = Modifier
                                     .weight(1f)
                                     .suppressShortcutsWhileFocused()
@@ -144,6 +155,8 @@ internal fun DisplaysAndSchedulePane(
                                         onUpdateCustomCoordinates(lat, lon, "Custom (${"%.2f".format(lat)}, ${"%.2f".format(lon)})")
                                     }
                                 },
+                                enabled = latError == null && lonError == null &&
+                                    customLatText.isNotBlank() && customLonText.isNotBlank(),
                                 modifier = Modifier.testTag("apply_custom_coords_button")
                             ) {
                                 Text("Apply")
@@ -292,32 +305,12 @@ internal fun DisplaysAndSchedulePane(
                     )
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Pause downloads on Battery Saver", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "Defer background catalog refreshes when Battery Saver is active.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = uiState.preferences.deferOnBatterySaver,
-                        onCheckedChange = onToggleBatterySaverDeferral,
-                        modifier = Modifier.testTag("defer_battery_saver_switch")
-                    )
-                }
-
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(onClick = onReopenSetup) {
                         Text("Setup Guide")
                     }
                     OutlinedButton(
-                        onClick = onRestoreSystemDefault,
+                        onClick = { showResetConfirm = true },
                         modifier = Modifier.testTag("restore_system_default_button")
                     ) {
                         Icon(SunloomIcons.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -328,4 +321,32 @@ internal fun DisplaysAndSchedulePane(
             }
         }
     }
+
+    if (showResetConfirm) {
+        ConfirmDestructiveDialog(
+            title = "Reset to system default?",
+            message = "Sunloom will put your device's original wallpaper back and stop changing it until you apply another one.",
+            confirmLabel = "Reset",
+            confirmTestTag = "confirm_reset_default_button",
+            onConfirm = {
+                showResetConfirm = false
+                onRestoreSystemDefault()
+            },
+            onDismiss = { showResetConfirm = false }
+        )
+    }
+}
+
+/**
+ * Validation message for a coordinate text field, or null when [text] is empty (not yet typed) or a
+ * number within [min]..[max]. Shown inline so bad input is explained instead of silently ignored.
+ */
+internal fun coordinateError(text: String, min: Double, max: Double): String? {
+    if (text.isBlank()) return null
+    val value = text.trim().toDoubleOrNull()
+        ?: return "Enter a number, e.g. 37.77"
+    if (!value.isFinite() || value < min || value > max) {
+        return "Must be between ${min.toInt()} and ${max.toInt()}"
+    }
+    return null
 }

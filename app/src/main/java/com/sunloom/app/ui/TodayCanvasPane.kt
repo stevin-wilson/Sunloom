@@ -132,6 +132,7 @@ internal fun TodayCanvasPane(
     onToggleKeep: () -> Unit,
     onRequestRejectConfirm: () -> Unit,
     onRestoreOriginal: () -> Unit,
+    onSyncOnline: () -> Unit = {},
     isFullscreen: Boolean = false,
     onToggleFullscreen: () -> Unit = {}
 ) {
@@ -170,7 +171,7 @@ internal fun TodayCanvasPane(
                                 ContextMenuItem("Restore original wallpaper", "ctx_restore") { dismiss(); onRestoreOriginal() }
                             }
                             HorizontalDivider()
-                            ContextMenuItem("Dislike and exclude\u2026", "ctx_dislike", destructive = true) {
+                            ContextMenuItem("Dislike and exclude", "ctx_dislike", destructive = true) {
                                 dismiss()
                                 onRequestRejectConfirm()
                             }
@@ -190,6 +191,18 @@ internal fun TodayCanvasPane(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
+                                if (current == null) {
+                                    Text(
+                                        text = "Nothing is showing yet. Fetch a batch of wallpapers, or add one of your own photos from Reserve.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Button(
+                                        onClick = onSyncOnline,
+                                        enabled = !uiState.isSyncingOnline,
+                                        modifier = Modifier.desktopControl().testTag("home_empty_fetch")
+                                    ) { Text(if (uiState.isSyncingOnline) "Fetching..." else "Fetch wallpapers") }
+                                }
                                 if (current != null) {
                                     Text(
                                         text = "${current.category.displayName} • ${current.provenance.sourceName}",
@@ -224,16 +237,16 @@ internal fun TodayCanvasPane(
                                     ShortcutTooltip(if (restricted) HostRestrictedTooltip else "Next wallpaper", if (restricted) null else "N") {
                                         Button(
                                             onClick = onNextWallpaper,
-                                            enabled = !uiState.isSyncingOnline && !restricted,
+                                            enabled = !restricted,
                                             modifier = Modifier.desktopControl().testTag("next_wallpaper_button")
                                         ) {
                                             Icon(
-                                                imageVector = if (uiState.isSyncingOnline) SunloomIcons.Refresh else SunloomIcons.SkipNext,
+                                                imageVector = if (uiState.isApplyingWallpaper) SunloomIcons.Refresh else SunloomIcons.SkipNext,
                                                 contentDescription = null,
                                                 modifier = Modifier.size(18.dp)
                                             )
                                             Spacer(Modifier.width(6.dp))
-                                            Text(if (uiState.isSyncingOnline) "Updating..." else "Next")
+                                            Text(if (uiState.isApplyingWallpaper) "Applying..." else "Next")
                                         }
                                     }
 
