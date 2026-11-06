@@ -10,10 +10,12 @@ enum class SafetyClassification {
 
 enum class SafeCategory(val displayName: String, val description: String) {
     LANDSCAPES_NATURE("Landscapes & Nature", "Mountains, forests, oceans, skies, and calm natural scenery"),
-    SPACE_ASTRONOMY("Space & Astronomy", "Nebulae, galaxies, orbital Earth views, and deep-space photography"),
+    SPACE_ASTRONOMY("Space & Astronomy", "Nebulae, galaxies, starfields, and deep-space photography"),
     ARCHITECTURE_CITYSCAPES("Architecture & Skylines", "Bridges, minimal geometry, historic structures, and city horizons"),
     ABSTRACT_PATTERNS("Abstract & Minimal", "Geometric textures, calm gradients, and natural mineral patterns"),
     SCENIC_FINE_ART("Scenic Fine Art", "Non-figurative landscape paintings and architectural fine art (CC0)"),
+    BOTANICAL_FLORA("Botanical & Flora", "Wildflowers, lush forest foliage, blooming orchards, and botanical art"),
+    AERIAL_EARTH("Aerial & Earth", "High-altitude coastlines, orbital Earth views, river deltas, and drone perspectives"),
     USER_LOCAL("My Local Files", "User-provided photos from your GoogleBook storage")
 }
 
@@ -307,7 +309,9 @@ data class UserPreferences(
         SafeCategory.SPACE_ASTRONOMY,
         SafeCategory.ARCHITECTURE_CITYSCAPES,
         SafeCategory.ABSTRACT_PATTERNS,
-        SafeCategory.SCENIC_FINE_ART
+        SafeCategory.SCENIC_FINE_ART,
+        SafeCategory.BOTANICAL_FLORA,
+        SafeCategory.AERIAL_EARTH
     ),
     val enabledSources: Set<String> = setOf(
         "seed_reserve",

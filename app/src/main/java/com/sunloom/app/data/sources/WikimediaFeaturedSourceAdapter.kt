@@ -32,7 +32,9 @@ class WikimediaFeaturedSourceAdapter(
         SafeCategory.SPACE_ASTRONOMY to "filetype:bitmap incategory:\"Featured_pictures_on_Wikimedia_Commons\" astronomy OR aurora OR nebula OR night sky",
         SafeCategory.ARCHITECTURE_CITYSCAPES to "filetype:bitmap incategory:\"Featured_pictures_on_Wikimedia_Commons\" architecture OR bridge OR castle OR skyline",
         SafeCategory.ABSTRACT_PATTERNS to "filetype:bitmap incategory:\"Featured_pictures_on_Wikimedia_Commons\" mineral OR crystal OR ice OR pattern",
-        SafeCategory.SCENIC_FINE_ART to "filetype:bitmap incategory:\"Featured_pictures_on_Wikimedia_Commons\" coast OR fjord OR glacier OR sunset"
+        SafeCategory.SCENIC_FINE_ART to "filetype:bitmap incategory:\"Featured_pictures_on_Wikimedia_Commons\" coast OR fjord OR glacier OR sunset",
+        SafeCategory.BOTANICAL_FLORA to "filetype:bitmap incategory:\"Featured_pictures_on_Wikimedia_Commons\" botanical OR flora OR flower OR orchard OR leaf OR succulent OR fruit",
+        SafeCategory.AERIAL_EARTH to "filetype:bitmap incategory:\"Featured_pictures_on_Wikimedia_Commons\" aerial OR satellite OR \"earth from space\" OR \"river delta\" OR coastline"
     )
 
     override suspend fun fetchCandidates(

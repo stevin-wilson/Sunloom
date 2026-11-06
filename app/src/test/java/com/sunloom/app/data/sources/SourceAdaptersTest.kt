@@ -932,4 +932,64 @@ class SourceAdaptersTest {
         assertEquals(300L, DefaultHttpsClient.parseRetryAfterSeconds(futureDate, nowEpochMs = nowMs))
         assertEquals(60L, DefaultHttpsClient.parseRetryAfterSeconds("invalid-header", nowEpochMs = nowMs))
     }
+
+    @Test
+    fun `Wikimedia and NASA adapters support newly adopted BOTANICAL_FLORA and AERIAL_EARTH categories`() = runTest {
+        val sampleWikiFloraJson = """
+            {
+              "query": {
+                "pages": {
+                  "8811": {
+                    "pageid": 8811,
+                    "title": "File:Apple Orchard in Spring Blossom.jpg",
+                    "imageinfo": [{
+                      "url": "https://upload.wikimedia.org/wikipedia/commons/apple_orchard.jpg",
+                      "thumburl": "https://upload.wikimedia.org/wikipedia/commons/thumb/apple_orchard_2560.jpg",
+                      "thumbwidth": 2560,
+                      "thumbheight": 1600,
+                      "width": 5000,
+                      "height": 3125,
+                      "extmetadata": {
+                        "Artist": { "value": "Linnaeus Botanist" },
+                        "License": { "value": "cc-by-sa-4.0" },
+                        "LicenseShortName": { "value": "CC BY-SA 4.0" },
+                        "Categories": { "value": "Apple orchards|Flora|Featured pictures" }
+                      }
+                    }]
+                  }
+                }
+              }
+            }
+        """.trimIndent()
+
+        val wiki = WikimediaFeaturedSourceAdapter(FakeHttpClient(mapOf("commons.wikimedia.org" to sampleWikiFloraJson)))
+        val floraCandidates = wiki.fetchCandidates(setOf(SafeCategory.BOTANICAL_FLORA), limit = 4)
+        assertEquals(1, floraCandidates.size)
+        assertEquals("Apple Orchard in Spring Blossom", floraCandidates.first().title)
+        assertEquals(SafeCategory.BOTANICAL_FLORA, floraCandidates.first().category)
+
+        val sampleNasaEarthJson = """
+            {
+              "collection": {
+                "items": [{
+                  "href": "https://images-assets.nasa.gov/image/iss068e012345/collection.json",
+                  "data": [{
+                    "nasa_id": "iss068e012345",
+                    "title": "Nile River Delta from Orbit",
+                    "description": "Astronaut photograph of the Nile River delta and Mediterranean coastline taken from the ISS.",
+                    "center": "JSC",
+                    "keywords": ["Earth", "Delta", "Coastline", "Orbital"]
+                  }],
+                  "links": [{ "href": "https://images-assets.nasa.gov/image/iss068e012345/iss068e012345~thumb.jpg" }]
+                }]
+              }
+            }
+        """.trimIndent()
+
+        val nasa = NasaLibrarySourceAdapter(FakeHttpClient(mapOf("images-api.nasa.gov" to sampleNasaEarthJson)))
+        val earthCandidates = nasa.fetchCandidates(setOf(SafeCategory.AERIAL_EARTH), limit = 4)
+        assertEquals(1, earthCandidates.size)
+        assertEquals("Nile River Delta from Orbit", earthCandidates.first().title)
+        assertEquals(SafeCategory.AERIAL_EARTH, earthCandidates.first().category)
+    }
 }

@@ -39,17 +39,23 @@ class ClevelandMuseumCc0SourceAdapter(
                 SafeCategory.SCENIC_FINE_ART,
                 SafeCategory.LANDSCAPES_NATURE,
                 SafeCategory.ARCHITECTURE_CITYSCAPES,
-                SafeCategory.ABSTRACT_PATTERNS
+                SafeCategory.ABSTRACT_PATTERNS,
+                SafeCategory.BOTANICAL_FLORA
             )
         )
         if (supported.isEmpty()) return emptyList()
 
         val querySpecs = buildList {
+            if (SafeCategory.BOTANICAL_FLORA in supported) {
+                add("botanical garden flowers fruit" to SafeCategory.BOTANICAL_FLORA)
+            }
             if (SafeCategory.SCENIC_FINE_ART in supported || SafeCategory.LANDSCAPES_NATURE in supported) {
                 add("landscape mountain river" to SafeCategory.SCENIC_FINE_ART)
                 add("seascape coast ocean" to SafeCategory.SCENIC_FINE_ART)
                 add("forest valley sunset" to SafeCategory.SCENIC_FINE_ART)
-                add("botanical garden meadow" to SafeCategory.LANDSCAPES_NATURE)
+                if (SafeCategory.BOTANICAL_FLORA !in supported) {
+                    add("botanical garden meadow" to SafeCategory.LANDSCAPES_NATURE)
+                }
             }
             if (SafeCategory.ARCHITECTURE_CITYSCAPES in supported) {
                 add("architecture courtyard bridge" to SafeCategory.ARCHITECTURE_CITYSCAPES)

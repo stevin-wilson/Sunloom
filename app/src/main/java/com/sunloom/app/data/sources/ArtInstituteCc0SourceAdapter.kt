@@ -30,7 +30,9 @@ class ArtInstituteCc0SourceAdapter(
         offset: Int,
         targetWidthPx: Int
     ): List<CandidateAsset> {
-        if (SafeCategory.SCENIC_FINE_ART !in enabledCategories && SafeCategory.LANDSCAPES_NATURE !in enabledCategories) {
+        if (SafeCategory.SCENIC_FINE_ART !in enabledCategories &&
+            SafeCategory.LANDSCAPES_NATURE !in enabledCategories &&
+            SafeCategory.BOTANICAL_FLORA !in enabledCategories) {
             return emptyList()
         }
         val page = ((offset / limit.coerceAtLeast(1)) % 8) + 1

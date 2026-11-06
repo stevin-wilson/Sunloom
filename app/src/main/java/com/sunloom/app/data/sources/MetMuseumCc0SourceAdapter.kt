@@ -38,17 +38,25 @@ class MetMuseumCc0SourceAdapter(
             setOf(
                 SafeCategory.SCENIC_FINE_ART,
                 SafeCategory.LANDSCAPES_NATURE,
-                SafeCategory.ARCHITECTURE_CITYSCAPES
+                SafeCategory.ARCHITECTURE_CITYSCAPES,
+                SafeCategory.BOTANICAL_FLORA
             )
         )
         if (targetCategories.isEmpty()) return emptyList()
 
-        val searchTerms = listOf(
-            "landscape mountains",
-            "seascape ocean horizon",
-            "sunset valley river",
-            "architecture garden courtyard"
-        )
+        val searchTerms = buildList {
+            if (SafeCategory.BOTANICAL_FLORA in targetCategories) {
+                add("botanical flowers garden flora")
+            }
+            if (SafeCategory.SCENIC_FINE_ART in targetCategories || SafeCategory.LANDSCAPES_NATURE in targetCategories) {
+                add("landscape mountains")
+                add("seascape ocean horizon")
+                add("sunset valley river")
+            }
+            if (SafeCategory.ARCHITECTURE_CITYSCAPES in targetCategories) {
+                add("architecture garden courtyard")
+            }
+        }.ifEmpty { listOf("landscape mountains") }
         val term = searchTerms[(offset / 4).coerceAtLeast(0) % searchTerms.size]
         val encodedTerm = URLEncoder.encode(term, "UTF-8")
         val searchUrl = "https://collectionapi.metmuseum.org/public/collection/v1/search" +

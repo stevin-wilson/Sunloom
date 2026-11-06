@@ -38,12 +38,16 @@ class SmkOpenSourceAdapter(
             setOf(
                 SafeCategory.SCENIC_FINE_ART,
                 SafeCategory.LANDSCAPES_NATURE,
-                SafeCategory.ARCHITECTURE_CITYSCAPES
+                SafeCategory.ARCHITECTURE_CITYSCAPES,
+                SafeCategory.BOTANICAL_FLORA
             )
         )
         if (supported.isEmpty()) return emptyList()
 
         val querySpecs = buildList {
+            if (SafeCategory.BOTANICAL_FLORA in supported) {
+                add("botanical flowers flora garden" to SafeCategory.BOTANICAL_FLORA)
+            }
             if (SafeCategory.SCENIC_FINE_ART in supported || SafeCategory.LANDSCAPES_NATURE in supported) {
                 add("landscape mountain valley" to SafeCategory.SCENIC_FINE_ART)
                 add("seascape coast ocean" to SafeCategory.SCENIC_FINE_ART)
