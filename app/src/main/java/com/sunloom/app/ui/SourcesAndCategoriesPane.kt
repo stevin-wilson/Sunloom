@@ -61,6 +61,7 @@ internal fun SourcesAndCategoriesPane(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .desktopScrollbar(scrollState)
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {

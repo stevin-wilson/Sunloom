@@ -437,6 +437,24 @@ object SunloomIcons {
         }
     }
 
+    val Fullscreen: ImageVector = icon24("Fullscreen") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(7f, 14f); horizontalLineTo(5f); verticalLineTo(19f); horizontalLineTo(10f); verticalLineTo(17f); horizontalLineTo(7f); close()
+            moveTo(5f, 10f); horizontalLineTo(7f); verticalLineTo(7f); horizontalLineTo(10f); verticalLineTo(5f); horizontalLineTo(5f); close()
+            moveTo(17f, 17f); horizontalLineTo(14f); verticalLineTo(19f); horizontalLineTo(19f); verticalLineTo(14f); horizontalLineTo(17f); close()
+            moveTo(14f, 5f); verticalLineTo(7f); horizontalLineTo(17f); verticalLineTo(10f); horizontalLineTo(19f); verticalLineTo(5f); close()
+        }
+    }
+
+    val FullscreenExit: ImageVector = icon24("FullscreenExit") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(5f, 16f); horizontalLineTo(8f); verticalLineTo(19f); horizontalLineTo(10f); verticalLineTo(14f); horizontalLineTo(5f); close()
+            moveTo(8f, 8f); horizontalLineTo(5f); verticalLineTo(10f); horizontalLineTo(10f); verticalLineTo(5f); horizontalLineTo(8f); close()
+            moveTo(14f, 19f); horizontalLineTo(16f); verticalLineTo(16f); horizontalLineTo(19f); verticalLineTo(14f); horizontalLineTo(14f); close()
+            moveTo(16f, 8f); verticalLineTo(5f); horizontalLineTo(14f); verticalLineTo(10f); horizontalLineTo(19f); verticalLineTo(8f); close()
+        }
+    }
+
     val Restore: ImageVector = icon24("Restore") {
         path(fill = SolidColor(Color.Black)) {
             moveTo(12.5f, 8f)
