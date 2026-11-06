@@ -189,10 +189,11 @@ class SourceAdaptersTest {
     }
 
     @Test
-    fun `BundledSeedSourceAdapter provides 3 Light and 3 Dark offline CC0 wallpapers with honest provenance`() = runTest {
+    fun `BundledSeedSourceAdapter provides offline CC0 wallpapers with honest provenance`() = runTest {
         val adapter = BundledSeedSourceAdapter()
-        val allSeeds = adapter.fetchCandidates(SafeCategory.entries.toSet(), limit = 10, targetWidthPx = 2560)
-        assertEquals(6, allSeeds.size)
+        val allSeeds = adapter.fetchCandidates(SafeCategory.entries.toSet(), limit = 50, targetWidthPx = 2560)
+        assertEquals(BundledSeedSourceAdapter.SEED_SPECS.size, allSeeds.size)
+        assertTrue(allSeeds.size >= 6)
         assertTrue(allSeeds.all { it.provenance.licenseType == LicenseType.CC0 })
         assertTrue(allSeeds.all { it.provenance.originalPageUrl.isEmpty() })
         assertTrue(allSeeds.all { it.provenance.creatorName == "Generated on device by Sunloom" })

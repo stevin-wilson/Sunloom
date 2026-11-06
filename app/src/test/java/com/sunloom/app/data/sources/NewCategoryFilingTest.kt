@@ -97,10 +97,11 @@ class NewCategoryFilingTest {
     @Test
     fun `seed reserve respects the enabled categories instead of returning every seed`() = runTest {
         val adapter = BundledSeedSourceAdapter()
-        val none = adapter.fetchCandidates(
+        val newOnly = adapter.fetchCandidates(
             setOf(SafeCategory.BOTANICAL_FLORA, SafeCategory.AERIAL_EARTH), limit = 50
         )
-        assertTrue("seeds for categories nobody enabled were returned: ${none.map { it.id }}", none.isEmpty())
+        assertTrue(newOnly.isNotEmpty())
+        assertTrue(newOnly.all { it.category == SafeCategory.BOTANICAL_FLORA || it.category == SafeCategory.AERIAL_EARTH })
         val landscapes = adapter.fetchCandidates(setOf(SafeCategory.LANDSCAPES_NATURE), limit = 50)
         assertTrue(landscapes.isNotEmpty())
         assertTrue(landscapes.all { it.category == SafeCategory.LANDSCAPES_NATURE })

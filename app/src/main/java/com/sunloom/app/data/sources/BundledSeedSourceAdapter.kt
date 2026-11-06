@@ -274,6 +274,104 @@ class BundledSeedSourceAdapter : WallpaperSourceAdapter {
                 horizonColorRgb = 0x1E293B,
                 bottomColorRgb = 0x090D16,
                 accentColorRgb = 0x334155
+            ),
+            // Offline fallback for the Botanical & Flora and Aerial & Earth categories (2 Light + 2 Dark each),
+            // so a user who enabled only those categories still has an eligible offline reserve.
+            SeedWallpaperSpec(
+                id = "seed-light-orchard-blossom",
+                title = "Orchard Blossom Morning",
+                description = "Soft blush and fresh-green daylight washes suggesting a blossoming orchard, with calm open sky for legibility.",
+                category = SafeCategory.BOTANICAL_FLORA,
+                targetBrightness = BrightnessClass.LIGHT,
+                subjectTags = listOf("orchard", "blossom", "botanical", "flora"),
+                topColorRgb = 0xEAF5E4,
+                horizonColorRgb = 0xFDF2F4,
+                bottomColorRgb = 0xC8E6C0,
+                accentColorRgb = 0xF9A8D4
+            ),
+            SeedWallpaperSpec(
+                id = "seed-light-wildflower-meadow",
+                title = "Wildflower Meadow Haze",
+                description = "Pale sky over a sunlit meadow band of buttercup yellow and spring green.",
+                category = SafeCategory.BOTANICAL_FLORA,
+                targetBrightness = BrightnessClass.LIGHT,
+                subjectTags = listOf("meadow", "flower", "flora", "field"),
+                topColorRgb = 0xE6F4FA,
+                horizonColorRgb = 0xFEFCE8,
+                bottomColorRgb = 0xD9F0B8,
+                accentColorRgb = 0xFDE047
+            ),
+            SeedWallpaperSpec(
+                id = "seed-dark-fern-canopy",
+                title = "Fern Canopy Dusk",
+                description = "Deep forest-green foliage layers after sunset, designed for low eye strain.",
+                category = SafeCategory.BOTANICAL_FLORA,
+                targetBrightness = BrightnessClass.DARK,
+                subjectTags = listOf("foliage", "leaf", "botanical", "forest"),
+                topColorRgb = 0x07140E,
+                horizonColorRgb = 0x0F2A1D,
+                bottomColorRgb = 0x06100B,
+                accentColorRgb = 0x14532D
+            ),
+            SeedWallpaperSpec(
+                id = "seed-dark-night-garden",
+                title = "Night Garden Bloom",
+                description = "Midnight garden in indigo and plum with a faint petal glow near the horizon.",
+                category = SafeCategory.BOTANICAL_FLORA,
+                targetBrightness = BrightnessClass.DARK,
+                subjectTags = listOf("garden", "flower", "petal", "botanical"),
+                topColorRgb = 0x0D1020,
+                horizonColorRgb = 0x1F1B3A,
+                bottomColorRgb = 0x0A0F14,
+                accentColorRgb = 0x3B1F4D
+            ),
+            SeedWallpaperSpec(
+                id = "seed-light-aerial-coastline",
+                title = "Aerial Coastline Shallows",
+                description = "High-altitude view of pale turquoise shallows meeting a sandy shore.",
+                category = SafeCategory.AERIAL_EARTH,
+                targetBrightness = BrightnessClass.LIGHT,
+                subjectTags = listOf("aerial", "coast", "shore", "island"),
+                topColorRgb = 0xDFF4F6,
+                horizonColorRgb = 0xBFE8E4,
+                bottomColorRgb = 0xF4E9C8,
+                accentColorRgb = 0x7DD3D0
+            ),
+            SeedWallpaperSpec(
+                id = "seed-light-river-delta",
+                title = "River Delta Daylight",
+                description = "Soft sage and silt tones suggesting a river delta seen from far above.",
+                category = SafeCategory.AERIAL_EARTH,
+                targetBrightness = BrightnessClass.LIGHT,
+                subjectTags = listOf("aerial", "river", "earth", "coast"),
+                topColorRgb = 0xE8F1E4,
+                horizonColorRgb = 0xD4E6C8,
+                bottomColorRgb = 0xC9D8C3,
+                accentColorRgb = 0x9BBF8E
+            ),
+            SeedWallpaperSpec(
+                id = "seed-dark-orbital-night",
+                title = "Orbital Earth at Night",
+                description = "Dark limb of the Earth against deep space with a thin blue atmospheric line.",
+                category = SafeCategory.AERIAL_EARTH,
+                targetBrightness = BrightnessClass.DARK,
+                subjectTags = listOf("orbital", "earth", "horizon", "satellite"),
+                topColorRgb = 0x050914,
+                horizonColorRgb = 0x0B1B33,
+                bottomColorRgb = 0x03060D,
+                accentColorRgb = 0x14325C
+            ),
+            SeedWallpaperSpec(
+                id = "seed-dark-polar-aerial",
+                title = "Polar Ice Aerial Dusk",
+                description = "Cold blue-slate pack ice and open water under a polar dusk, seen from above.",
+                category = SafeCategory.AERIAL_EARTH,
+                targetBrightness = BrightnessClass.DARK,
+                subjectTags = listOf("aerial", "ice", "glacier", "coast"),
+                topColorRgb = 0x0A1620,
+                horizonColorRgb = 0x16303F,
+                bottomColorRgb = 0x08121A,
+                accentColorRgb = 0x1F4B5E
             )
         )
 

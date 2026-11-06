@@ -36,13 +36,32 @@ class LocalLibraryRepositoryTest {
     }
 
     @Test
-    fun `ensureSeedReserveLoaded populates 3 Light and 3 Dark CC0 wallpapers into SQLite`() {
+    fun `ensureSeedReserveLoaded populates every bundled CC0 seed with the brightness it was designed for`() {
         val loaded = repository.ensureSeedReserveLoaded(display)
-        assertEquals(6, loaded.size)
-        val lightCount = loaded.count { it.evaluation.brightnessClass == BrightnessClass.LIGHT }
-        val darkCount = loaded.count { it.evaluation.brightnessClass == BrightnessClass.DARK }
-        assertEquals(3, lightCount)
-        assertEquals(3, darkCount)
+        val specs = com.sunloom.app.data.sources.BundledSeedSourceAdapter.SEED_SPECS
+        assertEquals(specs.size, loaded.size)
+        // Article IX §1 floor: at least 3 Light and 3 Dark.
+        assertTrue(loaded.count { it.evaluation.brightnessClass == BrightnessClass.LIGHT } >= 3)
+        assertTrue(loaded.count { it.evaluation.brightnessClass == BrightnessClass.DARK } >= 3)
+        for (spec in specs) {
+            val record = loaded.single { it.id == spec.id }
+            assertTrue("${spec.id} was not approved", record.evaluation.isEligible)
+            assertEquals("${spec.id} brightness", spec.targetBrightness, record.evaluation.brightnessClass)
+            assertEquals("${spec.id} category", spec.category, record.category)
+        }
+    }
+
+    @Test
+    fun `botanical and aerial categories each have an offline Light and Dark seed`() {
+        val loaded = repository.ensureSeedReserveLoaded(display)
+        for (category in listOf(
+            com.sunloom.app.domain.model.SafeCategory.BOTANICAL_FLORA,
+            com.sunloom.app.domain.model.SafeCategory.AERIAL_EARTH
+        )) {
+            val seeds = loaded.filter { it.category == category && it.evaluation.isEligible }
+            assertTrue("$category light", seeds.count { it.evaluation.brightnessClass == BrightnessClass.LIGHT } >= 2)
+            assertTrue("$category dark", seeds.count { it.evaluation.brightnessClass == BrightnessClass.DARK } >= 2)
+        }
     }
 
     @Test

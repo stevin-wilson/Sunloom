@@ -1,7 +1,7 @@
 # Wallpaper Tool Development Constitution
 
 - **Product:** Sunloom (`com.sunloom.app`)
-- **Status:** Adopted v0.10 (Governing Engineering Law) **[v0.10]**
+- **Status:** Adopted v0.11 (Governing Engineering Law) **[v0.11]**
 - **Scope:** Product principles, user experience, platform-independent requirements, and platform and distribution obligations confined to Article XVIII **[v0.3]**
 - **Purpose:** Guide product and engineering decisions. Articles I–XVII remain platform-independent; platform-specific obligations live only in Article XVIII so the core law survives a future port. **[v0.3]**
 
@@ -20,6 +20,7 @@
 | v0.8 | 2026-11-06 | Article VII §4 L2b and Schedule A expanded with recommended categories: Botanical & Flora (including orchard/fruits and botanical art) and Aerial & Earth (high-altitude coastlines, orbital Earth views, and river deltas), expanding `SAFE_DOMAIN_KEYWORDS` with safe natural flora and aerial tokens (`flower`, `blossom`, `petal`, `leaf`, `foliage`, `orchard`, `fruit`, `succulent`, `plant`, `aerial`, `satellite`, `delta`). |
 | v0.9 | 2026-11-06 | Desktop quality pass for the Play desktop badge. Article VI §6 gains export attribution (Save as… carries credit with the file; CC BY / CC BY-SA also require a companion attribution file). Article VI §10 and XVIII §2 admit images handed over by the system Share sheet, Open with, and drag-and-drop, all through the same L3–L5 import gate; export uses the system file picker with no new permissions. Article XII §3 extends timed Undo to multi-select removal and adds Ctrl+Z. Article XII §4 adds Esc, Ctrl+, / Ctrl+C / Ctrl+S, Reserve list/grid, Ctrl/Shift multi-select with arrow-key navigation, Ctrl+wheel and pinch preview zoom, true window fullscreen, busy cursor, and a single-window launch model. Article XVIII adds §6 (window model). |
 | v0.10 | 2026-11-06 | Corrective amendment to v0.8. The L2b allowlist drops the over-broad tokens `plant` and `delta` (industrial plants, brands and organisations pass L2b on those words alone; river deltas and plants are still recognised through `river`, `botanical`, `flora`, `flower` and `leaf`). Source adapters must file each record under a category the user enabled, because the matcher excludes everything else, and the bundled seed reserve returns only seeds in enabled categories. |
+| v0.11 | 2026-11-06 | Article IX §1: the bundled procedural seed reserve now covers the Botanical & Flora and Aerial & Earth categories adopted in v0.8 with 2 Light and 2 Dark seeds each (14 seeds in total), and states the per-category offline fallback rule. Scenic Fine Art and Abstract & Minimal still have no seeds and are recorded as an open gap. |
 
 ---
 
@@ -167,7 +168,7 @@ A wallpaper should look intentionally selected for the display on which it appea
 
 ## Article IX: Offline Reliability and Reserve Management **[v0.4]**
 
-1. **First-boot offline readiness:** On first launch (including in airplane mode), Sunloom synthesizes 3 Light and 3 Dark procedural CC0 wallpapers at the connected display's native resolution so the app functions without network access.
+1. **First-boot offline readiness:** On first launch (including in airplane mode), Sunloom synthesizes at least 3 Light and 3 Dark procedural CC0 wallpapers at the connected display's native resolution so the app functions without network access. Every category that has an online adapter must also have at least 2 Light and 2 Dark bundled seeds, so a user who enables only that category still has an eligible offline fallback (the matcher excludes seeds from other categories). **[v0.4, v0.11]**
 2. **Protected reserve floor:** The local library maintains at least **3 Light + 3 Dark** approved wallpapers protected from cache eviction (in addition to active wallpapers, user favorites, and the baseline restore wallpaper).
 3. **Atomic wallpaper changes:** A candidate wallpaper is fully downloaded, validated through L1–L4, and verified to exist on disk (`fileSizeBytes > 0`) before `WallpaperManager` is invoked. If applying a wallpaper fails, the scheduler advances to the next eligible reserve wallpaper rather than getting stuck.
 4. **Event-driven schedule recovery:** Time changes (`TIME_SET`) and timezone changes (`TIMEZONE_CHANGED`) reschedule the next transition immediately.
