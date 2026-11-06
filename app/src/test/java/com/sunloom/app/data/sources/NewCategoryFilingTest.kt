@@ -108,6 +108,18 @@ class NewCategoryFilingTest {
     }
 
     @Test
+    fun `seed ids are unique and every new category has two light and two dark seeds`() {
+        val specs = BundledSeedSourceAdapter.SEED_SPECS
+        assertEquals(specs.size, specs.map { it.id }.toSet().size)
+        assertEquals(14, specs.size)
+        for (category in listOf(SafeCategory.BOTANICAL_FLORA, SafeCategory.AERIAL_EARTH, SafeCategory.LANDSCAPES_NATURE)) {
+            val inCategory = specs.filter { it.category == category }
+            assertTrue("$category light", inCategory.count { it.targetBrightness == com.sunloom.app.domain.model.BrightnessClass.LIGHT } >= 2)
+            assertTrue("$category dark", inCategory.count { it.targetBrightness == com.sunloom.app.domain.model.BrightnessClass.DARK } >= 2)
+        }
+    }
+
+    @Test
     fun `generic industrial and brand words do not satisfy the safe domain check`() {
         assertFalse(SafetyDenylist.matchesSafeDomain("Delta Airlines poster", emptyList()))
         assertFalse(SafetyDenylist.matchesSafeDomain("Coal power plant", listOf("industry")))

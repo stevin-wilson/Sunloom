@@ -146,8 +146,9 @@ object SeedRenderer {
 /**
  * Keyless Source #4: Bundled Offline Seed Reserve (Article IX §1–2).
  * Guarantees that Sunloom works 100% offline from the very first launch with
- * 3 Light (Daytime) and 3 Dark (Evening/Night) procedural CC0 compositions rendered
+ * Light (Daytime) and Dark (Evening/Night) procedural CC0 compositions rendered
  * at the connected display's native resolution with honest on-device provenance.
+ * Only seeds in the user's enabled categories are offered; see [SEED_SPECS] for coverage.
  */
 class BundledSeedSourceAdapter : WallpaperSourceAdapter {
 

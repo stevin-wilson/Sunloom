@@ -68,6 +68,30 @@ class BoundedCacheManagerTest {
     }
 
     @Test
+    fun `eviction keeps one light and one dark seed per category beyond the global top three`() {
+        fun seed(id: String, category: SafeCategory, brightness: BrightnessClass, retrievedAt: Long): WallpaperRecord {
+            val base = record(id, sizeMb = 1, brightness = brightness, retrievedAt = retrievedAt)
+            return base.copy(
+                category = category,
+                provenance = base.provenance.copy(sourceId = "seed_reserve")
+            )
+        }
+        val records = buildList {
+            // Newer landscape seeds fill the global top-3 slots...
+            repeat(3) { add(seed("land-l$it", SafeCategory.LANDSCAPES_NATURE, BrightnessClass.LIGHT, 9_000L + it)) }
+            repeat(3) { add(seed("land-d$it", SafeCategory.LANDSCAPES_NATURE, BrightnessClass.DARK, 9_000L + it)) }
+            // ...so these older botanical seeds would otherwise be evictable.
+            add(seed("bot-l", SafeCategory.BOTANICAL_FLORA, BrightnessClass.LIGHT, 1_000L))
+            add(seed("bot-d", SafeCategory.BOTANICAL_FLORA, BrightnessClass.DARK, 1_000L))
+        }
+        val report = cacheManager.selectEvictions(records, activeWallpaperIds = emptySet(), maxCacheBytes = 1L)
+        assertTrue("bot-l" in report.protectedIds)
+        assertTrue("bot-d" in report.protectedIds)
+        assertFalse("bot-l" in report.evictedIds)
+        assertFalse("bot-d" in report.evictedIds)
+    }
+
+    @Test
     fun `selectEvictions never deletes active wallpaper, favorites, baseline restore, or minimum light and dark reserve`() {
         val records = listOf(
             record("active-wall", sizeMb = 10, brightness = BrightnessClass.LIGHT, retrievedAt = 100L),
