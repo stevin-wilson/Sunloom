@@ -97,6 +97,9 @@
     <string name="export_failed">Could not save the wallpaper.</string>
     <string name="export_attribution_prompt">Choose where to save the attribution file for this image.</string>
     <string name="attribution_copied">Attribution copied to the clipboard</string>
+    <string name="try_again">Try again</string>
+    <string name="no_browser_for_link">No web browser available to open this link</string>
+    <string name="today_preview_description">Wallpaper preview. Press Ctrl plus or minus to zoom, Ctrl 0 to reset.</string>
     <string name="shortcut_undo">Undo last dislike or removal</string>
     <string name="shortcut_copy_attribution">Copy attribution</string>
     <string name="shortcut_save_as">Save wallpaper as…</string>

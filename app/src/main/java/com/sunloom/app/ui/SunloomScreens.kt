@@ -212,15 +212,23 @@ fun SunloomApp(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val attributionCopiedMessage = stringResource(R.string.attribution_copied)
-    val copyAttribution: (com.sunloom.app.domain.model.WallpaperRecord) -> Unit = { record ->
-        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-        clipboard?.setPrimaryClip(
-            android.content.ClipData.newPlainText(record.title, AttributionFormatter.format(record))
-        )
-        scope.launch { snackbarHostState.showSnackbar(attributionCopiedMessage) }
+    val showMessage: (String) -> Unit = remember(scope, snackbarHostState) {
+        { message -> scope.launch { snackbarHostState.showSnackbar(message) }; Unit }
     }
-    val wallpaperActions = remember(onSaveAs, copyAttribution, onDeleteManyFromReserve) {
-        WallpaperActions(onSaveAs, copyAttribution, onDeleteManyFromReserve)
+    // Remembered: LocalWallpaperActions is a static local, so a new instance per recomposition would
+    // recompose the whole workspace every time.
+    val copyAttribution: (com.sunloom.app.domain.model.WallpaperRecord) -> Unit =
+        remember(context, showMessage, attributionCopiedMessage) {
+            { record ->
+                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                clipboard?.setPrimaryClip(
+                    android.content.ClipData.newPlainText(record.title, AttributionFormatter.format(record))
+                )
+                showMessage(attributionCopiedMessage)
+            }
+        }
+    val wallpaperActions = remember(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage) {
+        WallpaperActions(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage)
     }
     val dropTarget = remember(onDropImages) {
         object : DragAndDropTarget {
@@ -862,7 +870,11 @@ fun DesktopWorkspaceScreen(
                 modifier = paneModifier.padding(contentPadding),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                TopStatusBanner(uiState = uiState, onTogglePause = onTogglePause)
+                TopStatusBanner(
+                    uiState = uiState,
+                    onTogglePause = onTogglePause,
+                    onRetryApply = { uiState.retryApplyRecordId?.let(onApplySpecific) }
+                )
 
                 when (uiState.activeTab) {
                     DesktopNavTab.TODAY_CANVAS -> TodayCanvasPane(
@@ -999,7 +1011,8 @@ private val ReadableContentMaxWidth = 1100.dp
 @Composable
 private fun TopStatusBanner(
     uiState: SunloomUiState,
-    onTogglePause: () -> Unit
+    onTogglePause: () -> Unit,
+    onRetryApply: () -> Unit = {}
 ) {
     val solarNote = when {
         uiState.daylightWindow.isPolarDay -> "24h Daylight"
@@ -1049,6 +1062,13 @@ private fun TopStatusBanner(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
+                }
+                if (uiState.retryApplyRecordId != null) {
+                    OutlinedButton(
+                        onClick = onRetryApply,
+                        enabled = !uiState.isApplyingWallpaper,
+                        modifier = Modifier.desktopControl().testTag("retry_apply_button")
+                    ) { Text(stringResource(R.string.try_again)) }
                 }
                 if (showPauseResume) {
                     ShortcutTooltip(

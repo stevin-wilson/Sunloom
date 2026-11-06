@@ -92,7 +92,9 @@ data class SunloomUiState(
     val pendingDiscard: PendingDiscard? = null,
     /** True while a wallpaper is being decoded/cropped/applied, so controls can show progress. */
     val isApplyingWallpaper: Boolean = false,
-    val statusBannerMessage: String = "Ready"
+    val statusBannerMessage: String = "Ready",
+    /** Set when the last apply failed in a way that may succeed on a second try; drives the banner's Retry. */
+    val retryApplyRecordId: String? = null
 ) {
     val totalCacheBytesUsed: Long
         get() = if (allCachedBytesUsed >= 0L) allCachedBytesUsed else libraryWallpapers.sumOf { it.fileSizeBytes }
@@ -224,7 +226,7 @@ class MainViewModel(
 
     /** Shows a short result message in the status banner (used by one-shot platform actions like export). */
     fun announce(message: String) {
-        _uiState.value = _uiState.value.copy(statusBannerMessage = message)
+        _uiState.value = _uiState.value.copy(statusBannerMessage = message, retryApplyRecordId = null)
     }
 
     fun selectTab(tab: DesktopNavTab) {
@@ -269,7 +271,8 @@ class MainViewModel(
             } catch (e: Exception) {
                 current.copy(
                     preferences = previous,
-                    statusBannerMessage = "Couldn't save that setting. Your previous choice was kept."
+                    statusBannerMessage = "Couldn't save that setting. Your previous choice was kept.",
+                    retryApplyRecordId = null
                 )
             }
         }
@@ -532,9 +535,11 @@ class MainViewModel(
         val prevTab = _uiState.value.activeTab
         val prevOverlay = _uiState.value.showLegibilityZonesOverlay
         val prevBanner = _uiState.value.statusBannerMessage
+        val prevRetry = _uiState.value.retryApplyRecordId
         _uiState.value = _uiState.value.copy(
             isSyncingOnline = true,
-            statusBannerMessage = "Fetching high-resolution wallpapers from online catalogs..."
+            statusBannerMessage = "Fetching high-resolution wallpapers from online catalogs...",
+            retryApplyRecordId = null
         )
         try {
             val refreshed = withContext(workDispatcher) {
@@ -551,13 +556,15 @@ class MainViewModel(
         } catch (cancel: CancellationException) {
             _uiState.value = _uiState.value.copy(
                 isSyncingOnline = false,
-                statusBannerMessage = prevBanner
+                statusBannerMessage = prevBanner,
+                retryApplyRecordId = prevRetry
             )
             throw cancel
         } catch (t: Throwable) {
             _uiState.value = _uiState.value.copy(
                 isSyncingOnline = false,
-                statusBannerMessage = "Online sync interrupted: ${t.message ?: "check connection"}"
+                statusBannerMessage = "Online sync interrupted: ${t.message ?: "check connection"}",
+                retryApplyRecordId = null
             )
         } finally {
             if (_uiState.value.isSyncingOnline) {
@@ -965,10 +972,18 @@ class AndroidSunloomGateway(
                 preloadedPrefs = prefs
             )
         } else {
+            // Say what happened in plain words (Article V §2). Only a temporary failure is worth retrying;
+            // an unsupported host will refuse again, so it gets an explanation instead of a button.
+            val retryable = status == WallpaperStatus.FAILED_TEMPORARILY
             buildSnapshot(
                 repo = repo,
-                bannerMessage = "Status: ${status.label} while applying '${record.title}'",
-                preloadedPrefs = prefs
+                bannerMessage = if (retryable) {
+                    "Couldn't set '${record.title}' just now. Your current wallpaper is unchanged."
+                } else {
+                    "This system doesn't allow Sunloom to change the wallpaper (${status.label.lowercase()})."
+                },
+                preloadedPrefs = prefs,
+                retryApplyRecordId = record.id.takeIf { retryable }
             )
         }
     }
@@ -1050,7 +1065,8 @@ class AndroidSunloomGateway(
         }
         val nextState = applyNextInternal(repo)
         nextState.copy(
-            statusBannerMessage = "Disliked '${current.title}' and switched to '${nextState.currentWallpaper?.title ?: "next wallpaper"}'"
+            statusBannerMessage = "Disliked '${current.title}' and switched to '${nextState.currentWallpaper?.title ?: "next wallpaper"}'",
+            retryApplyRecordId = null
         )
     }
 
@@ -1061,7 +1077,8 @@ class AndroidSunloomGateway(
         if (wasActive) {
             val nextState = applyNextInternal(repo)
             nextState.copy(
-                statusBannerMessage = "Deleted '${target.title}' from reserve"
+                statusBannerMessage = "Deleted '${target.title}' from reserve",
+                retryApplyRecordId = null
             )
         } else {
             buildSnapshot(repo, "Deleted '${target.title}' from reserve")
@@ -1144,7 +1161,8 @@ class AndroidSunloomGateway(
     private fun buildSnapshot(
         repo: LocalLibraryRepository,
         bannerMessage: String,
-        preloadedPrefs: UserPreferences? = null
+        preloadedPrefs: UserPreferences? = null,
+        retryApplyRecordId: String? = null
     ): SunloomUiState {
         val prefs = preloadedPrefs ?: repo.loadPreferences()
         val caps = platformAdapter.probeCapabilities(prefs.displayPolicy)
@@ -1197,7 +1215,8 @@ class AndroidSunloomGateway(
             sourceDiagnostics = repo.getSourceDiagnostics(),
             targetBrightnessNow = targetBrightness,
             daylightWindow = daylight,
-            statusBannerMessage = bannerMessage
+            statusBannerMessage = bannerMessage,
+            retryApplyRecordId = retryApplyRecordId
         )
     }
 }

@@ -11,9 +11,23 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed as isKeyCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -61,15 +75,76 @@ internal fun zoomAround(state: ZoomState, factor: Float, focal: Offset, size: In
 internal fun panBy(state: ZoomState, delta: Offset, size: IntSize): ZoomState =
     if (state.scale <= MIN_PREVIEW_ZOOM) state else clampZoom(state.copy(translation = state.translation + delta), size)
 
+/** Keyboard zoom: one step multiplies the scale by this much. */
+internal const val KEY_ZOOM_STEP = 1.25f
+
+internal enum class ZoomKeyAction { IN, OUT, RESET }
+
+/** Ctrl+= / Ctrl++ zoom in, Ctrl+- zoom out, Ctrl+0 resets. Shift is allowed because "+" needs it on most layouts. */
+internal fun zoomKeyActionFor(key: Key, ctrl: Boolean): ZoomKeyAction? {
+    if (!ctrl) return null
+    return when (key) {
+        Key.Equals, Key.Plus, Key.NumPadAdd -> ZoomKeyAction.IN
+        Key.Minus, Key.NumPadSubtract -> ZoomKeyAction.OUT
+        Key.Zero, Key.NumPad0 -> ZoomKeyAction.RESET
+        else -> null
+    }
+}
+
+internal fun applyZoomKey(state: ZoomState, action: ZoomKeyAction, size: IntSize): ZoomState {
+    val center = Offset(size.width / 2f, size.height / 2f)
+    return when (action) {
+        ZoomKeyAction.IN -> zoomAround(state, KEY_ZOOM_STEP, center, size)
+        ZoomKeyAction.OUT -> zoomAround(state, 1f / KEY_ZOOM_STEP, center, size)
+        ZoomKeyAction.RESET -> ZoomState()
+    }
+}
+
+/** Arrow keys pan a zoomed preview by a tenth of its size; null when the key does not pan. */
+internal fun panDeltaForKey(key: Key, size: IntSize): Offset? {
+    val dx = size.width * 0.1f
+    val dy = size.height * 0.1f
+    return when (key) {
+        Key.DirectionLeft -> Offset(dx, 0f)
+        Key.DirectionRight -> Offset(-dx, 0f)
+        Key.DirectionUp -> Offset(0f, dy)
+        Key.DirectionDown -> Offset(0f, -dy)
+        else -> null
+    }
+}
+
+private fun KeyEvent.hasAltOrMeta() = isAltPressed || isMetaPressed
+
 /**
  * Content_Zoom: Ctrl + mouse wheel and trackpad pinch (delivered as Ctrl+scroll on desktop) zoom the
  * content under the pointer, two-finger touch pinch zooms and pans, and a double click/tap resets.
+ * The focused preview also zooms with Ctrl+= / Ctrl+- / Ctrl+0 and pans with the arrows once zoomed.
  * Plain wheel scrolling is untouched so the page still scrolls.
  */
 internal fun Modifier.zoomablePreview(state: MutableState<ZoomState>): Modifier = composed {
     var size by remember { mutableStateOf(IntSize.Zero) }
+    val focus = remember { FocusRequester() }
     this
         .onSizeChanged { size = it }
+        .focusRequester(focus)
+        .desktopFocusRing(RoundedCornerShape(12.dp))
+        .focusable()
+        .onKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown || event.hasAltOrMeta()) return@onKeyEvent false
+            val action = zoomKeyActionFor(event.key, event.isKeyCtrlPressed)
+            if (action != null) {
+                state.value = applyZoomKey(state.value, action, size)
+                return@onKeyEvent true
+            }
+            // Arrows only belong to the preview while it is zoomed; at 1x they stay free for focus movement.
+            val pan = if (!event.isKeyCtrlPressed && state.value.scale > MIN_PREVIEW_ZOOM) panDeltaForKey(event.key, size) else null
+            if (pan != null) {
+                state.value = panBy(state.value, pan, size)
+                true
+            } else {
+                false
+            }
+        }
         .pointerInput(Unit) {
             awaitPointerEventScope {
                 while (true) {
@@ -100,7 +175,10 @@ internal fun Modifier.zoomablePreview(state: MutableState<ZoomState>): Modifier 
             }
         }
         .pointerInput(Unit) {
-            detectTapGestures(onDoubleTap = { state.value = ZoomState() })
+            detectTapGestures(
+                onTap = { focus.requestFocus() },
+                onDoubleTap = { state.value = ZoomState() }
+            )
         }
 }
 

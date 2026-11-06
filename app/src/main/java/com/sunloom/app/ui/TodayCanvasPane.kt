@@ -15,6 +15,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -227,12 +231,14 @@ internal fun TodayCanvasPane(
                             if (current != null) {
                                 val previewAspect = primaryDisplayAspect(uiState, 0.75f, 2.6f)
                                 val zoomState = remember(current.id) { mutableStateOf(ZoomState()) }
+                                val previewDescription = stringResource(R.string.today_preview_description)
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .aspectRatio(previewAspect)
                                         .clip(RoundedCornerShape(12.dp))
                                         .zoomablePreview(zoomState)
+                                        .semantics { contentDescription = previewDescription }
                                         .testTag("today_preview")
                                 ) {
                                     WallpaperPreviewSurface(
@@ -378,21 +384,29 @@ internal fun TodayCanvasPane(
             .fillMaxSize()
             .desktopScrollbar(scrollState)
             .verticalScroll(scrollState)
-        if (stacked) {
-            Column(
-                modifier = scrollingModifier,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                previewColumn(Modifier.fillMaxWidth())
-                provenanceCard(Modifier.fillMaxWidth())
-            }
-        } else {
-            Row(
-                modifier = scrollingModifier.testTag("today_side_by_side"),
-                horizontalArrangement = Arrangement.spacedBy(18.dp)
-            ) {
-                previewColumn(Modifier.weight(1.35f))
-                provenanceCard(Modifier.weight(1f))
+        // The scroll container (and its scrollbar) spans the window; only the content is capped and
+        // centred so an ultra-wide display does not stretch the preview and cards across the screen.
+        val contentModifier = Modifier
+            .wrapContentWidth(Alignment.CenterHorizontally)
+            .widthIn(max = TodayCanvasMaxWidth)
+            .fillMaxWidth()
+        Box(modifier = scrollingModifier) {
+            if (stacked) {
+                Column(
+                    modifier = contentModifier,
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    previewColumn(Modifier.fillMaxWidth())
+                    provenanceCard(Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(
+                    modifier = contentModifier.testTag("today_side_by_side"),
+                    horizontalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    previewColumn(Modifier.weight(1.35f))
+                    provenanceCard(Modifier.weight(1f))
+                }
             }
         }
     }
@@ -458,6 +472,8 @@ internal fun ProvenanceRow(label: String, value: String) {
 @Composable
 internal fun ProvenanceLinkRow(label: String, displayText: String, url: String) {
     val uriHandler = LocalUriHandler.current
+    val actions = LocalWallpaperActions.current
+    val noBrowserMessage = stringResource(R.string.no_browser_for_link)
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         TooltipBox(
@@ -489,7 +505,9 @@ internal fun ProvenanceLinkRow(label: String, displayText: String, url: String) 
                         role = androidx.compose.ui.semantics.Role.Button
                     ) {
                         if (url.startsWith("https://")) {
+                            // No browser installed (or the host blocks it): say so instead of failing silently.
                             runCatching { uriHandler.openUri(url) }
+                                .onFailure { actions.showMessage(noBrowserMessage) }
                         }
                     }
             )

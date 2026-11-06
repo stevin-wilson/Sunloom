@@ -26,3 +26,6 @@ enum class WorkspaceWidthClass {
 
 /** Below this pane width the Today canvas stacks its preview above the provenance card. */
 val TodayCanvasStackBreakpoint: Dp = 720.dp
+
+/** Today content is centred and capped at this width so ultra-wide windows do not stretch it. */
+val TodayCanvasMaxWidth: Dp = 1400.dp

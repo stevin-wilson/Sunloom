@@ -1,6 +1,7 @@
 package com.sunloom.app.ui
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.IntSize
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -50,5 +51,34 @@ class PreviewZoomTest {
     @Test
     fun `panning at 1x does nothing so the page can scroll`() {
         assertEquals(ZoomState(), panBy(ZoomState(), Offset(40f, 40f), size))
+    }
+
+    @Test
+    fun `zoom keys map only with ctrl`() {
+        assertEquals(ZoomKeyAction.IN, zoomKeyActionFor(Key.Equals, ctrl = true))
+        assertEquals(ZoomKeyAction.IN, zoomKeyActionFor(Key.NumPadAdd, ctrl = true))
+        assertEquals(ZoomKeyAction.OUT, zoomKeyActionFor(Key.Minus, ctrl = true))
+        assertEquals(ZoomKeyAction.RESET, zoomKeyActionFor(Key.Zero, ctrl = true))
+        assertEquals(null, zoomKeyActionFor(Key.Equals, ctrl = false))
+        assertEquals(null, zoomKeyActionFor(Key.A, ctrl = true))
+    }
+
+    @Test
+    fun `keyboard zoom steps about the centre and resets`() {
+        val zoomed = applyZoomKey(ZoomState(), ZoomKeyAction.IN, size)
+        assertEquals(KEY_ZOOM_STEP, zoomed.scale, 0.0001f)
+        val centre = Offset(size.width / 2f, size.height / 2f)
+        val contentPoint = (centre - zoomed.translation) / zoomed.scale
+        assertEquals(centre.x, contentPoint.x, 0.01f)
+        assertEquals(centre.y, contentPoint.y, 0.01f)
+        assertEquals(ZoomState(), applyZoomKey(zoomed, ZoomKeyAction.OUT, size))
+        assertEquals(ZoomState(), applyZoomKey(zoomed, ZoomKeyAction.RESET, size))
+    }
+
+    @Test
+    fun `arrow keys produce pan deltas and other keys do not`() {
+        assertTrue(panDeltaForKey(Key.DirectionLeft, size)!!.x > 0f)
+        assertTrue(panDeltaForKey(Key.DirectionDown, size)!!.y < 0f)
+        assertEquals(null, panDeltaForKey(Key.Enter, size))
     }
 }

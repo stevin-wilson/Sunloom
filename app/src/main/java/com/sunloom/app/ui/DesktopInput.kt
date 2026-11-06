@@ -132,7 +132,8 @@ internal fun tabForCtrlShortcut(key: Key): DesktopNavTab? {
 class WallpaperActions(
     val saveAs: (com.sunloom.app.domain.model.WallpaperRecord) -> Unit = {},
     val copyAttribution: (com.sunloom.app.domain.model.WallpaperRecord) -> Unit = {},
-    val removeMany: (Collection<String>) -> Unit = {}
+    val removeMany: (Collection<String>) -> Unit = {},
+    val showMessage: (String) -> Unit = {}
 )
 
 val LocalWallpaperActions = staticCompositionLocalOf { WallpaperActions() }
