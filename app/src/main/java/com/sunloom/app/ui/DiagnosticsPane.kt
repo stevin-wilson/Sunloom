@@ -1,5 +1,7 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -62,7 +64,7 @@ internal fun DiagnosticsPane(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Internal Storage & Display Diagnostics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.internal_storage_display_diagnostics), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text(
                                 text = "Reserve: ${uiState.lightReserveCount} Light + ${uiState.darkReserveCount} Dark (${uiState.disabledReserveCount} disabled) • Cache Used: ${"%.1f".format(usedMb)} MB / ${"%.0f".format(maxMb)} MB cap",
                                 style = MaterialTheme.typography.bodySmall,
@@ -73,7 +75,7 @@ internal fun DiagnosticsPane(
                             selected = uiState.showLegibilityZonesOverlay,
                             onClick = onToggleLegibilityOverlay,
                             leadingIcon = { Icon(SunloomIcons.Visibility, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                            label = { Text("Legibility Overlay") }
+                            label = { Text(stringResource(R.string.legibility_overlay)) }
                         )
                     }
                     LinearProgressIndicator(
@@ -142,17 +144,17 @@ internal fun DiagnosticsPane(
             ) {
                 Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        "Privacy & Open-Source Attribution",
+                        stringResource(R.string.privacy_open_source_attribution),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "• Privacy: Sunloom operates locally on your device without user accounts, analytics SDKs, advertising IDs, or telemetry. Network connections are made exclusively over HTTPS to the public-domain and Creative Commons sources you enable.",
+                        stringResource(R.string.privacy_sunloom_operates_locally_on_your),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        "• Licensing: Every remote wallpaper is verified for CC0, Public Domain, CC BY (2.0–4.0), or CC BY-SA (2.0–4.0) terms prior to admission.",
+                        stringResource(R.string.licensing_every_remote_wallpaper_is_veri),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

@@ -1,5 +1,7 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import android.graphics.Bitmap
@@ -157,21 +159,21 @@ internal fun TodayCanvasPane(
                     menuContent = { dismiss ->
                         if (current != null) {
                             if (!restricted) {
-                                ContextMenuItem("Next wallpaper", "ctx_next") { dismiss(); onNextWallpaper() }
+                                ContextMenuItem(stringResource(R.string.next_wallpaper), "ctx_next") { dismiss(); onNextWallpaper() }
                             }
                             if (uiState.previousWallpaperId != null && !restricted) {
-                                ContextMenuItem("Previous wallpaper", "ctx_previous") { dismiss(); onPreviousWallpaper() }
+                                ContextMenuItem(stringResource(R.string.previous_wallpaper), "ctx_previous") { dismiss(); onPreviousWallpaper() }
                             }
                             ContextMenuItem(
-                                if (current.isFavorite) "Remove from favorites" else "Add to favorites",
+                                if (current.isFavorite) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
                                 "ctx_keep"
                             ) { dismiss(); onToggleKeep() }
                             ContextMenuItem("About this image\u2026", "ctx_about") { dismiss(); showAbout = true }
                             if (!restricted) {
-                                ContextMenuItem("Restore original wallpaper", "ctx_restore") { dismiss(); onRestoreOriginal() }
+                                ContextMenuItem(stringResource(R.string.restore_original_wallpaper), "ctx_restore") { dismiss(); onRestoreOriginal() }
                             }
                             HorizontalDivider()
-                            ContextMenuItem("Dislike and exclude", "ctx_dislike", destructive = true) {
+                            ContextMenuItem(stringResource(R.string.dislike_and_exclude), "ctx_dislike", destructive = true) {
                                 dismiss()
                                 onRequestRejectConfirm()
                             }
@@ -193,7 +195,7 @@ internal fun TodayCanvasPane(
                                 )
                                 if (current == null) {
                                     Text(
-                                        text = "Nothing is showing yet. Fetch a batch of wallpapers, or add one of your own photos from Reserve.",
+                                        text = stringResource(R.string.nothing_is_showing_yet_fetch_a_batch_of),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -201,7 +203,7 @@ internal fun TodayCanvasPane(
                                         onClick = onSyncOnline,
                                         enabled = !uiState.isSyncingOnline,
                                         modifier = Modifier.desktopControl().testTag("home_empty_fetch")
-                                    ) { Text(if (uiState.isSyncingOnline) "Fetching..." else "Fetch wallpapers") }
+                                    ) { Text(if (uiState.isSyncingOnline) stringResource(R.string.fetching) else stringResource(R.string.fetch_wallpapers)) }
                                 }
                                 if (current != null) {
                                     Text(
@@ -246,7 +248,7 @@ internal fun TodayCanvasPane(
                                                 modifier = Modifier.size(18.dp)
                                             )
                                             Spacer(Modifier.width(6.dp))
-                                            Text(if (uiState.isApplyingWallpaper) "Applying..." else "Next")
+                                            Text(if (uiState.isApplyingWallpaper) stringResource(R.string.applying) else stringResource(R.string.next))
                                         }
                                     }
 
@@ -258,12 +260,12 @@ internal fun TodayCanvasPane(
                                         ) {
                                             Icon(SunloomIcons.SkipPrevious, contentDescription = null, modifier = Modifier.size(18.dp))
                                             Spacer(Modifier.width(6.dp))
-                                            Text("Previous")
+                                            Text(stringResource(R.string.previous))
                                         }
                                     }
 
                                     ShortcutTooltip(
-                                        if (current?.isFavorite == true) "Remove from favorites" else "Keep in favorites",
+                                        if (current?.isFavorite == true) stringResource(R.string.remove_from_favorites) else stringResource(R.string.keep_in_favorites),
                                         "K"
                                     ) {
                                         OutlinedIconButton(
@@ -272,7 +274,7 @@ internal fun TodayCanvasPane(
                                         ) {
                                             Icon(
                                                 imageVector = if (current?.isFavorite == true) SunloomIcons.Favorite else SunloomIcons.FavoriteBorder,
-                                                contentDescription = if (current?.isFavorite == true) "Remove from favorites" else "Add to favorites",
+                                                contentDescription = if (current?.isFavorite == true) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
                                                 tint = if (current?.isFavorite == true) Color(0xFFF43F5E) else MaterialTheme.colorScheme.onSurface,
                                                 modifier = Modifier.size(20.dp)
                                             )
@@ -292,32 +294,32 @@ internal fun TodayCanvasPane(
                                         ) {
                                             Icon(SunloomIcons.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
                                             Spacer(Modifier.width(6.dp))
-                                            Text("Restore")
+                                            Text(stringResource(R.string.restore))
                                         }
                                     }
 
-                                    ShortcutTooltip(if (isFullscreen) "Exit fullscreen" else "View fullscreen", "F11") {
+                                    ShortcutTooltip(if (isFullscreen) stringResource(R.string.exit_fullscreen) else stringResource(R.string.view_fullscreen), "F11") {
                                     OutlinedIconButton(
                                         onClick = onToggleFullscreen,
                                         modifier = Modifier.desktopControl(CircleShape).testTag("fullscreen_button")
                                     ) {
                                         Icon(
                                             imageVector = if (isFullscreen) SunloomIcons.FullscreenExit else SunloomIcons.Fullscreen,
-                                            contentDescription = if (isFullscreen) "Exit fullscreen" else "View fullscreen",
+                                            contentDescription = if (isFullscreen) stringResource(R.string.exit_fullscreen) else stringResource(R.string.view_fullscreen),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(20.dp)
                                         )
                                     }
                                 }
 
-                                ShortcutTooltip("Dislike and exclude", "Del") {
+                                ShortcutTooltip(stringResource(R.string.dislike_and_exclude), "Del") {
                                         OutlinedIconButton(
                                             onClick = onRequestRejectConfirm,
                                             modifier = Modifier.desktopControl(CircleShape).testTag("reject_wallpaper_button")
                                         ) {
                                             Icon(
                                                 imageVector = SunloomIcons.ThumbDown,
-                                                contentDescription = "Dislike wallpaper",
+                                                contentDescription = stringResource(R.string.dislike_wallpaper),
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.size(20.dp)
                                             )
@@ -343,7 +345,7 @@ internal fun TodayCanvasPane(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(SunloomIcons.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Text(
-                            text = "About this wallpaper",
+                            text = stringResource(R.string.about_this_wallpaper),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface

@@ -1,5 +1,7 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -125,7 +127,7 @@ private val SunloomDarkPalette = darkColorScheme(
 )
 
 private val SunloomLightPalette = lightColorScheme(
-    primary = Color(0xFF0284C7),
+    primary = Color(0xFF0369A1),
     onPrimary = Color(0xFFFFFFFF),
     secondary = Color(0xFFD97706),
     onSecondary = Color(0xFFFFFFFF),
@@ -302,7 +304,7 @@ fun SunloomApp(
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Text(
-                                    text = "Local Library Database Unavailable",
+                                    text = stringResource(R.string.local_library_database_unavailable),
                                     style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.error
@@ -313,12 +315,12 @@ fun SunloomApp(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = "To protect your permanent rejection blocklist, Sunloom fails closed rather than running without persistent storage. Check available device storage and restart Sunloom.",
+                                    text = stringResource(R.string.to_protect_your_permanent_rejection_bloc),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 OutlinedButton(onClick = onRestoreSystemDefault) {
-                                    Text("Restore System Default Wallpaper")
+                                    Text(stringResource(R.string.restore_system_default_wallpaper))
                                 }
                             }
                         }
@@ -504,7 +506,7 @@ fun CityDropdownSelector(
                 expanded = true
             },
             singleLine = true,
-            label = { Text("City & time zone") },
+            label = { Text(stringResource(R.string.city_time_zone)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
             modifier = Modifier
@@ -522,7 +524,7 @@ fun CityDropdownSelector(
         ) {
             if (matches.isEmpty()) {
                 DropdownMenuItem(
-                    text = { Text("No matching city. Try the custom coordinates option.") },
+                    text = { Text(stringResource(R.string.no_matching_city_try_the_custom_coordina)) },
                     onClick = {},
                     enabled = false
                 )
@@ -567,13 +569,13 @@ fun FirstRunSetupScreen(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                text = "Welcome to Sunloom",
+                text = stringResource(R.string.welcome_to_sunloom),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
             )
             Text(
-                text = "Daylight and evening wallpapers tailored to your screen.",
+                text = stringResource(R.string.daylight_and_evening_wallpapers_tailored),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -591,9 +593,9 @@ fun FirstRunSetupScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Automatic wallpaper schedule", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.automatic_wallpaper_schedule), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Switch between bright wallpapers during the day and calm dark wallpapers at night.",
+                            stringResource(R.string.switch_between_bright_wallpapers_during),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -607,7 +609,7 @@ fun FirstRunSetupScreen(
                 if (draftPrefs.autoChangeEnabled) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
 
-                    Text("Schedule", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.schedule), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -648,9 +650,9 @@ fun FirstRunSetupScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Categories", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.categories), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Choose the themes you enjoy.",
+                    stringResource(R.string.choose_the_themes_you_enjoy),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -683,7 +685,7 @@ fun FirstRunSetupScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Apply wallpaper to", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.apply_wallpaper_to), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -706,7 +708,7 @@ fun FirstRunSetupScreen(
         ) {
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "Initial preview",
+                    text = stringResource(R.string.initial_preview),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -742,7 +744,7 @@ fun FirstRunSetupScreen(
                         Icon(SunloomIcons.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            if (draftPrefs.autoChangeEnabled) "Start Sunloom" else "Open Sunloom",
+                            if (draftPrefs.autoChangeEnabled) stringResource(R.string.start_sunloom) else stringResource(R.string.open_sunloom),
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -867,7 +869,7 @@ fun DesktopWorkspaceScreen(
                             selected = uiState.activeTab == tab,
                             onClick = { onSelectTab(tab) },
                             modifier = Modifier.desktopControl(RoundedCornerShape(16.dp)).testTag("nav_${tab.name}"),
-                            icon = { Icon(navIcon(tab), contentDescription = tab.label) },
+                            icon = { Icon(navIcon(tab), contentDescription = null) }, // the visible label names it
                             label = { Text(tab.label, fontSize = 12.sp, maxLines = 1) }
                         )
                     }
@@ -883,7 +885,7 @@ fun DesktopWorkspaceScreen(
                 ) {
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        text = "Sunloom",
+                        text = stringResource(R.string.sunloom),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
@@ -894,7 +896,7 @@ fun DesktopWorkspaceScreen(
                             selected = uiState.activeTab == tab,
                             onClick = { onSelectTab(tab) },
                             modifier = Modifier.desktopControl(RoundedCornerShape(16.dp)).testTag("nav_${tab.name}"),
-                            icon = { Icon(navIcon(tab), contentDescription = tab.label) },
+                            icon = { Icon(navIcon(tab), contentDescription = if (showLabels) null else tab.label) },
                             label = if (showLabels) {
                                 { Text(tab.label, fontSize = 12.sp) }
                             } else {
@@ -984,7 +986,7 @@ private fun TopStatusBanner(
                 }
                 if (showPauseResume) {
                     ShortcutTooltip(
-                        if (uiState.preferences.isPaused) "Resume automatic scheduling" else "Pause automatic scheduling"
+                        if (uiState.preferences.isPaused) stringResource(R.string.resume_automatic_scheduling) else stringResource(R.string.pause_automatic_scheduling)
                     ) {
                         OutlinedButton(
                             onClick = onTogglePause,
@@ -996,7 +998,7 @@ private fun TopStatusBanner(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(Modifier.width(6.dp))
-                            Text(if (uiState.preferences.isPaused) "Resume" else "Pause")
+                            Text(if (uiState.preferences.isPaused) stringResource(R.string.resume) else stringResource(R.string.pause))
                         }
                     }
                 }

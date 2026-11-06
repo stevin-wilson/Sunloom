@@ -1,5 +1,7 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
@@ -84,7 +86,7 @@ internal fun DisplaysAndSchedulePane(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Schedule", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.schedule), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -111,7 +113,7 @@ internal fun DisplaysAndSchedulePane(
                     FilterChip(
                         selected = showCustomCoords,
                         onClick = { showCustomCoords = !showCustomCoords },
-                        label = { Text("Custom coordinates") }
+                        label = { Text(stringResource(R.string.custom_coordinates)) }
                     )
                     if (showCustomCoords) {
                         val latError = coordinateError(customLatText, -90.0, 90.0)
@@ -124,7 +126,7 @@ internal fun DisplaysAndSchedulePane(
                             OutlinedTextField(
                                 value = customLatText,
                                 onValueChange = { customLatText = it },
-                                label = { Text("Latitude (-90..90)") },
+                                label = { Text(stringResource(R.string.latitude_90_90)) },
                                 singleLine = true,
                                 isError = latError != null,
                                 supportingText = { latError?.let { Text(it) } },
@@ -137,7 +139,7 @@ internal fun DisplaysAndSchedulePane(
                             OutlinedTextField(
                                 value = customLonText,
                                 onValueChange = { customLonText = it },
-                                label = { Text("Longitude (-180..180)") },
+                                label = { Text(stringResource(R.string.longitude_180_180)) },
                                 singleLine = true,
                                 isError = lonError != null,
                                 supportingText = { lonError?.let { Text(it) } },
@@ -159,7 +161,7 @@ internal fun DisplaysAndSchedulePane(
                                     customLatText.isNotBlank() && customLonText.isNotBlank(),
                                 modifier = Modifier.testTag("apply_custom_coords_button")
                             ) {
-                                Text("Apply")
+                                Text(stringResource(R.string.apply))
                             }
                         }
                     }
@@ -189,7 +191,7 @@ internal fun DisplaysAndSchedulePane(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Display & Preferences", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.display_preferences), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -222,7 +224,7 @@ internal fun DisplaysAndSchedulePane(
 
                 if (uiState.capabilities.connectedDisplays.size > 1) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-                    Text("Multi-display fitting mode", style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(R.string.multi_display_fitting_mode), style = MaterialTheme.typography.labelLarge)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -244,7 +246,7 @@ internal fun DisplaysAndSchedulePane(
                 if (disconnectedHistory.isNotEmpty()) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                     Text(
-                        text = "Remembered External Displays (disconnected — never constrain active crops)",
+                        text = stringResource(R.string.remembered_external_displays_disconnecte),
                         style = MaterialTheme.typography.labelLarge
                     )
                     disconnectedHistory.forEach { rec ->
@@ -264,13 +266,13 @@ internal fun DisplaysAndSchedulePane(
                                 onClick = { onForgetRememberedDisplay(rec.key) },
                                 modifier = Modifier.testTag("forget_display_${rec.key}")
                             ) {
-                                Text("Forget")
+                                Text(stringResource(R.string.forget))
                             }
                         }
                     }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-                Text("Apply wallpaper to", style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(R.string.apply_wallpaper_to), style = MaterialTheme.typography.labelLarge)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -292,9 +294,9 @@ internal fun DisplaysAndSchedulePane(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Blurred frame fill for smaller images", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.blurred_frame_fill_for_smaller_images), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Frame smaller artworks with a darkened blurred backdrop instead of rejecting them.",
+                            stringResource(R.string.frame_smaller_artworks_with_a_darkened_b),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -307,7 +309,7 @@ internal fun DisplaysAndSchedulePane(
 
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(onClick = onReopenSetup) {
-                        Text("Setup Guide")
+                        Text(stringResource(R.string.setup_guide))
                     }
                     OutlinedButton(
                         onClick = { showResetConfirm = true },
@@ -315,7 +317,7 @@ internal fun DisplaysAndSchedulePane(
                     ) {
                         Icon(SunloomIcons.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Reset to System Default")
+                        Text(stringResource(R.string.reset_to_system_default))
                     }
                 }
             }
@@ -324,9 +326,9 @@ internal fun DisplaysAndSchedulePane(
 
     if (showResetConfirm) {
         ConfirmDestructiveDialog(
-            title = "Reset to system default?",
-            message = "Sunloom will put your device's original wallpaper back and stop changing it until you apply another one.",
-            confirmLabel = "Reset",
+            title = stringResource(R.string.reset_to_system_default_2),
+            message = stringResource(R.string.sunloom_will_put_your_device_s_original),
+            confirmLabel = stringResource(R.string.reset),
             confirmTestTag = "confirm_reset_default_button",
             onConfirm = {
                 showResetConfirm = false

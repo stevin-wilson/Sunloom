@@ -30,6 +30,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.sunloom.app.BuildConfig
+import com.sunloom.app.R
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -222,19 +223,19 @@ class MainActivity : ComponentActivity() {
     ) {
         super.onProvideKeyboardShortcuts(data, menu, deviceId)
         data += KeyboardShortcutGroup(
-            "Wallpaper",
+            getString(R.string.shortcut_group_wallpaper),
             listOf(
-                KeyboardShortcutInfo("Next wallpaper", KeyEvent.KEYCODE_N, 0),
-                KeyboardShortcutInfo("Previous wallpaper", KeyEvent.KEYCODE_P, 0),
-                KeyboardShortcutInfo("Keep in favorites", KeyEvent.KEYCODE_K, 0),
-                KeyboardShortcutInfo("Dislike and exclude (asks first)", KeyEvent.KEYCODE_FORWARD_DEL, 0),
-                KeyboardShortcutInfo("Toggle fullscreen", KeyEvent.KEYCODE_F11, 0),
-                KeyboardShortcutInfo("Go to Home", KeyEvent.KEYCODE_1, KeyEvent.META_CTRL_ON),
-                KeyboardShortcutInfo("Go to Reserve", KeyEvent.KEYCODE_2, KeyEvent.META_CTRL_ON),
-                KeyboardShortcutInfo("Go to Sources", KeyEvent.KEYCODE_3, KeyEvent.META_CTRL_ON),
-                KeyboardShortcutInfo("Go to Schedule", KeyEvent.KEYCODE_4, KeyEvent.META_CTRL_ON),
-                KeyboardShortcutInfo("Go to Diagnostics", KeyEvent.KEYCODE_5, KeyEvent.META_CTRL_ON),
-                KeyboardShortcutInfo("Close dialog or exit fullscreen", KeyEvent.KEYCODE_ESCAPE, 0)
+                KeyboardShortcutInfo(getString(R.string.shortcut_next), KeyEvent.KEYCODE_N, 0),
+                KeyboardShortcutInfo(getString(R.string.shortcut_previous), KeyEvent.KEYCODE_P, 0),
+                KeyboardShortcutInfo(getString(R.string.shortcut_keep), KeyEvent.KEYCODE_K, 0),
+                KeyboardShortcutInfo(getString(R.string.shortcut_dislike), KeyEvent.KEYCODE_FORWARD_DEL, 0),
+                KeyboardShortcutInfo(getString(R.string.shortcut_fullscreen), KeyEvent.KEYCODE_F11, 0),
+                KeyboardShortcutInfo(getString(R.string.shortcut_go_home), KeyEvent.KEYCODE_1, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_go_reserve), KeyEvent.KEYCODE_2, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_go_sources), KeyEvent.KEYCODE_3, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_go_schedule), KeyEvent.KEYCODE_4, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_go_storage), KeyEvent.KEYCODE_5, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_escape), KeyEvent.KEYCODE_ESCAPE, 0)
             )
         )
     }

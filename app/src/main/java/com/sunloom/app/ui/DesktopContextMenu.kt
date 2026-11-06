@@ -1,5 +1,7 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -185,7 +187,7 @@ fun ConfirmDestructiveDialog(
                 onClick = onDismiss,
                 modifier = Modifier.focusRequester(cancelFocusRequester).desktopControl()
             ) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel))
             }
         }
     )
@@ -216,7 +218,7 @@ fun WallpaperAboutDialog(record: WallpaperRecord, onDismiss: () -> Unit) {
         },
         confirmButton = {
             TextButton(onClick = onDismiss, modifier = Modifier.desktopControl().testTag("wallpaper_about_close")) {
-                Text("Close")
+                Text(stringResource(R.string.close))
             }
         }
     )

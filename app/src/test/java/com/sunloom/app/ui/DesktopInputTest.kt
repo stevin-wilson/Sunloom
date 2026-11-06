@@ -184,7 +184,7 @@ class DesktopInputTest {
         val white = Color(0xFFFFFFFF)
         assertEquals(21f, contrastRatio(Color.Black, white), 0.01f)
         // Light theme primary on the light surface passes.
-        assertTrue(contrastRatio(Color(0xFF0284C7), white) >= 3f)
+        assertTrue(contrastRatio(Color(0xFF0369A1), white) >= 4.5f)
         // Dark theme primary on the dark surface passes.
         assertTrue(contrastRatio(Color(0xFF38BDF8), Color(0xFF131C31)) >= 3f)
         // The checklist's suggested ring colour would fail on the light theme.
