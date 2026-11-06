@@ -1,0 +1,135 @@
+package com.sunloom.app.data.cache
+
+import com.sunloom.app.domain.model.BrightnessClass
+import com.sunloom.app.domain.model.WallpaperRecord
+import java.io.File
+
+data class CacheCleanupReport(
+    val bytesBefore: Long,
+    val bytesAfter: Long,
+    val evictedIds: List<String>,
+    val protectedIds: Set<String>
+)
+
+/**
+ * Article IX §2 & X §3 (Constitution v0.4): Bounded Cache & Offline Reserve Manager.
+ * Enforces user-configured storage limits while guaranteeing that active wallpapers,
+ * favorites ("Kept"), baseline restoration copies, minimum Light/Dark offline reserves
+ * (up to 3 Light + 3 Dark), and provenance records are never deleted.
+ */
+class BoundedCacheManager(
+    private val minProtectedPerBrightness: Int = DEFAULT_PROTECTED_PER_BRIGHTNESS
+) {
+
+    fun selectEvictions(
+        records: List<WallpaperRecord>,
+        activeWallpaperIds: Set<String>,
+        maxCacheBytes: Long
+    ): CacheCleanupReport {
+        val cachedRecords = records.filter { it.fileSizeBytes > 0L && !it.isRejected }
+        val bytesBefore = cachedRecords.sumOf { it.fileSizeBytes }
+
+        // Always protect:
+        // 1. Active wallpapers
+        // 2. Favorites (user clicked Keep)
+        // 3. Baseline restoration wallpaper
+        // 4. Up to minProtectedPerBrightness (default 3) Light and 3 Dark approved reserve wallpapers (Article IX §2)
+        val protectedIds = LinkedHashSet<String>()
+        protectedIds.addAll(activeWallpaperIds)
+        cachedRecords.filter { it.isFavorite || it.isBaselineRestore }.forEach {
+            protectedIds.add(it.id)
+        }
+
+        val protectionPriority = compareBy<WallpaperRecord> {
+            if (it.provenance.sourceId == "seed_reserve") 1 else 0
+        }.thenByDescending { it.provenance.retrievedAtEpochMs }
+
+        cachedRecords
+            .filter { it.evaluation.brightnessClass == BrightnessClass.LIGHT && !it.isBaselineRestore }
+            .sortedWith(protectionPriority)
+            .take(minProtectedPerBrightness)
+            .forEach { protectedIds.add(it.id) }
+
+        cachedRecords
+            .filter { it.evaluation.brightnessClass == BrightnessClass.DARK && !it.isBaselineRestore }
+            .sortedWith(protectionPriority)
+            .take(minProtectedPerBrightness)
+            .forEach { protectedIds.add(it.id) }
+
+        cachedRecords
+            .filter {
+                it.evaluation.brightnessClass == BrightnessClass.NEUTRAL &&
+                    !it.isBaselineRestore &&
+                    it.provenance.sourceId != "seed_reserve"
+            }
+            .sortedByDescending { it.provenance.retrievedAtEpochMs }
+            .take(minProtectedPerBrightness)
+            .forEach { protectedIds.add(it.id) }
+
+        if (bytesBefore <= maxCacheBytes) {
+            return CacheCleanupReport(
+                bytesBefore = bytesBefore,
+                bytesAfter = bytesBefore,
+                evictedIds = emptyList(),
+                protectedIds = protectedIds
+            )
+        }
+
+        // Sort evictable records oldest-first by lastAppliedEpochMs, then retrievedAtEpochMs
+        val evictable = cachedRecords
+            .filter { it.id !in protectedIds }
+            .sortedWith(
+                compareBy<WallpaperRecord> { it.lastAppliedEpochMs }
+                    .thenBy { it.provenance.retrievedAtEpochMs }
+            )
+
+        var currentBytes = bytesBefore
+        val evictedIds = ArrayList<String>()
+
+        for (candidate in evictable) {
+            if (currentBytes <= maxCacheBytes) break
+            evictedIds.add(candidate.id)
+            currentBytes -= candidate.fileSizeBytes
+        }
+
+        return CacheCleanupReport(
+            bytesBefore = bytesBefore,
+            bytesAfter = currentBytes.coerceAtLeast(0L),
+            evictedIds = evictedIds,
+            protectedIds = protectedIds
+        )
+    }
+
+    fun executeCleanupOnDisk(
+        records: List<WallpaperRecord>,
+        activeWallpaperIds: Set<String>,
+        maxCacheBytes: Long
+    ): Pair<List<WallpaperRecord>, CacheCleanupReport> {
+        val report = selectEvictions(records, activeWallpaperIds, maxCacheBytes)
+        val evictedSet = report.evictedIds.toSet()
+
+        val updatedRecords = records.map { record ->
+            if (record.id in evictedSet) {
+                if (record.localFilePath.isNotBlank()) {
+                    runCatching { File(record.localFilePath).delete() }
+                }
+                if (record.croppedFilePath.isNotBlank()) {
+                    runCatching { File(record.croppedFilePath).delete() }
+                }
+                // Article X §3: Retain provenance record even when cached image file is evicted
+                record.copy(
+                    localFilePath = "",
+                    croppedFilePath = "",
+                    fileSizeBytes = 0L
+                )
+            } else {
+                record
+            }
+        }
+        return updatedRecords to report
+    }
+
+    companion object {
+        const val DEFAULT_PROTECTED_PER_BRIGHTNESS = 3
+    }
+}

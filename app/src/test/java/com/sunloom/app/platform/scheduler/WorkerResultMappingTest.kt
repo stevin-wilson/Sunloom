@@ -1,0 +1,105 @@
+package com.sunloom.app.platform.scheduler
+
+import android.app.Application
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.work.ListenableWorker.Result
+import androidx.work.testing.TestListenableWorkerBuilder
+import com.sunloom.app.data.repository.LibraryStoreUnavailableException
+import com.sunloom.app.domain.model.WallpaperStatus
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [34], application = Application::class)
+class WorkerResultMappingTest {
+
+    private fun change(attempt: Int, cancelled: BooleanArray = booleanArrayOf(false), exec: suspend () -> WallpaperStatus?) =
+        runBlocking { mapChangeWorkResult(attempt, exec) { cancelled[0] = true } }
+
+    private fun refresh(attempt: Int, cancelled: BooleanArray = booleanArrayOf(false), exec: suspend () -> Int) =
+        runBlocking { mapRefreshWorkResult(attempt, exec) { cancelled[0] = true } }
+
+    @Test
+    fun change_successAndNullStatusMapToSuccess() {
+        assertEquals(Result.success(), change(0) { WallpaperStatus.APPLIED_SUCCESSFULLY })
+        assertEquals(Result.success(), change(0) { null })
+        assertEquals(Result.success(), change(0) { WallpaperStatus.UNSUPPORTED_BY_SYSTEM })
+    }
+
+    @Test
+    fun change_temporaryFailureRetriesUntilThirdAttempt() {
+        assertEquals(Result.retry(), change(2) { WallpaperStatus.FAILED_TEMPORARILY })
+        assertEquals(Result.success(), change(3) { WallpaperStatus.FAILED_TEMPORARILY })
+    }
+
+    @Test
+    fun change_unexpectedThrowableRetriesThenFails() {
+        assertEquals(Result.retry(), change(0) { throw IllegalStateException("boom") })
+        assertEquals(Result.failure(), change(3) { throw IllegalStateException("boom") })
+    }
+
+    @Test
+    fun change_storeUnavailableCancelsScheduleAndFails() {
+        val cancelled = booleanArrayOf(false)
+        val result = change(0, cancelled) { throw LibraryStoreUnavailableException("down") }
+        assertEquals(Result.failure(), result)
+        assertTrue(cancelled[0])
+    }
+
+    @Test
+    fun change_cancellationPropagates() {
+        try {
+            change(0) { throw CancellationException("cancelled") }
+            fail("expected CancellationException")
+        } catch (_: CancellationException) {
+        }
+    }
+
+    @Test
+    fun refresh_successMapsToSuccess() {
+        assertEquals(Result.success(), refresh(0) { 5 })
+    }
+
+    @Test
+    fun refresh_unexpectedThrowableRetriesOnceThenSucceeds() {
+        assertEquals(Result.retry(), refresh(1) { throw RuntimeException("net") })
+        assertEquals(Result.success(), refresh(2) { throw RuntimeException("net") })
+    }
+
+    @Test
+    fun refresh_storeUnavailableCancelsScheduleAndFails() {
+        val cancelled = booleanArrayOf(false)
+        val result = refresh(0, cancelled) { throw LibraryStoreUnavailableException("down") }
+        assertEquals(Result.failure(), result)
+        assertTrue(cancelled[0])
+    }
+
+    @Test
+    fun refresh_cancellationPropagates() {
+        val cancelled = booleanArrayOf(false)
+        try {
+            refresh(0, cancelled) { throw CancellationException("cancelled") }
+            fail("expected CancellationException")
+        } catch (_: CancellationException) {
+        }
+        assertFalse(cancelled[0])
+    }
+
+    @Test
+    fun workers_doWorkReturnsSuccessWhenAutoChangeDisabled() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val changeResult = runBlocking { TestListenableWorkerBuilder<ChangeWorker>(context).build().doWork() }
+        val refreshResult = runBlocking { TestListenableWorkerBuilder<RefreshWorker>(context).build().doWork() }
+        assertEquals(Result.success(), changeResult)
+        assertEquals(Result.success(), refreshResult)
+    }
+}

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Only preferences and WAL-checkpointed SQLite DB are included; transient WAL/SHM files and image directories are excluded -->
+    <include domain="sharedpref" path="sunloom_preferences.xml" />
+    <include domain="database" path="sunloom_library.db" />
+    <exclude domain="database" path="sunloom_library.db-wal" />
+    <exclude domain="database" path="sunloom_library.db-shm" />
+    <exclude domain="database" path="sunloom_library.db-journal" />
+</full-backup-content>

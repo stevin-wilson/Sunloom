@@ -1,0 +1,20 @@
+# Keystores and signing secrets
+*.jks
+*.keystore
+keystore.properties
+play-store-keys.json
+app/keystore/
+
+# Local SDK & IDE files
+local.properties
+.gradle/
+.kotlin/
+.idea/
+*.iml
+
+# Build outputs
+build/
+app/build/
+
+# Internal review notes
+.notes/

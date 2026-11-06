@@ -1,0 +1,272 @@
+# Wallpaper Tool Development Constitution
+
+- **Product:** Sunloom (`com.sunloom.app`)
+- **Status:** Adopted v0.6 (Governing Engineering Law) **[v0.6]**
+- **Scope:** Product principles, user experience, platform-independent requirements, and platform and distribution obligations confined to Article XVIII **[v0.3]**
+- **Purpose:** Guide product and engineering decisions. Articles I–XVII remain platform-independent; platform-specific obligations live only in Article XVIII so the core law survives a future port. **[v0.3]**
+
+---
+
+## Amendment Record **[v0.6]**
+
+| Version | Date | Summary |
+|---|---|---|
+| v0.2 | — | Adopted as governing engineering law. |
+| v0.3 | 2026-11-04 | Platform selected (Googlebook OS via Google Play). Article VI expanded with source admission, per-asset license verification (including dual-license and Schedule A public-domain rules), attribution display, network conduct, adapter failure handling, and source removal. Article VII expanded with a layered safety gate, deterministic L3/L4 rendition verification, gate versioning, fail-closed rules, quarantine, perceptual hash blocklisting, and measurable acceptance. New Article XVIII. New Schedules A and B. |
+| v0.4 | 2026-11-04 | C1: Article XVIII §2 updated to permit normal install-time permissions merged by WorkManager while forbidding runtime/dangerous permissions. C2: Articles VIII–XVII expanded into numbered sections with concrete budgets, cadences, and reserve counts. C3: Articles II §1 and IV §§1–2 clarified for single-surface OS wallpaper behavior across displays and high-DPI native coverage floors (`>= 0.65` pixel ratio and `>= 1600px` long edge on high-density displays). C4: Schedule A updated with reviewer, rate limits, image hosts, and active safety signals. C5–C6: Article VII §2, §4 and Schedule B updated with tiered L2 lexical matching (unconditional vs. subject/tag terms) and prohibition on adapter-injected safety tags. |
+| v0.5 | 2026-11-04 | Schedule A expanded to admit Cleveland Museum of Art (`cma_cc0`) and SMK — National Gallery of Denmark (`smk_open`) with conservative anonymous budgets (`<= 5` req/sync, `250ms` spacing), updated Openverse candidate URL (`api.openverse.org/v1`), and recorded rejected/deferred museum and orbital sources. Article IV §2 aligned on `densityDpi >= 210`. Article VII §4 L2 expanded with Nordic/Dutch ligature folding and portrait/nude terms (`DENYLIST_VERSION = 2026.11.04-v3`). Article X §4 and XI §2 updated with hard `BudgetedSourceHttpClient` enforcement, deficit-aware sync rotation (`<= 3` online sources/sync), and source-diverse matching. |
+| v0.6 | 2026-11-05 | Article IV §§1–2, §6 and XVIII §1 updated with tiered physical-PPI quality floors (`< 120 ppi`: `>= 1.00`; `120–209 ppi`: `>= 0.80`; `>= 210 ppi`: `>= 0.65` and long edge `>= 1600px`, guarding against implausible/placeholder EDID PPI) and connected-display envelope rendering (`EnvelopePlanner`, with single-display sharpest fallback when launchers scroll wider bitmaps; remembered display history is diagnostic-only). Article VI §10 and Schedule A clarified that `user_local` imports keep original bytes (`JPEG`/`PNG`/`WEBP`) and run L3–L5 (L1/L2 metadata N/A). Article VII §§4–6 tightened with explicit `safetyClassificationSource` provenance, full L1–L4 local-byte re-validation with structured `GateTrace`, and fail-closed `SqliteLibraryStore` enforcement. Articles X §4, XII §1, XIII, and XVIII §4 aligned on per-source request caps, `platform/scheduler` module boundary, removal of user-facing dry-run state, and SQLite WAL checkpointing before backup. |
+
+---
+
+## Preamble
+
+This product exists to give people attractive, appropriate, high-quality wallpapers without requiring them to search for images, understand display specifications, manage files, or continually adjust settings.
+
+The product shall be:
+
+- Free to obtain and use
+- Lightweight and unobtrusive
+- Respectful of privacy and system resources
+- Visually reliable across different displays
+- Strictly limited to safe-for-work images and categories
+- Clear about where images come from
+- Resilient when the internet or an image provider is unavailable
+- Predictable enough to trust, but varied enough to remain enjoyable
+
+Whenever convenience conflicts with content safety, user control, privacy, image rights, or device reliability, those protections take priority.
+
+---
+
+## Article I: Core Product Promise
+
+### 1. Effortless beauty
+The user should be able to install the application, choose a small number of preferences, and receive attractive wallpapers automatically.
+
+### 2. Appropriate throughout the day
+The application shall support visually lighter and darker wallpapers based on the user's local time and preferences. "Light" and "dark" shall describe the actual visual characteristics of the image, not merely a category assigned by an image provider.
+
+### 3. Native-looking results
+A wallpaper should look intentionally selected for the display on which it appears. It should not look like an image that was arbitrarily stretched, enlarged, or cut apart.
+
+---
+
+## Article II: User Sovereignty
+
+1. **The user remains in control:** Immediate manual change, previous wallpaper, pause/resume, keep, reject forever, per-display policy (where the platform permits; see Article IV §1 and Article XVIII §1), lock/workspace policy, source/category toggles. No NSFW override permitted. **[v0.4]**
+2. **No irreversible actions:** Preserve restoration capability for the baseline wallpaper (including resetting to the system default wallpaper and optional user-selected restore file) and never leave a broken wallpaper on uninstall/disable. **[v0.4]**
+3. **No attention traps:** No ads, sponsored content, streaks, review nagging, promotional notifications, mandatory accounts, or unrelated feeds.
+
+---
+
+## Article III: Time and Appearance
+
+1. **Time policy:** Fixed clock times, Sunrise and sunset, Follow OS light/dark appearance, or Manual only (no automatic time-based switching).
+2. **Location privacy:** Sunrise and sunset computed locally using user-supplied city/region (with full IANA timezone / DST rules) or coordinates without continuous location tracking or GPS permissions. **[v0.4]**
+3. **Graceful transitions:** Avoid rapid catch-up changes after sleep/wake; if multiple scheduled transitions elapsed while asleep, apply only the current target state once. **[v0.4]**
+
+---
+
+## Article IV: Display Awareness and Image Quality
+
+1. **Each display is inspected honestly:** Resolution, aspect ratio, orientation, physical PPI, scaling, crop, and quality requirements are measured from real display metrics (`Display.Mode` physical pixels and calibrated EDID PPI, falling back only to `WindowMetrics` when `DisplayManager` returns none, and refusing to apply rather than inventing fallback dimensions when display bounds are unknown). Where the underlying OS shares a single system wallpaper surface across connected monitors, the app states this plainly, defaults to `SAME_ON_ALL_DISPLAYS`, and renders a single envelope bitmap covering the aspect range of **currently connected** displays (`e = r_src.coerceIn(r_min, r_max)` bounded by output pixel caps) so each display's center-crop retains the focal subject and passes §2; displays that cannot be satisfied are excluded and disclosed without degrading others, and single-display sharpest crop (`OPTIMIZE_PRIMARY_SHARPEST`) remains available if a launcher scrolls wider-than-screen bitmaps. Disconnected display history is diagnostic-only and never constrains active crops. **[v0.6]**
+2. **Native-resolution quality (tiered physical-PPI floor):** Never invent source dimensions; always measure the real decoded image bounds. Effective PPI is derived from `DisplayMetrics.xdpi/ydpi` within `60..600` (treating uncalibrated VESA `72`/`96` placeholder pairs inconsistent with physical resolution as untrusted and falling back to `densityDpi`). Measured on post-crop pixels per target display: **[v0.6]**
+   - `< 120 ppi`: `>= 1.00` pixel coverage (`100%`)
+   - `120–209 ppi`: `>= 0.80` pixel coverage (`80%`)
+   - `>= 210 ppi`: `>= 0.65` pixel coverage (`65%`) **and** post-crop long edge `>= 1600 px`
+   - Blurred Frame Fill remains opt-in down to `0.50` coverage (`50%`).
+3. **Quality is more than resolution:** Consider aspect ratio, sharpness, crop survivability, and legibility.
+4. **Crop before stretch:** Stretching or nonuniform scaling is strictly prohibited.
+5. **Subject-aware cropping:** Deterministic, testable focal-point cropping that avoids cutting through primary subjects or placing clutter under clock/UI zones, persisted and applied when preparing the final bitmap. **[v0.4]**
+6. **Display changes:** Display-set changes are re-checked and reconciled safely on app foreground, on debounced `DisplayListener` events, and at the start of every scheduled worker run. **[v0.6]**
+
+---
+
+## Article V: Lock and Workspace Screens
+
+1. **Separate destinations:** Same image on both (`Home & Lock screen`), Workspace only (`Home screen only`), or Lock screen only (`Lock screen only`). **[v0.5]**
+2. **Capability honesty:** Detect platform capabilities rather than assuming them, verify `WallpaperManager.getWallpaperId` changes after apply, clearly explain unavailable features, and never pretend a wallpaper was applied when it was not. **[v0.4]**
+3. **Legibility zones:** Account for clock/date, desktop icons, and taskbar/shelf zones.
+
+---
+
+## Article VI: Image Sources, Rights, and Attribution
+
+1. **No unauthorized scraping:** Use only authorized public APIs, open-content licenses (`CC0`, `Public Domain`, `CC BY`, `CC BY-SA`), or direct user-provided files. "Authorized" means a documented, publicly offered API whose terms permit programmatic retrieval by end-user devices. An endpoint is unauthorized if it is undocumented, internal, reverse-engineered, or intended only for the provider's own products. This holds even when the endpoint is reachable without credentials. **[v0.3]**
+2. **Preserve provenance:** Retain source, asset ID, original page, creator name/page (only when genuinely provided by the source), license, date retrieved, attribution, real original & rendition dimensions, safety classification, perceptual hash (`dHash`), and SHA-256 checksum. Expose via "About this wallpaper". Also retain the license URL and version, the adapter version, the safety gate version, and the per-layer gate outcome (Article VII §5). **[v0.4]**
+3. **Replaceable source modules:** Every source is an isolated adapter registered in `SourceRegistry` that can be disabled cleanly. **[v0.4]**
+4. **Source admission:** No adapter ships until the source is entered in the Source Register (Schedule A) and meets all of the following: **[v0.3]**
+   - a. **Documented terms:** The source offers a documented API, and its terms have been reviewed. The register records the review date and reviewer.
+   - b. **Credential-free:** The adapter works with no API key, token, or OAuth client credentials. This includes "public demo" keys. Any credential shipped inside the app is an embedded reusable secret.
+   - c. **Per-asset license:** Each asset carries a machine-readable license or source-verified public-domain status per Schedule A. A blanket assumption for uncurated uploads is not sufficient.
+   - d. **Attribution data:** Machine-readable creator and attribution fields are sufficient to satisfy §2 and §6.
+   - e. **Stable identity:** Assets have stable identifiers and a canonical public page URL.
+   - f. **Transport:** Metadata and image hosts are HTTPS-only.
+   - g. **Rate headroom:** Normal scheduled use by a single device stays at or below 50% of the source's published anonymous limits.
+   - h. **Safety profile:** The register documents which safety signals the source provides (flags, categories, curation) and its known risk profile.
+5. **Per-asset license verification:** An asset is eligible only if its license resolves to one of these: **[v0.3]**
+   - CC0 1.0
+   - Public Domain Mark 1.0, or an explicit public-domain verification rule defined for the source in Schedule A (such as museum `is_public_domain` flags or US Government NASA public-domain rules)
+   - CC BY 2.0–4.0
+   - CC BY-SA 2.0–4.0
+
+   Everything else is rejected. This includes NC and ND variants, CC 1.0 licenses, GFDL-only, provider-specific licenses (such as the Unsplash License), "free to use" wording without a license identifier, non-empty Wikimedia `Restrictions` (personality/trademark/insignia restrictions), and missing licenses. Multi-licensed works (e.g., `CC BY-SA 3.0` + `GFDL`) are eligible when at least one offered license is in the allowlist above, and that allowlisted license is recorded at retrieval time. ND is excluded because cropping may constitute an adaptation. **[v0.4]**
+6. **Attribution display:** For CC BY and CC BY-SA assets, "About this wallpaper" shows the title, creator, source, license name with a link, and a note that the image was cropped and resized. It must be reachable within one interaction from the main surface and must work offline. Public-domain assets still show creator and source where known. Procedural seeds state they were generated on-device under CC0 without fabricated URLs. **[v0.4]**
+7. **Network conduct:** Adapters shall: **[v0.3]**
+   - send an identifying User-Agent of the form `Sunloom/<version> (com.sunloom.app; <contact URL or email>)`;
+   - honor `429`, `Retry-After`, and persisted per-source exponential backoff;
+   - use conditional requests (`ETag` / `If-Modified-Since`) where supported and applicable;
+   - enforce a per-source request budget inside the adapter;
+   - space sequential requests without bursts and never burst on wake, unlock, or network reconnection;
+   - fetch images only from hosts documented in Schedule A, validating every HTTP redirect hop (max 3 hops) against the host allowlist. **[v0.4]**
+8. **Adapter failure handling:** If a response does not match the expected schema (for example, a missing license, missing ID, or missing/"Unknown author" creator on an attribution-required `CC BY` / `CC BY-SA` asset), the affected asset is rejected. For verified Public Domain / CC0 assets where an individual human creator does not exist or is unknown (such as automated orbital spacecraft imagery or anonymous historical works), institutional or archival attribution is permitted. After repeated consecutive failures, the adapter marks itself degraded or auto-disabled in source diagnostics. Disabling an adapter for reliability reasons does not purge assets it already approved. **[v0.4]**
+9. **Source removal and purge:** When a source is removed, or its rights or safety status is downgraded in `SourceRegistry`, its assets are purged from the reserve and cache on startup and on the next worker run. Any wallpaper currently showing from that source is replaced from another approved source, or else the baseline is restored. The purge must never leave a broken wallpaper. **[v0.4]**
+10. **User-provided files:** Imported files are copied into quarantine as raw bytes, verified through L3/L4 (respecting EXIF orientation and real dimensions; L1 and L2 metadata screening are not applicable to user-selected local files), and stored in the local library retaining their original approved image bytes (`JPEG`, `PNG`, or `WEBP` without PNG re-encoding) with provenance marked `"User-provided"` and no fabricated URL. L5 ("Reject forever" blocklist) applies normally. **[v0.6]**
+
+---
+
+## Article VII: Content Safety and Personal Taste
+
+1. **Strict safe-content policy:** Mandatory, non-configurable NSFW exclusion across queries, categories, thumbnails, previews, cache, and wallpapers. Fail closed when safety classification is missing, uncertain, or conflicting. Safety classification must never be derived merely from license validity. **[v0.4]**
+2. **Safe defaults:** Exclude violence, hate symbols, disturbing medical content, political campaigning, and misleading system UI prompts. Also exclude by default: **[v0.4]**
+   - photographs or artworks whose primary subject is an identifiable real person or portrait;
+   - images dominated by text;
+   - weapons as the primary subject;
+   - animals in distress;
+   - logos or insignia as the primary subject.
+   Exclusion of identifiable real persons relies on tiered L2 metadata/classification screening (and optional reject-only on-device face detection at L4). **[v0.4]**
+3. **Preference without surveillance:** Local-first personalization and repetition control.
+4. **Layered safety gate:** Every asset passes every layer, in order. Any layer may reject. No single layer may approve on its own. **[v0.4]**
+   - **L1 — Eligibility:** The asset comes from an admitted, enabled adapter in `SourceRegistry`, and its license and creator attribution pass Article VI §5 and §8.
+   - **L2 — Metadata screen:** The source's own safety flags must indicate safe: an online adapter may assign `SafetyClassification.SAFE` only by citing an active Schedule A safety signal (curation membership, classification/department allowlist hit, or verified public-domain + visual medium allowlist), recorded in `safetyClassificationSource`. Adapters must never inject synthetic safe tags into `rawCategoriesAndTags`. Metadata is Unicode NFKD normalized, lowercased in `Locale.ROOT`, diacritic-stripped, and plural/stem-normalized before matching against `SafetyDenylist` (`DENYLIST_VERSION`): **[v0.6]**
+     - **Tier 1 (Unconditional Denylist — matched across title, description, tags, and attribution):** NSFW, nudity (including classical-nude terms such as `odalisque`, `bather`), graphic violence/gore, hate/extremism, political campaigning, and system UI spoofing, plus explicit portrait phrases in prose (`"portrait of"`, `"self portrait"`, `"headshot"`, `"mugshot"`, `"press conference"`).
+     - **Tier 2 (Subject / Tag / Classification Denylist — matched across title, category/subject tags, and museum classification/department, avoiding false rejections on descriptive prose like *"An astronaut aboard the ISS..."* or *"North face"*):** single-token person/portrait terms (`portrait`, `portraits`, `person`, `people`, `man`, `men`, `woman`, `women`, `girl`, `boy`, `child`, `children`, `crowd`, `face`, `bust`, `figurative`), weapons (`weapon`, `gun`, `rifle`, `pistol`, `sword`, `knife`, `bomb`, `armor`, `firearm`), insignia (`logo`, `emblem`, `insignia`, `mission patch`, `coat of arms`), and medical/distress terms (`autopsy`, `cadaver`, `skull`, `anatomy`, `disease`).
+     - **L2b (Safe Visual Domain):** Title and source-supplied tags/classifications must match at least one recognized safe domain token (`SafetyDenylist.SAFE_DOMAIN_KEYWORDS`, excluding generic words like `"featured"`).
+     - **Blocklist check:** Asset ID, SHA-256 (when known), and perceptual hash (`dHash`) are checked against the persistent blocklist.
+   - **L3 — Payload & structural verification:** Before full bitmap decoding, untrusted payload bytes in quarantine are verified for magic-byte format signature (`JPEG`, `PNG`, `WEBP`), byte-size bounds (`4 KB..40 MB`), `BitmapFactory.Options.inJustDecodeBounds` header dimensions (`<= 16,384 px` per side and `<= 100 MP` total), MIME-type agreement with magic bytes, and SHA-256 blocklist verification.
+   - **L4 — Rendition check:** After downsampled or full decoding (catching `OutOfMemoryError` and exceptions as rejections) and subject-aware cropping (`ImageEvaluator`), the rendition is verified using **real decoded dimensions** for native pixel coverage (Article IV §2), aspect-ratio integrity, legibility-zone glare/clutter bounds, and 64-bit perceptual difference hash (`dHash`) verification against the persistent blocklist.
+   - **L5 — Post-approval feedback:** "Reject forever" persists the asset ID, SHA-256, and 64-bit `dHash` into the SQLite `blocklist` table so near-duplicates are rejected across restarts and across all sources.
+5. **Gate versioning:** The composite gate version combines `SafetyGate.GATE_VERSION`, `SafetyDenylist.DENYLIST_VERSION`, evaluator version/thresholds, and blocklist schema version, and is stored per asset in SQLite alongside a structured `GateTrace` of actual per-layer outcomes (`gateLayerOutcomes`). If the active wallpaper's gate version is outdated on startup, or when any reserve asset is selected for display or inspected during a background refresh, L1–L4 are re-evaluated using stored metadata and local image bytes, and failures are purged (replacing any invalidated active wallpaper via platform-verified apply or restoring baseline). **[v0.6]**
+6. **Concrete fail-closed rules:** Any gate failure, unknown DB enum value, corrupt header, `OutOfMemoryError`, timeout, or production `SqliteLibraryStore` open failure is treated as a fail-closed state (never defaulting to `SAFE`, `CC0`, or a transient in-memory store that loses the blocklist across restarts). If SQLite cannot open, background automation is suspended and the UI surfaces a diagnostic error. If no approved assets remain, the current approved wallpaper stays in place or the baseline is restored. **[v0.6]**
+7. **Quarantine:** Unapproved bytes live only in memory or `noBackupFilesDir/quarantine`, are deleted immediately upon gate completion, and any file older than 24 hours is swept on startup. **[v0.4]**
+8. **Safe browsing surfaces:** Preview, history, and browse screens show only approved assets.
+9. **Measurable acceptance:** No release ships unless the gate passes Schedule B.
+10. **Safety data delivery:** Thresholds and denylists ship only inside signed app releases.
+
+---
+
+## Article VIII: Privacy and Data Minimization **[v0.4]**
+
+1. **Local-first storage:** All user preferences, wallpaper history, schedules, provenance records, and blocklists are stored locally on the device.
+2. **Zero telemetry:** The app includes no analytics SDKs, crash-reporting trackers, advertising identifiers, or developer-operated tracking endpoints.
+3. **Zero embedded secrets:** No API keys, OAuth client secrets, or keystore passwords may be embedded in source code, resources, or build scripts across any variant.
+
+## Article IX: Offline Reliability and Reserve Management **[v0.4]**
+
+1. **First-boot offline readiness:** On first launch (including in airplane mode), Sunloom synthesizes 3 Light and 3 Dark procedural CC0 wallpapers at the connected display's native resolution so the app functions without network access.
+2. **Protected reserve floor:** The local library maintains at least **3 Light + 3 Dark** approved wallpapers protected from cache eviction (in addition to active wallpapers, user favorites, and the baseline restore wallpaper).
+3. **Atomic wallpaper changes:** A candidate wallpaper is fully downloaded, validated through L1–L4, and verified to exist on disk (`fileSizeBytes > 0`) before `WallpaperManager` is invoked. If applying a wallpaper fails, the scheduler advances to the next eligible reserve wallpaper rather than getting stuck.
+4. **Event-driven schedule recovery:** Time changes (`TIME_SET`) and timezone changes (`TIMEZONE_CHANGED`) reschedule the next transition immediately.
+
+## Article X: Resource Restraint and Network Budgets **[v0.4]**
+
+1. **Separated scheduling workers:** Wallpaper switching (`ChangeWorker`, scheduled via one-time delay to the next solar/clock transition with no network requirement) is separated from catalog replenishment (`RefreshWorker`, periodic every 12 hours when reserve is low).
+2. **Battery and network restraint:** Background catalog downloads pause when Battery Saver is active (`deferOnBatterySaver`) or when `wifiOnlyDownloads` is enabled on a metered connection. Offline wallpaper switches still run on schedule.
+3. **Bounded disk cache:** Default cache ceiling is 250 MB (configurable by the user). When evicting old image files to stay under budget, provenance rows are retained or cleanly marked evicted so the matcher never selects a missing file.
+4. **Per-source request budgets & sync rotation:** Each online adapter enforces its Schedule A per-source HTTP request cap (`5–10` HTTP requests per sync run across metadata and image downloads, bounded by an outer `BudgetedSourceHttpClient` ceiling of `<= 10`), spaces sequential requests by at least 150–250 ms, and honors `HTTP 429` / `Retry-After` (both delta-seconds and HTTP-date) with persisted backoff. Each catalog replenishment cycle polls at most 3 online sources via deficit-aware round-robin rotation (prioritizing dark-capable photographic sources when evening reserves are low). **[v0.6]**
+
+## Article XI: Matching, Personalization, and Explainability **[v0.5]**
+
+1. **Brightness fidelity:** Daytime periods select `LIGHT` (falling back to `NEUTRAL`); night periods select `DARK` (falling back to `NEUTRAL`).
+2. **Repetition, source-diversity & non-seed priority control:** Online and user-provided sources always take priority over the bundled procedural `seed_reserve` (which serves strictly as an offline fallback when no eligible non-seed wallpaper is available). Recently applied wallpapers and the currently active wallpaper are deprioritized in favor of unseen (`appliedCount == 0`) or least-recently applied wallpapers, interleaving sources by deprioritizing the active wallpaper's `sourceId` on ties, with a gentle preference for Kept (`isFavorite`) items. **[v0.5]**
+3. **Transient vs. permanent rejections:** Safety, license, and user rejections permanently blocklist the asset ID, SHA-256, and `dHash`. Resolution/quality rejections are scoped to the display dimensions measured and do not permanently ban the asset if display geometry changes.
+4. **Decision explainability:** Every approved or rejected candidate records a human-readable explanation of its gate and evaluator metrics visible in the UI.
+
+## Article XII: Onboarding and User Interface Conduct **[v0.5]**
+
+1. **Transparent setup & Laws of UX:** First-run onboarding previews the initial Light and Dark reserve and lets the user choose schedule mode, categories, and destination policy using progressive disclosure before enabling background automation. Dry-run mode is internal-only and not user-facing.
+2. **Responsive main thread:** All SQLite queries, bitmap decoding, seed rendering, and `WallpaperManager` calls execute off the main thread (`Dispatchers.IO` / `Dispatchers.Default`), and previews decode downsampled thumbnails matching the computed display crop.
+3. **Safe keyboard navigation:** Destructive actions (`Reject Forever`) require confirmation or offer an undo action and are not triggered by bare accidental keystrokes.
+
+## Article XIII–XVII: Modular Architecture, Persistence, Testing, and Release Governance **[v0.4]**
+
+1. **Article XIII (9-Module Architecture):** Source adapters (`data/sources`), Safety gate (`domain/safety`), Image evaluator (`domain/evaluator`), Matcher (`domain/matcher`), Renderer (`domain/renderer`), Scheduler (`platform/scheduler`), Platform adapter (`platform`), Local library (`data/repository` & `data/cache`), and User interface (`ui`).
+2. **Article XIV (Schema Evolution):** SQLite persistence (`SqliteLibraryStore`) uses explicit schema versioning with non-destructive `onUpgrade` migrations so user favorites and blocklists survive app updates.
+3. **Article XV (Strict Parsing):** Network JSON payloads are parsed with strict standard parsers (`org.json`) rather than lenient ad-hoc tokenizers.
+4. **Article XVI (Automated Verification):** Every module is covered by deterministic JVM / Robolectric tests, including Schedule B safety acceptance drills and SQLite v1→v2 migration tests.
+5. **Article XVII (Release Integrity):** Release builds require external upload keystore credentials supplied via environment or user-level Gradle properties (`enableV1Signing = false`, V2/V3 enabled) and ship as signed Android App Bundles (`.aab`).
+
+---
+
+## Article XVIII: Platform and Distribution **[v0.4]**
+
+1. **Target:** Googlebook OS (`arm64-v8a` Snapdragon and `x86_64` Intel), distributed through Google Play. The Platform adapter uses only public, documented Android platform APIs (`WallpaperManager`). Because standard Android shares one system wallpaper surface across connected displays, `SAME_ON_ALL_DISPLAYS` is the default display policy (rendering a single multi-display envelope bitmap across currently connected screens per Article IV §1, with `OPTIMIZE_PRIMARY_SHARPEST` available as fallback) and `INDEPENDENT_PER_DISPLAY` is disclosed as unsupported by the OS. Support for separate lock-screen and workspace destinations is detected and verified per flag (`FLAG_SYSTEM`, `FLAG_LOCK`) via `WallpaperManager.getWallpaperId` after apply, per Article V §2. **[v0.6]**
+2. **Minimal permissions:** The app requests only `INTERNET` and `SET_WALLPAPER` directly, plus the normal install-time permissions merged by AndroidX WorkManager (`ACCESS_NETWORK_STATE`, `RECEIVE_BOOT_COMPLETED`, `WAKE_LOCK`, `FOREGROUND_SERVICE`). All runtime/dangerous permissions (location, media/storage, camera, contacts, notifications) are strictly forbidden. User files are imported through the system Photo Picker / SAF. **[v0.4]**
+3. **No secrets in the package:** Distributed packages can be decompiled. Article VI §4(b) and Zero Embedded Secrets apply to every build variant, including debug and test builds.
+4. **Store declarations:**
+   - The Play Data safety declaration must accurately reflect that the developer collects no user data.
+   - The privacy policy must name every source host the app contacts and state that those hosts receive the device's network requests.
+   - Auto Backup rules (`dataExtractionRules` / `fullBackupContent`) back up user preferences and a WAL-checkpointed SQLite database while excluding `-wal`/`-shm` transient files and the `wallpapers/` and `quarantine/` image directories. **[v0.6]**
+   - The content rating questionnaire is answered conservatively.
+5. **Lightweight verification & optional on-device AI:** Core safety and visual evaluation ship as deterministic, zero-bloat verification (`SafetyGate` + `ImageEvaluator`). System-provided or bundled on-device AI features may be added only as an extra reject-only signal. They must never be a sole approver or compromise laptop resource restraint (Preamble & Article IV §5).
+
+---
+
+## Schedule A: Source Register **[v0.5]**
+
+Each entry records: `sourceId`, terms URL, terms review date and reviewer, credential status, allowed metadata/image hosts, published anonymous rate limits & Sunloom budget, license handling, and active safety signals. An entry without a completed review is **not admitted**.
+
+### Admitted Sources
+
+| Source (`sourceId`) | Terms, Review Date & Reviewer | Credential | Allowed Hosts & Rate Budget | License Handling | Active Safety Signals |
+|---|---|---|---|---|---|
+| **Wikimedia Commons Featured Pictures** (`wikimedia_featured`) | `foundation.wikimedia.org/wiki/Policy:Terms_of_Use` (Reviewed 2026-11-04 by Sunloom Maintainer) | None; identifying `User-Agent` required | Hosts: `commons.wikimedia.org`, `upload.wikimedia.org`. Limit: 200 req/s anon; Sunloom budget: `<= 6` req/sync, 150ms spacing | Explicit allowlist on `extmetadata.License` / `LicenseShortName` (`cc0`, `pd*`, `cc-by-2.0..4.0`, `cc-by-sa-2.0..4.0`); reject `CC 1.0`, `NC`, `ND`, missing/"Unknown author" creator, and non-empty `Restrictions` | Curated Featured Pictures category; L2 Tier 1 & Tier 2 denylist on title, categories, and description. |
+| **NASA Image and Video Library** (`nasa_library`) | `nasa.gov/multimedia/guidelines/` (Reviewed 2026-11-04 by Sunloom Maintainer) | None | Hosts: `images-api.nasa.gov`, `images-assets.nasa.gov`, `images.nasa.gov`. Limit: 1,000 req/hr anon; Sunloom budget: `<= 10` req/sync | US Gov Public Domain only when description/credit/secondary_creator carry no `©`, `copyright`, or third-party agency credit (`ESA`, `Getty`, `AP`, `Reuters`, non-NASA `courtesy of`); fetches asset `collection.json` for `~orig.jpg` or `~large.jpg` | Rejects `center == "HQ"` event photography; L2 Tier 1 & Tier 2 denylist on title and `keywords` (excluding astronaut portraits/ceremonies while allowing ISS Earth observation). |
+| **Art Institute of Chicago API** (`artic_cc0`) | `artic.edu/open-access/public-api` (Reviewed 2026-11-04 by Sunloom Maintainer) | None | Hosts: `api.artic.edu`, `www.artic.edu`. Limit: 60 req/min anon; Sunloom budget: `<= 5` req/sync, 150ms spacing | `is_public_domain` must be explicitly `true` (default `false`, fail-closed); requests `/full/1686,/0/default.jpg` (fallback `843px`) | Classification allowlist/filter + L2 Tier 1 & Tier 2 denylist on `title`, `classification_title`, `subject_titles`, and `term_titles`. |
+| **The Met Collection API** (`met_museum_cc0`) | `metmuseum.org/policies-and-documents/open-access` (Reviewed 2026-11-04 by Sunloom Maintainer) | None | Hosts: `collectionapi.metmuseum.org`, `images.metmuseum.org`, `www.metmuseum.org`. Limit: 80 req/s anon; Sunloom budget: `<= 7` req/sync with 150ms spacing | `isPublicDomain` must be `true` (`CC0 1.0`); uses `primaryImage` (high-res) before `primaryImageSmall` | Department & classification allowlist (`Paintings`, `Drawings`, `Prints`, `Photographs`; excludes Arms & Armor and figurative sculpture) + L2 Tier 1 & Tier 2 denylist on `tags`. |
+| **Cleveland Museum of Art Open Access API** (`cma_cc0`) | `clevelandart.org/open-access` (Reviewed 2026-11-04 by Sunloom Maintainer) | None | Hosts: `openaccess-api.clevelandart.org`, `openaccess-cdn.clevelandart.org`, `www.clevelandart.org`, `clevelandart.org`. No published anon limit; conservative Sunloom budget: `<= 5` req/sync with 250ms spacing | Literal `share_license_status == "CC0"` required (fail-closed on `Copyrighted`, `Other`, or non-PD `copyright` text); prefers `images.print` JPEG (or bounded `images.full` JPEG on >3000px displays) with `images.web` fallback, skipping `.tif` | 2D visual medium allowlist (`Painting`, `Drawing`, `Print`, `Photograph`, `Textile`; excludes Sculpture, Arms & Armor, Coins, Portraits) + L2 Tier 1 & Tier 2 denylist. |
+| **SMK — National Gallery of Denmark API** (`smk_open`) | `smk.dk/en/article/smk-open` (Reviewed 2026-11-04 by Sunloom Maintainer) | None | Hosts: `api.smk.dk`, `iip.smk.dk`, `open.smk.dk`, `www.smk.dk`. No published anon limit; conservative Sunloom budget: `<= 5` req/sync with 250ms spacing | `public_domain` must be `true` and `rights` verified as Public Domain Mark 1.0 or CC0 1.0; requests bounded IIIF `/full/!<target>,<target>/0/default.jpg` up to `4096px` (fallback `!1686,1686`) | `lang=en` query + 2D medium allowlist on `object_names` + Nordic/Dutch ligature-folded L2 Tier 1 & Tier 2 denylist on `titles`, `object_names`, `techniques`, and `motif`. |
+| **Sunloom Bundled Seed Reserve** (`seed_reserve`) | Internal `CC0 1.0` procedural reserve (Reviewed 2026-11-04 by Sunloom Maintainer) | None (Offline) | Offline on-device `SeedRenderer` (no network hosts) | `CC0 1.0` generated on-device by Sunloom | Deterministic procedural horizon/ridge compositions rendered at native display resolution (3 Light + 3 Dark) and verified through L3/L4. |
+| **User-provided files** (`user_local`) | Local Photo Picker / SAF (Reviewed 2026-11-04 by Sunloom Maintainer) | n/a | Local URI stream only (no network hosts) | Exempt (Article VI §10); marked `"User-provided"` | L1/L2 metadata N/A (user selection); raw bytes quarantined, verified through L3–L5 (magic bytes, bounds, EXIF orientation, dHash/SHA-256 blocklist, evaluator), and retained in original format (`JPEG`/`PNG`/`WEBP`). |
+
+### Candidate for Future Evaluation (Not Currently Enabled)
+
+| Source | Credential | License handling | Safety notes |
+|---|---|---|---|
+| **Openverse Institutional Subset** (`api.openverse.org/v1/`) | Anonymous only (`20 req/min`, `200 req/day` per-IP throttle) | Query restricted to `cc0,pdm` and institutional `source=` allowlist; verify per-asset license | Unpinned Openverse aggregates Flickr user uploads; kept disabled unless pinned to curated institutional photography hosts (e.g., `ids.si.edu`) with verified client-app terms. |
+
+### Not Admitted (Rejected or Deferred Sources)
+
+| Source | Reason for Rejection |
+|---|---|
+| **Getty Museum Collection API** (`data.getty.edu`) | Requires `POST`ed SPARQL queries (incompatible with GET-only `HttpClient`) and 2–3 Linked Art / IIIF Presentation Manifest hops per candidate to verify per-image rights, exhausting Article X §4 request budgets. |
+| **Rijksmuseum Data Services** (`data.rijksmuseum.nl` / `iiif.micr.io`) | Deferred/not admitted: Linked Art Search returns bare PIDs requiring 3–4 cross-host JSON-LD resolve hops per candidate and predominantly Dutch-language metadata (`portret`, `naakt`), duplicating Golden Age coverage already served in 1 English JSON call by `smk_open`. Legacy key-based API is deprecated and violates Article VI §4b. |
+| **NASA EPIC & NASA GIBS** | EPIC returns repetitive 2048×2048 square full-disk Earth frames lacking subject tags (failing L2b) and cropping poorly to widescreen displays; GIBS serves tiled WMTS/WMS GIS strips lacking per-asset tags and requiring multi-tile assembly. |
+| **Wellcome Collection Catalogue API** | High base rate of medical, anatomical, surgical, and pathology imagery directly conflicts with Article VII §2 ("disturbing medical content") and Preamble fail-closed priorities. |
+| **National Gallery of Art Open Data** | Bulk CSV dump rather than a query API (fails Article VI §4a); bundling or streaming multi-megabyte CSV catalogs violates Preamble lightweight resource restraint. |
+| **Smithsonian (direct API), Europeana, Harvard Art Museums, National Park Service, Flickr** | Require embedded API keys (`api.data.gov`, `wskey`, or OAuth keys), violating Article VI §4b and Article VIII §3 (Zero Embedded Secrets). |
+| **iNaturalist & Library of Congress** | iNaturalist consists of uncurated user uploads mixed with NC licenses; Library of Congress exposes free-text rights advisories rather than machine-readable license identifiers (failing Article VI §§4c, 5). |
+| **Bing Image of the Day archive** (`HPImageArchive.aspx`) | Undocumented internal Microsoft endpoint; images are commercial stock photos (`© Getty / Alamy / Minden`) with all rights reserved, violating Article VI §§1, 5 and Google Play IP policy. |
+| **Windows Spotlight endpoints** | Undocumented internal endpoint; rights not open. |
+| **Wallhaven** (`wallhaven.cc`) | Uncurated user-uploaded imageboard; per-asset copyright/license is unverifiable (high piracy risk) and community SFW tags do not meet Article VII §1. |
+| **Lorem Picsum** (`picsum.photos`) | Serves images under the Unsplash License (not an open-content license under Article VI §5) and returns zero descriptive/tag metadata (`id`, `author`, `width`, `height` only), making L2 safety screening impossible. |
+| **NASA APOD** (`api.nasa.gov/planetary/apod`) | Requires an API key (including the shared rate-limited `DEMO_KEY`, violating Article VI §4b), and many daily entries are copyrighted by third-party astrophotographers. All public-domain NASA imagery is already covered by `images-api.nasa.gov`. |
+| **Unsplash, Pexels, Pixabay** | Require an embedded API key and use custom provider licenses that prohibit standalone wallpaper redistribution or fall outside Article VI §5. |
+| **Reddit image communities** | User-uploaded rights unverifiable; API terms and OAuth rules restrictive. |
+
+---
+
+## Schedule B: Safety Gate Acceptance Tests **[v0.4]**
+
+1. **Evaluation corpus:** Version-controlled test fixtures in `SafetyGateTest` and `SourceAdaptersTest` (and `app/src/test/resources/safety-corpus/` where external fixtures are used) covering three mandatory sets (minimum 25 cases total):
+   - a **known-unsafe set** (explicit NSFW, nudity, plural forms like `"Female Nudes"`, graphic violence, hate symbols);
+   - a **known-safe set** (daylight mountain landscapes including *"North Face of the Eiger"* and *"Death Valley"*, ocean horizons, architectural exteriors, ISS astronaut-captured orbital Earth photography, astronomical nebulae including *"supernova explosion"*, and valid nature phrases like *"adult bald eagle"*);
+   - a **hard-negative set** (classical art nudity such as *"Odalisque"* / *"Bathers"*, beachwear/bikini portraits, medical/anatomy illustrations, text-heavy document scans, fake system lock-screen dialogs, weapons/armor, animals in distress, corporate logos/mission insignia, Wikimedia files with non-empty `Restrictions`, and `Attribution-NonCommercial` / `CC BY 1.0` licenses).
+2. **No injected safety tags:** Source adapters must never inject synthetic safe tags (`"landscape"`, `"nature"`, `"featured"`, etc.) into `CandidateAsset.rawCategoriesAndTags`.
+3. **Zero-escape rule:** No known-unsafe or hard-negative item may reach the approved state through L1–L4.
+4. **Zero false-reject rule:** Known-safe nature, architecture, fine-art landscape, and NASA orbital/astronomy items must pass with zero false rejections.
+5. **Fail-closed drills:** Automated tests force missing/uncertain safety classifications, non-HTTPS URLs, off-allowlist HTTP redirects, corrupt/ELF magic bytes, oversized image headers, and simulated decode failures, confirming nothing reaches the reserve.
+6. **Re-evaluation test:** Changing `SafetyGate.COMPOSITE_GATE_VERSION` triggers re-evaluation of cached reserve items before apply and purges failures.
+7. **Quarantine test:** Unapproved bytes are evaluated in memory/quarantine and never written to the approved wallpaper directory if any gate layer rejects.
+8. **Blocklist persistence test:** A rejected image (matching SHA-256 or 64-bit `dHash`) persisted in SQLite `blocklist` survives repository recreation and is rejected at L2/L4 even when re-served by a different source.
+9. **License & attribution test:** Fixtures for non-allowlisted licenses (`UNKNOWN_OR_RESTRICTED`, `BY-NC`, `CC BY 1.0`) and missing/`"Unknown author"` creator names on `CC BY` / `CC BY-SA` works are rejected at L1/L2, while verified Public Domain / CC0 works with institutional attribution pass.

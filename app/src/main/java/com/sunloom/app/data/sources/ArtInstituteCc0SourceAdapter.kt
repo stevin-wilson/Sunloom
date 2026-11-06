@@ -1,0 +1,140 @@
+package com.sunloom.app.data.sources
+
+import com.sunloom.app.domain.model.CandidateAsset
+import com.sunloom.app.domain.model.LicenseType
+import com.sunloom.app.domain.model.ProvenanceRecord
+import com.sunloom.app.domain.model.SafeCategory
+import com.sunloom.app.domain.model.SafetyClassification
+import com.sunloom.app.domain.safety.SafetyGate
+import java.util.Locale
+
+/**
+ * Keyless Source #3: Art Institute of Chicago Open Access (CC0) Adapter.
+ * Strictly queries non-figurative landscape and architectural public-domain works,
+ * enforces fail-closed `is_public_domain == true` (default false), and injects zero fake tags.
+ */
+class ArtInstituteCc0SourceAdapter(
+    private val httpClient: HttpClient = DefaultHttpsClient()
+) : WallpaperSourceAdapter {
+
+    override val sourceId: String = "artic_cc0"
+    override val sourceName: String = "Art Institute of Chicago Open Access (Landscapes)"
+    override val licenseSummary: String = "CC0 1.0 Universal (Public Domain Dedication)"
+
+    override fun withHttpClient(client: HttpClient): WallpaperSourceAdapter =
+        ArtInstituteCc0SourceAdapter(client)
+
+    override suspend fun fetchCandidates(
+        enabledCategories: Set<SafeCategory>,
+        limit: Int,
+        offset: Int,
+        targetWidthPx: Int
+    ): List<CandidateAsset> {
+        if (SafeCategory.SCENIC_FINE_ART !in enabledCategories && SafeCategory.LANDSCAPES_NATURE !in enabledCategories) {
+            return emptyList()
+        }
+        val page = ((offset / limit.coerceAtLeast(1)) % 8) + 1
+        val apiUrl = "https://api.artic.edu/api/v1/artworks/search" +
+            "?q=landscape%20mountains%20seascape%20clouds%20valley" +
+            "&fields=id,title,artist_title,image_id,is_public_domain,classification_title,subject_titles,term_titles" +
+            "&limit=$limit&page=$page"
+        val jsonText = httpClient.fetchTextOrNull(apiUrl) ?: return emptyList()
+        return parseResponse(jsonText).take(limit)
+    }
+
+    fun parseResponse(jsonText: String): List<CandidateAsset> {
+        val out = ArrayList<CandidateAsset>()
+        val root = SimpleJson.parseObject(jsonText) ?: return emptyList()
+        val dataArr = root.arr("data") ?: return emptyList()
+
+        for (i in 0 until dataArr.size) {
+            val item = dataArr.obj(i) ?: continue
+            val id = item.int("id", -1)
+            val imageId = item.str("image_id", "").trim()
+            if (id <= 0 || imageId.isBlank() || imageId == "null") continue
+
+            // Fail-closed: is_public_domain must be explicitly true (default false)
+            if (!item.bool("is_public_domain", false)) continue
+
+            val title = item.str("title", "").trim().ifBlank { continue }
+            val rawArtist = item.str("artist_title", "").trim()
+            val artist = if (rawArtist.isBlank() || rawArtist == "null") {
+                "Unknown Artist (Art Institute of Chicago)"
+            } else {
+                rawArtist
+            }
+            val classification = item.str("classification_title", "").trim().lowercase(Locale.ROOT)
+
+            // Block sculpture, figurine, anatomy, or portrait classifications at source adapter level
+            if (classification.contains("sculpture") ||
+                classification.contains("portrait") ||
+                classification.contains("nude") ||
+                classification.contains("armor") ||
+                classification.contains("weapon") ||
+                classification.contains("costume")
+            ) {
+                continue
+            }
+
+            // Zero injected tags: only include actual fields from the ArtIC response
+            val tags = ArrayList<String>()
+            if (classification.isNotBlank() && classification != "null") {
+                tags.add(classification)
+            }
+            val subjects = item.arr("subject_titles")
+            if (subjects != null) {
+                for (s in 0 until subjects.size) {
+                    val sub = subjects.str(s, "").trim()
+                    if (sub.isNotBlank() && sub != "null") tags.add(sub)
+                }
+            }
+            val terms = item.arr("term_titles")
+            if (terms != null) {
+                for (t in 0 until terms.size) {
+                    val term = terms.str(t, "").trim()
+                    if (term.isNotBlank() && term != "null") tags.add(term)
+                }
+            }
+
+            // Request ArtIC's largest public IIIF rendition (1686px; falls back to 843px if 1686px 403/404s)
+            val iiifUrl = "https://www.artic.edu/iiif/2/$imageId/full/1686,/0/default.jpg"
+            val iiifFallbackUrl = "https://www.artic.edu/iiif/2/$imageId/full/843,/0/default.jpg"
+            val pageUrl = "https://www.artic.edu/artworks/$id"
+
+            out.add(
+                CandidateAsset(
+                    id = "artic-$id",
+                    title = title,
+                    description = "$title — $artist (Art Institute of Chicago Open Access CC0)",
+                    category = SafeCategory.SCENIC_FINE_ART,
+                    rawCategoriesAndTags = tags,
+                    downloadUrl = iiifUrl,
+                    fallbackDownloadUrls = listOf(iiifFallbackUrl),
+                    provenance = ProvenanceRecord(
+                        sourceId = sourceId,
+                        sourceName = sourceName,
+                        assetId = "artic-$id",
+                        originalPageUrl = pageUrl,
+                        creatorName = artist,
+                        creatorPageUrl = "",
+                        licenseType = LicenseType.CC0,
+                        attributionText = "$artist — $title (CC0 1.0 Public Domain, Art Institute of Chicago)",
+                        retrievedAtEpochMs = System.currentTimeMillis(),
+                        originalWidth = 0,
+                        originalHeight = 0,
+                        renditionWidth = 0,
+                        renditionHeight = 0,
+                        safetyClassification = SafetyClassification.SAFE,
+                        safetyClassificationSource = "ArtIC Open Access Public Domain Filter (${classification.ifBlank { "Artwork" }})",
+                        sha256Checksum = "",
+                        licenseUrl = LicenseType.CC0.defaultUrl,
+                        licenseVersion = "1.0",
+                        adapterVersion = SourceRegistry.get(sourceId)?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
+                        safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION
+                    )
+                )
+            )
+        }
+        return out
+    }
+}
