@@ -36,6 +36,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.PlainTooltip
@@ -446,7 +447,13 @@ internal fun ProvenanceLinkRow(label: String, displayText: String, url: String) 
                     .testTag("source_page_link")
                     .then(if (url.startsWith("https://")) Modifier.handCursor() else Modifier)
                     .desktopFocusRing(RoundedCornerShape(4.dp))
-                    .clickable(enabled = url.startsWith("https://")) {
+                    // Grow the hit area to a comfortable 48dp target (Fitts) without changing the text.
+                    .minimumInteractiveComponentSize()
+                    .clickable(
+                        enabled = url.startsWith("https://"),
+                        onClickLabel = "Open source page in browser",
+                        role = androidx.compose.ui.semantics.Role.Button
+                    ) {
                         if (url.startsWith("https://")) {
                             runCatching { uriHandler.openUri(url) }
                         }

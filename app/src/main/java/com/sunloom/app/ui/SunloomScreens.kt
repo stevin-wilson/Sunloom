@@ -2,16 +2,22 @@ package com.sunloom.app.ui
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -63,9 +70,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.ui.draganddrop.mimeTypes
+import androidx.compose.ui.draganddrop.toAndroidDragEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
@@ -118,6 +132,7 @@ private val SunloomLightPalette = lightColorScheme(
     error = Color(0xFFDC2626)
 )
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SunloomApp(
     uiState: SunloomUiState,
@@ -151,6 +166,7 @@ fun SunloomApp(
     onRestoreSystemDefault: () -> Unit = onRestoreOriginal,
     isFullscreen: Boolean = false,
     onToggleFullscreen: () -> Unit = {},
+    onDropImages: (android.view.DragEvent) -> Boolean = { false },
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
     var showKeyboardRejectConfirm by remember { mutableStateOf(false) }
@@ -163,13 +179,24 @@ fun SunloomApp(
 
     // Give the root focus once the workspace is usable, and again after the reject dialog
     // closes, so single-key accelerators work without needing a click first.
-    LaunchedEffect(workspaceReady, showKeyboardRejectConfirm) {
+    LaunchedEffect(workspaceReady, showKeyboardRejectConfirm, uiState.activeTab) {
         if (workspaceReady && !showKeyboardRejectConfirm) {
             runCatching { rootFocusRequester.requestFocus() }
         }
     }
+    val restoreRootFocus: () -> Unit = remember(rootFocusRequester) {
+        { runCatching { rootFocusRequester.requestFocus() }; Unit }
+    }
+    val dropTarget = remember(onDropImages) {
+        object : DragAndDropTarget {
+            override fun onDrop(event: DragAndDropEvent): Boolean = onDropImages(event.toAndroidDragEvent())
+        }
+    }
 
-    CompositionLocalProvider(LocalShortcutGate provides shortcutGate) {
+    CompositionLocalProvider(
+        LocalShortcutGate provides shortcutGate,
+        LocalRestoreRootFocus provides restoreRootFocus
+    ) {
     MaterialTheme(colorScheme = colorScheme) {
         Surface(
             modifier = Modifier
@@ -177,6 +204,16 @@ fun SunloomApp(
                 .focusRequester(rootFocusRequester)
                 .focusable()
                 .onKeyEvent { event ->
+                    // Ctrl+1..5 jumps between workspace tabs (works while typing, like desktop apps).
+                    if (event.type == KeyEventType.KeyUp && event.isCtrlPressed &&
+                        !event.isAltPressed && !event.isMetaPressed && workspaceReady
+                    ) {
+                        val tab = tabForCtrlShortcut(event.key)
+                        if (tab != null) {
+                            onSelectTab(tab)
+                            return@onKeyEvent true
+                        }
+                    }
                     if (event.type != KeyEventType.KeyUp || !isPlainKeyEvent(event)) {
                         return@onKeyEvent false
                     }
@@ -214,6 +251,19 @@ fun SunloomApp(
                 },
             color = MaterialTheme.colorScheme.background
         ) {
+          // Edge-to-edge (enforced at targetSdk 36): keep content clear of the caption bar, system
+          // bars, display cutouts and the keyboard, while the background still bleeds to the edges.
+          Box(
+              modifier = Modifier
+                  .fillMaxSize()
+                  .windowInsetsPadding(WindowInsets.safeDrawing)
+                  .dragAndDropTarget(
+                      shouldStartDragAndDrop = { event ->
+                          event.mimeTypes().any { it.startsWith("image/") }
+                      },
+                      target = dropTarget
+                  )
+          ) {
             if (showKeyboardRejectConfirm && uiState.currentWallpaper != null) {
                 ConfirmDestructiveDialog(
                     title = "Dislike Wallpaper?",
@@ -334,6 +384,7 @@ fun SunloomApp(
                     )
                 }
             }
+          }
         }
     }
     }
@@ -695,41 +746,48 @@ fun DesktopWorkspaceScreen(
                         isFullscreen = isFullscreen,
                         onToggleFullscreen = onToggleFullscreen
                     )
-                    DesktopNavTab.RESERVE_AND_HISTORY -> ReserveAndHistoryPane(
-                        uiState = uiState,
-                        onApplySpecific = onApplySpecific,
-                        onDeleteFromReserve = onDeleteFromReserve,
-                        onToggleKeepSpecific = onToggleKeepSpecific,
-                        onPickLocalPhoto = { onPickLocalPhoto(false) },
-                        onPickBaselineRestore = { onPickLocalPhoto(true) }
-                    )
-                    DesktopNavTab.SOURCES_AND_CATEGORIES -> SourcesAndCategoriesPane(
-                        uiState = uiState,
-                        onToggleCategory = onToggleCategory,
-                        onToggleSource = onToggleSource,
-                        onToggleWifiOnly = onToggleWifiOnly,
-                        onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
-                        onSyncOnline = onSyncOnline
-                    )
-                    DesktopNavTab.DISPLAYS_AND_SCHEDULE -> DisplaysAndSchedulePane(
-                        uiState = uiState,
-                        onSelectCity = onSelectCity,
-                        onUpdateScheduleMode = onUpdateScheduleMode,
-                        onUpdateLockPolicy = onUpdateLockPolicy,
-                        onToggleBlurredFill = onToggleBlurredFill,
-                        onUpdateFixedHours = onUpdateFixedHours,
-                        onUpdateCustomCoordinates = onUpdateCustomCoordinates,
-                        onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
-                        onUpdateDisplayPolicy = onUpdateDisplayPolicy,
-                        onForgetRememberedDisplay = onForgetRememberedDisplay,
-                        onRestoreSystemDefault = onRestoreSystemDefault,
-                        onReopenSetup = onReopenSetup
-                    )
-                    DesktopNavTab.SAFETY_AND_DECISION_LOG -> DiagnosticsPane(
-                        uiState = uiState,
-                        onToggleLegibilityOverlay = onToggleLegibilityOverlay,
-                        onUpdateMaxCacheBytes = onUpdateMaxCacheBytes
-                    )
+                    else -> ReadableWidth {
+                        when (uiState.activeTab) {
+                        DesktopNavTab.RESERVE_AND_HISTORY -> ReserveAndHistoryPane(
+                            uiState = uiState,
+                            onApplySpecific = onApplySpecific,
+                            onDeleteFromReserve = onDeleteFromReserve,
+                            onToggleKeepSpecific = onToggleKeepSpecific,
+                            onPickLocalPhoto = { onPickLocalPhoto(false) },
+                            onPickBaselineRestore = { onPickLocalPhoto(true) },
+                            onSyncOnline = onSyncOnline
+                        )
+                        DesktopNavTab.SOURCES_AND_CATEGORIES -> SourcesAndCategoriesPane(
+                            uiState = uiState,
+                            onToggleCategory = onToggleCategory,
+                            onToggleSource = onToggleSource,
+                            onToggleWifiOnly = onToggleWifiOnly,
+                            onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
+                            onSyncOnline = onSyncOnline
+                        )
+                        DesktopNavTab.DISPLAYS_AND_SCHEDULE -> DisplaysAndSchedulePane(
+                            uiState = uiState,
+                            onSelectCity = onSelectCity,
+                            onUpdateScheduleMode = onUpdateScheduleMode,
+                            onUpdateLockPolicy = onUpdateLockPolicy,
+                            onToggleBlurredFill = onToggleBlurredFill,
+                            onUpdateFixedHours = onUpdateFixedHours,
+                            onUpdateCustomCoordinates = onUpdateCustomCoordinates,
+                            onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
+                            onUpdateDisplayPolicy = onUpdateDisplayPolicy,
+                            onForgetRememberedDisplay = onForgetRememberedDisplay,
+                            onRestoreSystemDefault = onRestoreSystemDefault,
+                            onReopenSetup = onReopenSetup
+                        )
+                        DesktopNavTab.SAFETY_AND_DECISION_LOG -> DiagnosticsPane(
+                            uiState = uiState,
+                            onToggleLegibilityOverlay = onToggleLegibilityOverlay,
+                            onUpdateMaxCacheBytes = onUpdateMaxCacheBytes
+                        )
+                
+                            else -> Unit
+                        }
+                    }
                 }
             }
         }
@@ -739,6 +797,7 @@ fun DesktopWorkspaceScreen(
                 workspace(Modifier.weight(1f).fillMaxWidth())
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surface,
+                    windowInsets = WindowInsets(0, 0, 0, 0),
                     modifier = Modifier.testTag("workspace_nav_bar")
                 ) {
                     DesktopNavTab.entries.forEach { tab ->
@@ -747,7 +806,7 @@ fun DesktopWorkspaceScreen(
                             onClick = { onSelectTab(tab) },
                             modifier = Modifier.desktopControl(RoundedCornerShape(16.dp)).testTag("nav_${tab.name}"),
                             icon = { Icon(navIcon(tab), contentDescription = tab.label) },
-                            label = { Text(tab.label, fontSize = 11.sp, maxLines = 1) }
+                            label = { Text(tab.label, fontSize = 12.sp, maxLines = 1) }
                         )
                     }
                 }
@@ -757,6 +816,7 @@ fun DesktopWorkspaceScreen(
             Row(modifier = Modifier.fillMaxSize()) {
                 NavigationRail(
                     containerColor = MaterialTheme.colorScheme.surface,
+                    windowInsets = WindowInsets(0, 0, 0, 0),
                     modifier = Modifier.fillMaxHeight().testTag("workspace_nav_rail")
                 ) {
                     Spacer(Modifier.height(12.dp))
@@ -774,7 +834,7 @@ fun DesktopWorkspaceScreen(
                             modifier = Modifier.desktopControl(RoundedCornerShape(16.dp)).testTag("nav_${tab.name}"),
                             icon = { Icon(navIcon(tab), contentDescription = tab.label) },
                             label = if (showLabels) {
-                                { Text(tab.label, fontSize = 11.sp) }
+                                { Text(tab.label, fontSize = 12.sp) }
                             } else {
                                 null
                             },
@@ -795,6 +855,16 @@ private fun navIcon(tab: DesktopNavTab) = when (tab) {
     DesktopNavTab.DISPLAYS_AND_SCHEDULE -> SunloomIcons.Schedule
     DesktopNavTab.SAFETY_AND_DECISION_LOG -> SunloomIcons.Info
 }
+
+/** Caps line length on text-heavy panes so wide free-form windows stay readable. */
+@Composable
+private fun ColumnScope.ReadableWidth(content: @Composable () -> Unit) {
+    Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopCenter) {
+        Box(modifier = Modifier.widthIn(max = ReadableContentMaxWidth).fillMaxSize()) { content() }
+    }
+}
+
+private val ReadableContentMaxWidth = 1100.dp
 
 @Composable
 private fun TopStatusBanner(

@@ -51,7 +51,8 @@ internal fun ReserveAndHistoryPane(
     onDeleteFromReserve: (String) -> Unit,
     onToggleKeepSpecific: (String) -> Unit,
     onPickLocalPhoto: () -> Unit,
-    onPickBaselineRestore: () -> Unit
+    onPickBaselineRestore: () -> Unit,
+    onSyncOnline: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val restricted = uiState.isWallpaperChangeRestricted
@@ -105,11 +106,49 @@ internal fun ReserveAndHistoryPane(
             }
         }
 
+        if (uiState.libraryWallpapers.isEmpty()) {
+            item(key = "reserve_empty") {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("reserve_empty_state")
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "No saved wallpapers yet",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Fetch a fresh batch from your enabled sources, or add one of your own photos.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            androidx.compose.material3.Button(
+                                onClick = onSyncOnline,
+                                enabled = !uiState.isSyncingOnline,
+                                modifier = Modifier.desktopControl().testTag("reserve_empty_fetch")
+                            ) { Text(if (uiState.isSyncingOnline) "Fetching..." else "Fetch wallpapers") }
+                            OutlinedButton(onClick = onPickLocalPhoto, modifier = Modifier.desktopControl()) {
+                                Text("Add Photo")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         items(items = uiState.libraryWallpapers, key = { it.id }) { item ->
             val isActive = uiState.currentWallpaper?.id == item.id
             ContextMenuHost(
                 modifier = Modifier.fillMaxWidth().testTag("reserve_card_${item.id}"),
                 focusShape = RoundedCornerShape(14.dp),
+                onActivate = if (!isActive && !restricted) ({ onApplySpecific(item.id) }) else null,
                 menuContent = { dismiss ->
                     if (!isActive && !restricted) {
                         ContextMenuItem("Apply wallpaper now", "ctx_apply_${item.id}") {

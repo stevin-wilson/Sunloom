@@ -218,4 +218,15 @@ class DesktopInputTest {
         assertEquals("Pause", shortcutTooltipText("Pause", null))
         assertEquals("Pause", shortcutTooltipText("Pause", " "))
     }
+
+    @Test
+    fun `ctrl digit shortcuts map to tabs in order and ignore other keys`() {
+        assertEquals(DesktopNavTab.TODAY_CANVAS, tabForCtrlShortcut(Key.One))
+        assertEquals(DesktopNavTab.RESERVE_AND_HISTORY, tabForCtrlShortcut(Key.Two))
+        assertEquals(DesktopNavTab.SOURCES_AND_CATEGORIES, tabForCtrlShortcut(Key.Three))
+        assertEquals(DesktopNavTab.DISPLAYS_AND_SCHEDULE, tabForCtrlShortcut(Key.Four))
+        assertEquals(DesktopNavTab.SAFETY_AND_DECISION_LOG, tabForCtrlShortcut(Key.Five))
+        assertEquals(null, tabForCtrlShortcut(Key.Six))
+        assertEquals(null, tabForCtrlShortcut(Key.N))
+    }
 }

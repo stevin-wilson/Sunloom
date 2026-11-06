@@ -37,6 +37,12 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Free-form desktop windows: sensible first size and a floor that keeps the UI usable. -->
+            <layout
+                android:defaultWidth="960dp"
+                android:defaultHeight="640dp"
+                android:minWidth="400dp"
+                android:minHeight="480dp" />
         </activity>
 
         <receiver

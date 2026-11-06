@@ -7,12 +7,14 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.StrictMode
+import android.view.DragEvent
 import android.view.KeyEvent
 import android.view.KeyboardShortcutGroup
 import android.view.KeyboardShortcutInfo
 import android.view.Menu
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -43,6 +45,7 @@ class MainActivity : ComponentActivity() {
     /** True while the system bars are hidden for unobstructed wallpaper viewing (F11). */
     private var isFullscreen by mutableStateOf(false)
     private var lastNightMask = Int.MIN_VALUE
+    private val dropPermissions = mutableListOf<android.view.DragAndDropPermissions>()
     private var hasStartedBefore = false
     private val debouncedDisplayRunnable = Runnable {
         notifyDisplaysChangedNow()
@@ -84,6 +87,7 @@ class MainActivity : ComponentActivity() {
             )
         }
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         lastNightMask = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
 
         gateway = AndroidSunloomGateway(applicationContext)
@@ -140,6 +144,7 @@ class MainActivity : ComponentActivity() {
                 onForgetRememberedDisplay = { key -> viewModel.forgetRememberedDisplay(key) },
                 isFullscreen = isFullscreen,
                 onToggleFullscreen = { applyFullscreen(!isFullscreen) },
+                onDropImages = { dragEvent -> importDroppedImages(dragEvent) },
                 onPickLocalPhoto = { asBaseline ->
                     pickingAsBaselineRestore = asBaseline
                     photoPickerLauncher.launch(
@@ -148,6 +153,22 @@ class MainActivity : ComponentActivity() {
                 }
             )
         }
+    }
+
+    /** Imports images dropped from the Files app or another window (each becomes a reserve item). */
+    private fun importDroppedImages(dragEvent: DragEvent): Boolean {
+        val clip = dragEvent.clipData ?: return false
+        // Cross-app content URIs are only readable while this grant is held.
+        requestDragAndDropPermissions(dragEvent)?.let { dropPermissions.add(it) }
+        var imported = 0
+        for (i in 0 until clip.itemCount) {
+            val uri = clip.getItemAt(i).uri ?: continue
+            val type = contentResolver.getType(uri)
+            if (type != null && !type.startsWith("image/")) continue
+            viewModel.importLocalUri(uri.toString(), asBaselineRestore = false)
+            imported++
+        }
+        return imported > 0
     }
 
     private fun applyFullscreen(enabled: Boolean) {
@@ -204,6 +225,11 @@ class MainActivity : ComponentActivity() {
                 KeyboardShortcutInfo("Keep in favorites", KeyEvent.KEYCODE_K, 0),
                 KeyboardShortcutInfo("Dislike and exclude (asks first)", KeyEvent.KEYCODE_FORWARD_DEL, 0),
                 KeyboardShortcutInfo("Toggle fullscreen", KeyEvent.KEYCODE_F11, 0),
+                KeyboardShortcutInfo("Go to Home", KeyEvent.KEYCODE_1, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo("Go to Reserve", KeyEvent.KEYCODE_2, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo("Go to Sources", KeyEvent.KEYCODE_3, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo("Go to Schedule", KeyEvent.KEYCODE_4, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo("Go to Diagnostics", KeyEvent.KEYCODE_5, KeyEvent.META_CTRL_ON),
                 KeyboardShortcutInfo("Close dialog or exit fullscreen", KeyEvent.KEYCODE_ESCAPE, 0)
             )
         )
