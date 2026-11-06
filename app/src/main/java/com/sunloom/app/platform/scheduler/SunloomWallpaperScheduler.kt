@@ -250,6 +250,23 @@ class SunloomWallpaperScheduler(
             return finalStatus
         }
 
+        /** Re-enqueues the next transition after a change attempt exhausted its retries. */
+        fun rearmAfterGivingUp(appContext: Context) {
+            val prefs = try {
+                LocalLibraryRepository(appContext).loadPreferences()
+            } catch (_: Throwable) {
+                return
+            }
+            SunloomWallpaperScheduler(appContext).syncPeriodicSchedule(
+                autoEnabled = prefs.autoChangeEnabled,
+                isPaused = prefs.isPaused,
+                wifiOnly = prefs.wifiOnlyDownloads,
+                deferBatterySaver = prefs.deferOnBatterySaver,
+                preferences = prefs,
+                rescheduleRefreshWork = false
+            )
+        }
+
         /**
          * Executes background online catalog replenishment when permitted by network/power rules.
          */
@@ -287,6 +304,7 @@ class ChangeWorker(
     override suspend fun doWork(): Result = mapChangeWorkResult(
         runAttemptCount = runAttemptCount,
         execute = { SunloomWallpaperScheduler.executeScheduledWallpaperChange(applicationContext) },
+        onGiveUp = { SunloomWallpaperScheduler.rearmAfterGivingUp(applicationContext) },
         onStoreUnavailable = { SunloomWallpaperScheduler(applicationContext).cancelAllScheduledWork() }
     )
 }
@@ -306,12 +324,19 @@ class RefreshWorker(
 internal suspend fun mapChangeWorkResult(
     runAttemptCount: Int,
     execute: suspend () -> WallpaperStatus?,
+    onGiveUp: () -> Unit = {},
     onStoreUnavailable: () -> Unit
 ): ListenableWorker.Result {
     return try {
         val status = execute()
-        if (status == WallpaperStatus.FAILED_TEMPORARILY && runAttemptCount < 3) {
-            ListenableWorker.Result.retry()
+        if (status == WallpaperStatus.FAILED_TEMPORARILY) {
+            if (runAttemptCount < 3) {
+                ListenableWorker.Result.retry()
+            } else {
+                // Out of retries: re-arm the next transition so automation doesn't silently stop.
+                runCatching(onGiveUp)
+                ListenableWorker.Result.success()
+            }
         } else {
             ListenableWorker.Result.success()
         }
@@ -321,7 +346,12 @@ internal suspend fun mapChangeWorkResult(
         onStoreUnavailable()
         ListenableWorker.Result.failure()
     } catch (_: Throwable) {
-        if (runAttemptCount < 3) ListenableWorker.Result.retry() else ListenableWorker.Result.failure()
+        if (runAttemptCount < 3) {
+            ListenableWorker.Result.retry()
+        } else {
+            runCatching(onGiveUp)
+            ListenableWorker.Result.failure()
+        }
     }
 }
 

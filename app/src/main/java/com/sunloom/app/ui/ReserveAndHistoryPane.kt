@@ -1,5 +1,7 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -51,12 +53,12 @@ internal fun ReserveAndHistoryPane(
     onDeleteFromReserve: (String) -> Unit,
     onToggleKeepSpecific: (String) -> Unit,
     onPickLocalPhoto: () -> Unit,
-    onPickBaselineRestore: () -> Unit
+    onPickBaselineRestore: () -> Unit,
+    onSyncOnline: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val restricted = uiState.isWallpaperChangeRestricted
     val thumbnailAspect = primaryDisplayAspect(uiState, 1.2f, 2.2f)
-    var pendingDelete by remember { mutableStateOf<WallpaperRecord?>(null) }
     var aboutRecord by remember { mutableStateOf<WallpaperRecord?>(null) }
     LazyColumn(
         state = listState,
@@ -78,13 +80,13 @@ internal fun ReserveAndHistoryPane(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Saved Wallpapers",
+                            text = stringResource(R.string.saved_wallpapers),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Wallpapers ready for offline rotation from your enabled sources.",
+                            text = stringResource(R.string.wallpapers_ready_for_offline_rotation_fr),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -93,32 +95,72 @@ internal fun ReserveAndHistoryPane(
                         OutlinedButton(onClick = onPickLocalPhoto) {
                             Icon(SunloomIcons.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Add Photo")
+                            Text(stringResource(R.string.add_photo))
                         }
                         OutlinedButton(onClick = onPickBaselineRestore) {
                             Icon(SunloomIcons.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Backup")
+                            Text(stringResource(R.string.restore_photo))
                         }
                     }
                 }
             }
         }
 
-        items(items = uiState.libraryWallpapers, key = { it.id }) { item ->
+        val hiddenId = uiState.pendingDiscard?.recordId
+        val visibleItems = if (hiddenId == null) uiState.libraryWallpapers else uiState.libraryWallpapers.filter { it.id != hiddenId }
+        if (visibleItems.isEmpty()) {
+            item(key = "reserve_empty") {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("reserve_empty_state")
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.no_saved_wallpapers_yet),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = stringResource(R.string.fetch_a_fresh_batch_from_your_enabled_so),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            androidx.compose.material3.Button(
+                                onClick = onSyncOnline,
+                                enabled = !uiState.isSyncingOnline,
+                                modifier = Modifier.desktopControl().testTag("reserve_empty_fetch")
+                            ) { Text(if (uiState.isSyncingOnline) stringResource(R.string.fetching) else stringResource(R.string.fetch_wallpapers)) }
+                            OutlinedButton(onClick = onPickLocalPhoto, modifier = Modifier.desktopControl()) {
+                                Text(stringResource(R.string.add_photo))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        items(items = visibleItems, key = { it.id }) { item ->
             val isActive = uiState.currentWallpaper?.id == item.id
             ContextMenuHost(
                 modifier = Modifier.fillMaxWidth().testTag("reserve_card_${item.id}"),
                 focusShape = RoundedCornerShape(14.dp),
+                onActivate = if (!isActive && !restricted) ({ onApplySpecific(item.id) }) else null,
                 menuContent = { dismiss ->
                     if (!isActive && !restricted) {
-                        ContextMenuItem("Apply wallpaper now", "ctx_apply_${item.id}") {
+                        ContextMenuItem(stringResource(R.string.apply_wallpaper_now), "ctx_apply_${item.id}") {
                             dismiss()
                             onApplySpecific(item.id)
                         }
                     }
                     ContextMenuItem(
-                        if (item.isFavorite) "Remove from favorites" else "Add to favorites",
+                        if (item.isFavorite) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
                         "ctx_favorite_${item.id}"
                     ) {
                         dismiss()
@@ -129,9 +171,9 @@ internal fun ReserveAndHistoryPane(
                         aboutRecord = item
                     }
                     HorizontalDivider()
-                    ContextMenuItem("Remove from reserve\u2026", "ctx_delete_${item.id}", destructive = true) {
+                    ContextMenuItem(stringResource(R.string.remove_from_reserve), "ctx_delete_${item.id}", destructive = true) {
                         dismiss()
-                        pendingDelete = item
+                        onDeleteFromReserve(item.id)
                     }
                 }
             ) {
@@ -160,7 +202,9 @@ internal fun ReserveAndHistoryPane(
                             showLegibilityZones = false,
                             modifier = Modifier
                                 .width(120.dp)
-                                .aspectRatio(thumbnailAspect)
+                                .aspectRatio(thumbnailAspect),
+                            maxDecodeWidth = 480,
+                            maxDecodeHeight = 480
                         )
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -177,7 +221,7 @@ internal fun ReserveAndHistoryPane(
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
                                         Text(
-                                            text = "Active",
+                                            text = stringResource(R.string.active),
                                             color = MaterialTheme.colorScheme.primary,
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.SemiBold,
@@ -203,14 +247,14 @@ internal fun ReserveAndHistoryPane(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalArrangement = Arrangement.Center
                         ) {
-                            ShortcutTooltip(if (item.isFavorite) "Remove from favorites" else "Add to favorites") {
+                            ShortcutTooltip(if (item.isFavorite) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites)) {
                                 IconButton(
                                     onClick = { onToggleKeepSpecific(item.id) },
                                     modifier = Modifier.desktopControl(CircleShape).testTag("favorite_reserve_item_${item.id}")
                                 ) {
                                     Icon(
                                         imageVector = if (item.isFavorite) SunloomIcons.Favorite else SunloomIcons.FavoriteBorder,
-                                        contentDescription = if (item.isFavorite) "Remove from favorites" else "Add to favorites",
+                                        contentDescription = if (item.isFavorite) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
                                         tint = if (item.isFavorite) Color(0xFFF43F5E) else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -222,18 +266,18 @@ internal fun ReserveAndHistoryPane(
                                         enabled = !restricted,
                                         modifier = Modifier.desktopControl()
                                     ) {
-                                        Text("Apply")
+                                        Text(stringResource(R.string.apply))
                                     }
                                 }
                             }
-                            ShortcutTooltip("Delete from reserve") {
+                            ShortcutTooltip(stringResource(R.string.delete_from_reserve)) {
                                 IconButton(
-                                    onClick = { pendingDelete = item },
+                                    onClick = { onDeleteFromReserve(item.id) },
                                     modifier = Modifier.desktopControl(CircleShape).testTag("delete_reserve_item_${item.id}")
                                 ) {
                                     Icon(
                                         imageVector = SunloomIcons.Delete,
-                                        contentDescription = "Delete from reserve",
+                                        contentDescription = stringResource(R.string.delete_from_reserve),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -245,19 +289,6 @@ internal fun ReserveAndHistoryPane(
         }
     }
 
-    pendingDelete?.let { record ->
-        ConfirmDestructiveDialog(
-            title = "Remove from reserve?",
-            message = "Remove '${record.title}' from your saved wallpapers and delete its cached file? This can't be undone.",
-            confirmLabel = "Remove",
-            confirmTestTag = "confirm_delete_reserve_button",
-            onConfirm = {
-                pendingDelete = null
-                onDeleteFromReserve(record.id)
-            },
-            onDismiss = { pendingDelete = null }
-        )
-    }
     aboutRecord?.let { record ->
         WallpaperAboutDialog(record = record, onDismiss = { aboutRecord = null })
     }

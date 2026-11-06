@@ -7,12 +7,14 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.StrictMode
+import android.view.DragEvent
 import android.view.KeyEvent
 import android.view.KeyboardShortcutGroup
 import android.view.KeyboardShortcutInfo
 import android.view.Menu
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,6 +30,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.sunloom.app.BuildConfig
+import com.sunloom.app.R
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -42,6 +45,9 @@ class MainActivity : ComponentActivity() {
 
     /** True while the system bars are hidden for unobstructed wallpaper viewing (F11). */
     private var isFullscreen by mutableStateOf(false)
+    private var lastNightMask = Int.MIN_VALUE
+    private val dropPermissions = mutableListOf<android.view.DragAndDropPermissions>()
+    private var hasStartedBefore = false
     private val debouncedDisplayRunnable = Runnable {
         notifyDisplaysChangedNow()
     }
@@ -82,6 +88,8 @@ class MainActivity : ComponentActivity() {
             )
         }
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        lastNightMask = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
 
         gateway = AndroidSunloomGateway(applicationContext)
         viewModel = ViewModelProvider(
@@ -113,12 +121,14 @@ class MainActivity : ComponentActivity() {
                 onNextWallpaper = { viewModel.triggerNextWallpaperSmart() },
                 onPreviousWallpaper = { viewModel.returnToPreviousWallpaper() },
                 onToggleKeep = { viewModel.toggleKeepCurrentWallpaper() },
-                onRejectForever = { viewModel.rejectCurrentWallpaperForever() },
+                onRejectForever = { viewModel.dislikeCurrentWithUndo() },
+                onUndoDiscard = { viewModel.undoPendingDiscard() },
+                onCommitDiscard = { viewModel.commitPendingDiscard() },
                 onTogglePause = { viewModel.togglePauseAutomation() },
                 onRestoreOriginal = { viewModel.restoreOriginalBaselineWallpaper() },
                 onRestoreSystemDefault = { viewModel.restoreSystemDefaultWallpaper() },
                 onApplySpecific = { viewModel.applySpecificWallpaper(it) },
-                onDeleteFromReserve = { viewModel.deleteFromReserve(it) },
+                onDeleteFromReserve = { viewModel.removeFromReserveWithUndo(it) },
                 onToggleKeepSpecific = { viewModel.toggleKeepSpecificWallpaper(it) },
                 onToggleLegibilityOverlay = { viewModel.toggleLegibilityOverlay() },
                 onSyncOnline = { viewModel.triggerOnlineSync() },
@@ -137,6 +147,7 @@ class MainActivity : ComponentActivity() {
                 onForgetRememberedDisplay = { key -> viewModel.forgetRememberedDisplay(key) },
                 isFullscreen = isFullscreen,
                 onToggleFullscreen = { applyFullscreen(!isFullscreen) },
+                onDropImages = { dragEvent -> importDroppedImages(dragEvent) },
                 onPickLocalPhoto = { asBaseline ->
                     pickingAsBaselineRestore = asBaseline
                     photoPickerLauncher.launch(
@@ -145,6 +156,22 @@ class MainActivity : ComponentActivity() {
                 }
             )
         }
+    }
+
+    /** Imports images dropped from the Files app or another window (each becomes a reserve item). */
+    private fun importDroppedImages(dragEvent: DragEvent): Boolean {
+        val clip = dragEvent.clipData ?: return false
+        // Cross-app content URIs are only readable while this grant is held.
+        requestDragAndDropPermissions(dragEvent)?.let { dropPermissions.add(it) }
+        var imported = 0
+        for (i in 0 until clip.itemCount) {
+            val uri = clip.getItemAt(i).uri ?: continue
+            val type = contentResolver.getType(uri)
+            if (type != null && !type.startsWith("image/")) continue
+            viewModel.importLocalUri(uri.toString(), asBaselineRestore = false)
+            imported++
+        }
+        return imported > 0
     }
 
     private fun applyFullscreen(enabled: Boolean) {
@@ -168,10 +195,15 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         val displayManager = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
         displayManager?.registerDisplayListener(displayListener, mainHandler)
-        notifyDisplaysChangedNow()
+        // The ViewModel's initial load already probes displays on a cold start; only re-check
+        // when returning from the background, where a dock/undock may have been missed.
+        if (hasStartedBefore) notifyDisplaysChangedNow()
+        hasStartedBefore = true
     }
 
     override fun onStop() {
+        // Don't leave an undoable action dangling if the window goes away.
+        if (::viewModel.isInitialized) viewModel.commitPendingDiscard()
         mainHandler.removeCallbacks(debouncedDisplayRunnable)
         val displayManager = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
         displayManager?.unregisterDisplayListener(displayListener)
@@ -191,23 +223,33 @@ class MainActivity : ComponentActivity() {
     ) {
         super.onProvideKeyboardShortcuts(data, menu, deviceId)
         data += KeyboardShortcutGroup(
-            "Wallpaper",
+            getString(R.string.shortcut_group_wallpaper),
             listOf(
-                KeyboardShortcutInfo("Next wallpaper", KeyEvent.KEYCODE_N, 0),
-                KeyboardShortcutInfo("Previous wallpaper", KeyEvent.KEYCODE_P, 0),
-                KeyboardShortcutInfo("Keep in favorites", KeyEvent.KEYCODE_K, 0),
-                KeyboardShortcutInfo("Dislike and exclude (asks first)", KeyEvent.KEYCODE_FORWARD_DEL, 0),
-                KeyboardShortcutInfo("Toggle fullscreen", KeyEvent.KEYCODE_F11, 0),
-                KeyboardShortcutInfo("Close dialog or exit fullscreen", KeyEvent.KEYCODE_ESCAPE, 0)
+                KeyboardShortcutInfo(getString(R.string.shortcut_next), KeyEvent.KEYCODE_N, 0),
+                KeyboardShortcutInfo(getString(R.string.shortcut_previous), KeyEvent.KEYCODE_P, 0),
+                KeyboardShortcutInfo(getString(R.string.shortcut_keep), KeyEvent.KEYCODE_K, 0),
+                KeyboardShortcutInfo(getString(R.string.shortcut_dislike), KeyEvent.KEYCODE_FORWARD_DEL, 0),
+                KeyboardShortcutInfo(getString(R.string.shortcut_fullscreen), KeyEvent.KEYCODE_F11, 0),
+                KeyboardShortcutInfo(getString(R.string.shortcut_go_home), KeyEvent.KEYCODE_1, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_go_reserve), KeyEvent.KEYCODE_2, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_go_sources), KeyEvent.KEYCODE_3, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_go_schedule), KeyEvent.KEYCODE_4, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_go_storage), KeyEvent.KEYCODE_5, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_escape), KeyEvent.KEYCODE_ESCAPE, 0)
             )
         )
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        if (::viewModel.isInitialized) {
+        if (!::viewModel.isInitialized) return
+        // Free-form window resizes fire this per frame; only a real Light/Dark flip needs the
+        // (expensive) snapshot reload. Size/density changes are covered by the debounced check.
+        val nightMask = newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        if (nightMask != lastNightMask) {
+            lastNightMask = nightMask
             viewModel.onSystemUiModeChanged()
-            scheduleDebouncedDisplayCheck()
         }
+        scheduleDebouncedDisplayCheck()
     }
 }

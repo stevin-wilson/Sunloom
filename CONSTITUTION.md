@@ -1,7 +1,7 @@
 # Wallpaper Tool Development Constitution
 
 - **Product:** Sunloom (`com.sunloom.app`)
-- **Status:** Adopted v0.6 (Governing Engineering Law) **[v0.6]**
+- **Status:** Adopted v0.7 (Governing Engineering Law) **[v0.7]**
 - **Scope:** Product principles, user experience, platform-independent requirements, and platform and distribution obligations confined to Article XVIII **[v0.3]**
 - **Purpose:** Guide product and engineering decisions. Articles I–XVII remain platform-independent; platform-specific obligations live only in Article XVIII so the core law survives a future port. **[v0.3]**
 
@@ -16,6 +16,7 @@
 | v0.4 | 2026-11-04 | C1: Article XVIII §2 updated to permit normal install-time permissions merged by WorkManager while forbidding runtime/dangerous permissions. C2: Articles VIII–XVII expanded into numbered sections with concrete budgets, cadences, and reserve counts. C3: Articles II §1 and IV §§1–2 clarified for single-surface OS wallpaper behavior across displays and high-DPI native coverage floors (`>= 0.65` pixel ratio and `>= 1600px` long edge on high-density displays). C4: Schedule A updated with reviewer, rate limits, image hosts, and active safety signals. C5–C6: Article VII §2, §4 and Schedule B updated with tiered L2 lexical matching (unconditional vs. subject/tag terms) and prohibition on adapter-injected safety tags. |
 | v0.5 | 2026-11-04 | Schedule A expanded to admit Cleveland Museum of Art (`cma_cc0`) and SMK — National Gallery of Denmark (`smk_open`) with conservative anonymous budgets (`<= 5` req/sync, `250ms` spacing), updated Openverse candidate URL (`api.openverse.org/v1`), and recorded rejected/deferred museum and orbital sources. Article IV §2 aligned on `densityDpi >= 210`. Article VII §4 L2 expanded with Nordic/Dutch ligature folding and portrait/nude terms (`DENYLIST_VERSION = 2026.11.04-v3`). Article X §4 and XI §2 updated with hard `BudgetedSourceHttpClient` enforcement, deficit-aware sync rotation (`<= 3` online sources/sync), and source-diverse matching. |
 | v0.6 | 2026-11-05 | Article IV §§1–2, §6 and XVIII §1 updated with tiered physical-PPI quality floors (`< 120 ppi`: `>= 1.00`; `120–209 ppi`: `>= 0.80`; `>= 210 ppi`: `>= 0.65` and long edge `>= 1600px`, guarding against implausible/placeholder EDID PPI) and connected-display envelope rendering (`EnvelopePlanner`, with single-display sharpest fallback when launchers scroll wider bitmaps; remembered display history is diagnostic-only). Article VI §10 and Schedule A clarified that `user_local` imports keep original bytes (`JPEG`/`PNG`/`WEBP`) and run L3–L5 (L1/L2 metadata N/A). Article VII §§4–6 tightened with explicit `safetyClassificationSource` provenance, full L1–L4 local-byte re-validation with structured `GateTrace`, and fail-closed `SqliteLibraryStore` enforcement. Articles X §4, XII §1, XIII, and XVIII §4 aligned on per-source request caps, `platform/scheduler` module boundary, removal of user-facing dry-run state, and SQLite WAL checkpointing before backup. |
+| v0.7 | 2026-11-06 | Article XII §3 refined: `Reject Forever` and reserve removal act immediately and offer a timed Undo snackbar (committed on timeout, new action, or app stop) instead of a blocking dialog; irreversible resets to system default still require confirmation. Article XII §4 added: Googlebook desktop conduct (edge-to-edge insets, free-form window sizing, Ctrl+1–5 tab shortcuts, hover/focus/48dp targets, drag-and-drop image import, live-region status). Responsive-main-thread budget extended with size-keyed, byte-bounded preview and seed-render caches. |
 
 ---
 
@@ -186,7 +187,8 @@ A wallpaper should look intentionally selected for the display on which it appea
 
 1. **Transparent setup & Laws of UX:** First-run onboarding previews the initial Light and Dark reserve and lets the user choose schedule mode, categories, and destination policy using progressive disclosure before enabling background automation. Dry-run mode is internal-only and not user-facing.
 2. **Responsive main thread:** All SQLite queries, bitmap decoding, seed rendering, and `WallpaperManager` calls execute off the main thread (`Dispatchers.IO` / `Dispatchers.Default`), and previews decode downsampled thumbnails matching the computed display crop.
-3. **Safe keyboard navigation:** Destructive actions (`Reject Forever`) require confirmation or offer an undo action and are not triggered by bare accidental keystrokes.
+3. **Safe keyboard navigation:** Destructive actions (`Reject Forever`, reserve removal) act immediately and offer a timed Undo action (the exclusion or file deletion is finalized when the Undo window ends, a new destructive action starts, or the app stops); irreversible resets (`Reset to System Default`) require confirmation. **[v0.7]**
+4. **Googlebook desktop conduct:** The workspace is edge-to-edge with safe-drawing insets, declares a default and minimum free-form window size, supports keyboard (Ctrl+1–5 tab switching alongside single-key accelerators, focus returned to the workspace after dialogs), mouse and trackpad (hover states, context menus, double-click activation, targets of at least 48dp), drag-and-drop image import, and announces status changes to assistive technology via live regions. **[v0.7]**
 
 ## Article XIII–XVII: Modular Architecture, Persistence, Testing, and Release Governance **[v0.4]**
 

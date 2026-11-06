@@ -1,5 +1,7 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import android.graphics.Bitmap
@@ -36,6 +38,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.PlainTooltip
@@ -69,23 +72,35 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Bounded LRU cache for downsampled UI preview bitmaps so `WallpaperPreviewSurface`
- * never decodes full-resolution bitmaps on the main UI thread.
+ * Byte-bounded LRU cache for downsampled UI preview bitmaps so `WallpaperPreviewSurface`
+ * never decodes full-resolution bitmaps on the main UI thread. Entries are keyed by path AND
+ * target size, so a 120dp Reserve thumbnail never pays for (or evicts) a 960x600 hero preview.
  */
 internal object PreviewBitmapCache {
-    private val cache = object : LruCache<String, Bitmap>(16) {}
+    /** ~24 MB: a handful of hero previews or a couple hundred thumbnails. */
+    const val MAX_BYTES = 24 * 1024 * 1024
 
-    fun get(path: String): Bitmap? = synchronized(cache) {
-        cache.get(path)?.takeIf { !it.isRecycled }
+    private val cache = object : LruCache<String, Bitmap>(MAX_BYTES) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount.coerceAtLeast(1)
     }
 
-    fun put(path: String, bitmap: Bitmap) = synchronized(cache) {
-        cache.put(path, bitmap)
+    internal fun key(path: String, maxW: Int, maxH: Int) = "$path@${maxW}x$maxH"
+
+    fun get(path: String, maxW: Int = DEFAULT_MAX_W, maxH: Int = DEFAULT_MAX_H): Bitmap? = synchronized(cache) {
+        cache.get(key(path, maxW, maxH))?.takeIf { !it.isRecycled }
     }
 
-    fun decodeDownsampled(path: String, maxW: Int = 960, maxH: Int = 600): Bitmap? {
+    fun put(path: String, maxW: Int, maxH: Int, bitmap: Bitmap) = synchronized(cache) {
+        cache.put(key(path, maxW, maxH), bitmap)
+    }
+
+    internal fun clear() = synchronized(cache) { cache.evictAll() }
+
+    internal fun sizeBytes(): Int = synchronized(cache) { cache.size() }
+
+    fun decodeDownsampled(path: String, maxW: Int = DEFAULT_MAX_W, maxH: Int = DEFAULT_MAX_H): Bitmap? {
         if (path.isBlank()) return null
-        get(path)?.let { return it }
+        get(path, maxW, maxH)?.let { return it }
         val file = File(path)
         if (!file.exists() || file.length() == 0L) return null
         return runCatching {
@@ -93,15 +108,21 @@ internal object PreviewBitmapCache {
             BitmapFactory.decodeFile(path, bounds)
             val opts = BitmapFactory.Options()
             if (bounds.outWidth > 0 && bounds.outHeight > 0) {
-                var sample = 1
-                while ((bounds.outWidth / sample) > maxW || (bounds.outHeight / sample) > maxH) {
-                    sample *= 2
-                }
-                opts.inSampleSize = sample
+                opts.inSampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, maxW, maxH)
             }
-            BitmapFactory.decodeFile(path, opts)?.also { put(path, it) }
+            BitmapFactory.decodeFile(path, opts)?.also { put(path, maxW, maxH, it) }
         }.getOrNull()
     }
+
+    /** Smallest power-of-two sample size that fits the source inside [maxW] x [maxH]. */
+    internal fun sampleSizeFor(srcW: Int, srcH: Int, maxW: Int, maxH: Int): Int {
+        var sample = 1
+        while ((srcW / sample) > maxW || (srcH / sample) > maxH) sample *= 2
+        return sample
+    }
+
+    const val DEFAULT_MAX_W = 960
+    const val DEFAULT_MAX_H = 600
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -113,6 +134,7 @@ internal fun TodayCanvasPane(
     onToggleKeep: () -> Unit,
     onRequestRejectConfirm: () -> Unit,
     onRestoreOriginal: () -> Unit,
+    onSyncOnline: () -> Unit = {},
     isFullscreen: Boolean = false,
     onToggleFullscreen: () -> Unit = {}
 ) {
@@ -137,21 +159,21 @@ internal fun TodayCanvasPane(
                     menuContent = { dismiss ->
                         if (current != null) {
                             if (!restricted) {
-                                ContextMenuItem("Next wallpaper", "ctx_next") { dismiss(); onNextWallpaper() }
+                                ContextMenuItem(stringResource(R.string.next_wallpaper), "ctx_next") { dismiss(); onNextWallpaper() }
                             }
                             if (uiState.previousWallpaperId != null && !restricted) {
-                                ContextMenuItem("Previous wallpaper", "ctx_previous") { dismiss(); onPreviousWallpaper() }
+                                ContextMenuItem(stringResource(R.string.previous_wallpaper), "ctx_previous") { dismiss(); onPreviousWallpaper() }
                             }
                             ContextMenuItem(
-                                if (current.isFavorite) "Remove from favorites" else "Add to favorites",
+                                if (current.isFavorite) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
                                 "ctx_keep"
                             ) { dismiss(); onToggleKeep() }
                             ContextMenuItem("About this image\u2026", "ctx_about") { dismiss(); showAbout = true }
                             if (!restricted) {
-                                ContextMenuItem("Restore original wallpaper", "ctx_restore") { dismiss(); onRestoreOriginal() }
+                                ContextMenuItem(stringResource(R.string.restore_original_wallpaper), "ctx_restore") { dismiss(); onRestoreOriginal() }
                             }
                             HorizontalDivider()
-                            ContextMenuItem("Dislike and exclude\u2026", "ctx_dislike", destructive = true) {
+                            ContextMenuItem(stringResource(R.string.dislike_and_exclude), "ctx_dislike", destructive = true) {
                                 dismiss()
                                 onRequestRejectConfirm()
                             }
@@ -171,6 +193,18 @@ internal fun TodayCanvasPane(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
+                                if (current == null) {
+                                    Text(
+                                        text = stringResource(R.string.nothing_is_showing_yet_fetch_a_batch_of),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Button(
+                                        onClick = onSyncOnline,
+                                        enabled = !uiState.isSyncingOnline,
+                                        modifier = Modifier.desktopControl().testTag("home_empty_fetch")
+                                    ) { Text(if (uiState.isSyncingOnline) stringResource(R.string.fetching) else stringResource(R.string.fetch_wallpapers)) }
+                                }
                                 if (current != null) {
                                     Text(
                                         text = "${current.category.displayName} • ${current.provenance.sourceName}",
@@ -205,16 +239,16 @@ internal fun TodayCanvasPane(
                                     ShortcutTooltip(if (restricted) HostRestrictedTooltip else "Next wallpaper", if (restricted) null else "N") {
                                         Button(
                                             onClick = onNextWallpaper,
-                                            enabled = !uiState.isSyncingOnline && !restricted,
+                                            enabled = !restricted,
                                             modifier = Modifier.desktopControl().testTag("next_wallpaper_button")
                                         ) {
                                             Icon(
-                                                imageVector = if (uiState.isSyncingOnline) SunloomIcons.Refresh else SunloomIcons.SkipNext,
+                                                imageVector = if (uiState.isApplyingWallpaper) SunloomIcons.Refresh else SunloomIcons.SkipNext,
                                                 contentDescription = null,
                                                 modifier = Modifier.size(18.dp)
                                             )
                                             Spacer(Modifier.width(6.dp))
-                                            Text(if (uiState.isSyncingOnline) "Updating..." else "Next")
+                                            Text(if (uiState.isApplyingWallpaper) stringResource(R.string.applying) else stringResource(R.string.next))
                                         }
                                     }
 
@@ -226,12 +260,12 @@ internal fun TodayCanvasPane(
                                         ) {
                                             Icon(SunloomIcons.SkipPrevious, contentDescription = null, modifier = Modifier.size(18.dp))
                                             Spacer(Modifier.width(6.dp))
-                                            Text("Previous")
+                                            Text(stringResource(R.string.previous))
                                         }
                                     }
 
                                     ShortcutTooltip(
-                                        if (current?.isFavorite == true) "Remove from favorites" else "Keep in favorites",
+                                        if (current?.isFavorite == true) stringResource(R.string.remove_from_favorites) else stringResource(R.string.keep_in_favorites),
                                         "K"
                                     ) {
                                         OutlinedIconButton(
@@ -240,7 +274,7 @@ internal fun TodayCanvasPane(
                                         ) {
                                             Icon(
                                                 imageVector = if (current?.isFavorite == true) SunloomIcons.Favorite else SunloomIcons.FavoriteBorder,
-                                                contentDescription = if (current?.isFavorite == true) "Remove from favorites" else "Add to favorites",
+                                                contentDescription = if (current?.isFavorite == true) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
                                                 tint = if (current?.isFavorite == true) Color(0xFFF43F5E) else MaterialTheme.colorScheme.onSurface,
                                                 modifier = Modifier.size(20.dp)
                                             )
@@ -260,32 +294,32 @@ internal fun TodayCanvasPane(
                                         ) {
                                             Icon(SunloomIcons.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
                                             Spacer(Modifier.width(6.dp))
-                                            Text("Restore")
+                                            Text(stringResource(R.string.restore))
                                         }
                                     }
 
-                                    ShortcutTooltip(if (isFullscreen) "Exit fullscreen" else "View fullscreen", "F11") {
+                                    ShortcutTooltip(if (isFullscreen) stringResource(R.string.exit_fullscreen) else stringResource(R.string.view_fullscreen), "F11") {
                                     OutlinedIconButton(
                                         onClick = onToggleFullscreen,
                                         modifier = Modifier.desktopControl(CircleShape).testTag("fullscreen_button")
                                     ) {
                                         Icon(
                                             imageVector = if (isFullscreen) SunloomIcons.FullscreenExit else SunloomIcons.Fullscreen,
-                                            contentDescription = if (isFullscreen) "Exit fullscreen" else "View fullscreen",
+                                            contentDescription = if (isFullscreen) stringResource(R.string.exit_fullscreen) else stringResource(R.string.view_fullscreen),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(20.dp)
                                         )
                                     }
                                 }
 
-                                ShortcutTooltip("Dislike and exclude", "Del") {
+                                ShortcutTooltip(stringResource(R.string.dislike_and_exclude), "Del") {
                                         OutlinedIconButton(
                                             onClick = onRequestRejectConfirm,
                                             modifier = Modifier.desktopControl(CircleShape).testTag("reject_wallpaper_button")
                                         ) {
                                             Icon(
                                                 imageVector = SunloomIcons.ThumbDown,
-                                                contentDescription = "Dislike wallpaper",
+                                                contentDescription = stringResource(R.string.dislike_wallpaper),
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.size(20.dp)
                                             )
@@ -311,7 +345,7 @@ internal fun TodayCanvasPane(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(SunloomIcons.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Text(
-                            text = "About this wallpaper",
+                            text = stringResource(R.string.about_this_wallpaper),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -428,7 +462,13 @@ internal fun ProvenanceLinkRow(label: String, displayText: String, url: String) 
                     .testTag("source_page_link")
                     .then(if (url.startsWith("https://")) Modifier.handCursor() else Modifier)
                     .desktopFocusRing(RoundedCornerShape(4.dp))
-                    .clickable(enabled = url.startsWith("https://")) {
+                    // Grow the hit area to a comfortable 48dp target (Fitts) without changing the text.
+                    .minimumInteractiveComponentSize()
+                    .clickable(
+                        enabled = url.startsWith("https://"),
+                        onClickLabel = "Open source page in browser",
+                        role = androidx.compose.ui.semantics.Role.Button
+                    ) {
                         if (url.startsWith("https://")) {
                             runCatching { uriHandler.openUri(url) }
                         }
@@ -442,16 +482,18 @@ internal fun ProvenanceLinkRow(label: String, displayText: String, url: String) 
 fun WallpaperPreviewSurface(
     record: WallpaperRecord,
     showLegibilityZones: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    maxDecodeWidth: Int = PreviewBitmapCache.DEFAULT_MAX_W,
+    maxDecodeHeight: Int = PreviewBitmapCache.DEFAULT_MAX_H
 ) {
-    var bitmap by remember(record.localFilePath) {
-        mutableStateOf(PreviewBitmapCache.get(record.localFilePath))
+    var bitmap by remember(record.localFilePath, maxDecodeWidth, maxDecodeHeight) {
+        mutableStateOf(PreviewBitmapCache.get(record.localFilePath, maxDecodeWidth, maxDecodeHeight))
     }
 
-    LaunchedEffect(record.localFilePath) {
+    LaunchedEffect(record.localFilePath, maxDecodeWidth, maxDecodeHeight) {
         if (bitmap == null && record.localFilePath.isNotBlank()) {
             val decoded = withContext(Dispatchers.IO) {
-                PreviewBitmapCache.decodeDownsampled(record.localFilePath)
+                PreviewBitmapCache.decodeDownsampled(record.localFilePath, maxDecodeWidth, maxDecodeHeight)
             }
             bitmap = decoded
         }

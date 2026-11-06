@@ -1,5 +1,7 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -71,9 +73,9 @@ internal fun SourcesAndCategoriesPane(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Wallpaper Sources", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.wallpaper_sources), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "Online and user sources always take priority over the offline on-device reserve.",
+                    stringResource(R.string.online_and_user_sources_always_take_prio),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -126,8 +128,8 @@ internal fun SourcesAndCategoriesPane(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Unmetered Wi-Fi or Ethernet only", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        Text("Pause background downloads when connected to a metered mobile hotspot.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.unmetered_wi_fi_or_ethernet_only), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.pause_background_downloads_when_connecte), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = uiState.preferences.wifiOnlyDownloads,
@@ -141,16 +143,17 @@ internal fun SourcesAndCategoriesPane(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Pause downloads on Battery Saver", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.pause_downloads_on_battery_saver), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Defer background catalog refreshes when Battery Saver is active.",
+                            stringResource(R.string.defer_background_catalog_refreshes_when),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Switch(
                         checked = uiState.preferences.deferOnBatterySaver,
-                        onCheckedChange = onToggleBatterySaverDeferral
+                        onCheckedChange = onToggleBatterySaverDeferral,
+                        modifier = Modifier.testTag("defer_battery_saver_switch")
                     )
                 }
             }
@@ -162,7 +165,7 @@ internal fun SourcesAndCategoriesPane(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Categories", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.categories), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -178,7 +181,7 @@ internal fun SourcesAndCategoriesPane(
                 Button(onClick = onSyncOnline, enabled = !uiState.isSyncingOnline, modifier = Modifier.testTag("sync_online_button")) {
                     Icon(SunloomIcons.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(if (uiState.isSyncingOnline) "Syncing..." else "Sync Catalog Now")
+                    Text(if (uiState.isSyncingOnline) stringResource(R.string.syncing) else stringResource(R.string.sync_catalog_now))
                 }
             }
         }

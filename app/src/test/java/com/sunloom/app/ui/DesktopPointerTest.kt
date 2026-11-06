@@ -101,14 +101,12 @@ class DesktopPointerTest {
     }
 
     @Test
-    fun `right click remove asks for confirmation and only confirming deletes`() {
+    fun `right click remove acts immediately without a blocking dialog`() {
         rightClickCard()
         composeTestRule.onNodeWithTag("ctx_delete_$firstId").performClick()
         composeTestRule.waitForIdle()
-        assertNull(deleted)
-        composeTestRule.onNodeWithTag("confirm_delete_reserve_button").performClick()
-        composeTestRule.waitForIdle()
         assertEquals(firstId, deleted)
+        composeTestRule.onNodeWithTag("confirm_delete_reserve_button").assertDoesNotExist()
     }
 
     @Test

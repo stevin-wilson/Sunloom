@@ -1,5 +1,7 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -78,6 +81,7 @@ fun Modifier.secondaryClickMenu(onOpen: (Offset) -> Unit): Modifier = this
 fun ContextMenuHost(
     modifier: Modifier = Modifier,
     focusShape: Shape = RoundedCornerShape(14.dp),
+    onActivate: (() -> Unit)? = null,
     menuContent: @Composable ColumnScope.(dismiss: () -> Unit) -> Unit,
     content: @Composable () -> Unit
 ) {
@@ -86,21 +90,31 @@ fun ContextMenuHost(
     var heightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val openFromKeyboard = rememberUpdatedState { anchor = Offset.Zero; expanded = true }
+    val activate = rememberUpdatedState(onActivate)
 
     Box(
         modifier = modifier
             .onSizeChanged { heightPx = it.height }
             .desktopFocusRing(focusShape, selfOnly = true)
+            .desktopHover(focusShape)
             .onKeyEvent { event ->
                 val isMenuChord = event.key == Key.Menu || (event.isShiftPressed && event.key == Key.F10)
+                val isActivate = (event.key == Key.Enter || event.key == Key.NumPadEnter) && activate.value != null
                 if (isMenuChord) {
                     if (event.type == KeyEventType.KeyUp) openFromKeyboard.value()
+                    true
+                } else if (isActivate) {
+                    if (event.type == KeyEventType.KeyUp) activate.value?.invoke()
                     true
                 } else {
                     false
                 }
             }
             .focusable()
+            .pointerInput(Unit) {
+                // Double-click (or double-tap) applies; single clicks stay free for the inner controls.
+                detectTapGestures(onDoubleTap = { activate.value?.invoke() })
+            }
             .secondaryClickMenu { position ->
                 anchor = position
                 expanded = true
@@ -153,6 +167,7 @@ fun ConfirmDestructiveDialog(
 ) {
     val cancelFocusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { cancelFocusRequester.requestFocus() } }
+    RestoreRootFocusOnDispose()
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.dismissOnEscape(onDismiss),
@@ -172,7 +187,7 @@ fun ConfirmDestructiveDialog(
                 onClick = onDismiss,
                 modifier = Modifier.focusRequester(cancelFocusRequester).desktopControl()
             ) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel))
             }
         }
     )
@@ -182,6 +197,7 @@ fun ConfirmDestructiveDialog(
 @Composable
 fun WallpaperAboutDialog(record: WallpaperRecord, onDismiss: () -> Unit) {
     val scrollState = rememberScrollState()
+    RestoreRootFocusOnDispose()
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.dismissOnEscape(onDismiss),
@@ -202,8 +218,16 @@ fun WallpaperAboutDialog(record: WallpaperRecord, onDismiss: () -> Unit) {
         },
         confirmButton = {
             TextButton(onClick = onDismiss, modifier = Modifier.desktopControl().testTag("wallpaper_about_close")) {
-                Text("Close")
+                Text(stringResource(R.string.close))
             }
         }
     )
+}
+
+/** Hands focus back to the workspace root when the calling dialog leaves composition. */
+@Composable
+internal fun RestoreRootFocusOnDispose() {
+    val restore = LocalRestoreRootFocus.current
+    val latest = rememberUpdatedState(restore)
+    DisposableEffect(Unit) { onDispose { latest.value() } }
 }

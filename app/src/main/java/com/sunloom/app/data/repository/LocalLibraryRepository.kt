@@ -48,7 +48,6 @@ import kotlinx.coroutines.ensureActive
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -64,7 +63,7 @@ class LocalLibraryRepository(
     private val cropRenderer: CropRenderer = CropRenderer(),
     private val envelopePlanner: EnvelopePlanner = EnvelopePlanner(cropRenderer),
     private val cacheManager: BoundedCacheManager = BoundedCacheManager(),
-    private val httpClient: HttpClient = DefaultHttpsClient(),
+    private val httpClient: HttpClient = DefaultHttpsClient.shared,
     private val sourceAdapters: List<WallpaperSourceAdapter> = listOf(
         BundledSeedSourceAdapter(),
         WikimediaFeaturedSourceAdapter(httpClient),
@@ -100,7 +99,24 @@ class LocalLibraryRepository(
             val height: Int
         )
 
-        private val seedRenderCache = ConcurrentHashMap<String, CachedSeedAsset>()
+        /** Rendered seed PNGs are large; keep a small byte-bounded LRU instead of an unbounded map. */
+        internal const val SEED_RENDER_CACHE_MAX_BYTES = 16 * 1024 * 1024
+
+        private val seedRenderCache = object : android.util.LruCache<String, CachedSeedAsset>(SEED_RENDER_CACHE_MAX_BYTES) {
+            override fun sizeOf(key: String, value: CachedSeedAsset): Int =
+                (value.pngBytes.size + value.rgbGrid.size * 4).coerceAtLeast(1)
+        }
+
+        internal fun seedRenderCacheSizeBytes(): Int = synchronized(seedRenderCache) { seedRenderCache.size() }
+
+        internal fun clearSeedRenderCache() = synchronized(seedRenderCache) { seedRenderCache.evictAll() }
+
+        private inline fun cachedSeedAsset(key: String, build: () -> CachedSeedAsset): CachedSeedAsset {
+            synchronized(seedRenderCache) { seedRenderCache.get(key) }?.let { return it }
+            val built = build()
+            synchronized(seedRenderCache) { seedRenderCache.put(key, built) }
+            return built
+        }
         private val SAFE_FILENAME_REGEX = Regex("[^a-zA-Z0-9._-]")
 
         @Volatile
@@ -867,7 +883,7 @@ class LocalLibraryRepository(
             }
 
             val cacheKey = "${spec.id}_${renderW}x${renderH}_${targetW}x${targetH}"
-            val cachedAsset = seedRenderCache.getOrPut(cacheKey) {
+            val cachedAsset = cachedSeedAsset(cacheKey) {
                 val gridW = 48
                 val gridH = 30
                 val grid = BundledSeedSourceAdapter.generateRgbGrid(spec, gridW, gridH)
@@ -1148,6 +1164,15 @@ class LocalLibraryRepository(
         return (darkPriority + remainder).take(maxSourcesPerSync)
     }
 
+    /** Sources the most recent [refreshOnlineCatalog] tried, and how many of them failed to fetch. */
+    @Volatile
+    var lastSyncAttemptedSources: Int = 0
+        private set
+
+    @Volatile
+    var lastSyncFailedSources: Int = 0
+        private set
+
     suspend fun refreshOnlineCatalog(
         display: DisplayProfile,
         maxSourcesPerSync: Int = DEFAULT_MAX_SOURCES_PER_SYNC,
@@ -1201,6 +1226,8 @@ class LocalLibraryRepository(
             }
         }
 
+        lastSyncAttemptedSources = selectedAdapters.size
+        lastSyncFailedSources = 0
         for (adapter in selectedAdapters) {
             coroutineContext.ensureActive()
             val reg = SourceRegistry.get(adapter.sourceId)
@@ -1227,6 +1254,7 @@ class LocalLibraryRepository(
                 if (isCancellationThrowable(err)) {
                     throw CancellationException(err.message).apply { initCause(err) }
                 }
+                lastSyncFailedSources++
                 recordSourceFetchFailure(adapter.sourceId, err)
                 continue
             }

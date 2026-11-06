@@ -1,5 +1,7 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
@@ -18,6 +20,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -61,6 +65,7 @@ internal fun DisplaysAndSchedulePane(
 ) {
     val scrollState = rememberScrollState()
     var showCustomCoords by remember { mutableStateOf(false) }
+    var showResetConfirm by remember { mutableStateOf(false) }
     var customLatText by remember(uiState.preferences.latitude) {
         mutableStateOf("%.4f".format(uiState.preferences.latitude))
     }
@@ -81,7 +86,7 @@ internal fun DisplaysAndSchedulePane(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Schedule", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.schedule), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -108,9 +113,11 @@ internal fun DisplaysAndSchedulePane(
                     FilterChip(
                         selected = showCustomCoords,
                         onClick = { showCustomCoords = !showCustomCoords },
-                        label = { Text("Custom coordinates") }
+                        label = { Text(stringResource(R.string.custom_coordinates)) }
                     )
                     if (showCustomCoords) {
+                        val latError = coordinateError(customLatText, -90.0, 90.0)
+                        val lonError = coordinateError(customLonText, -180.0, 180.0)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -119,8 +126,11 @@ internal fun DisplaysAndSchedulePane(
                             OutlinedTextField(
                                 value = customLatText,
                                 onValueChange = { customLatText = it },
-                                label = { Text("Latitude (-90..90)") },
+                                label = { Text(stringResource(R.string.latitude_90_90)) },
                                 singleLine = true,
+                                isError = latError != null,
+                                supportingText = { latError?.let { Text(it) } },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 modifier = Modifier
                                     .weight(1f)
                                     .suppressShortcutsWhileFocused()
@@ -129,8 +139,11 @@ internal fun DisplaysAndSchedulePane(
                             OutlinedTextField(
                                 value = customLonText,
                                 onValueChange = { customLonText = it },
-                                label = { Text("Longitude (-180..180)") },
+                                label = { Text(stringResource(R.string.longitude_180_180)) },
                                 singleLine = true,
+                                isError = lonError != null,
+                                supportingText = { lonError?.let { Text(it) } },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 modifier = Modifier
                                     .weight(1f)
                                     .suppressShortcutsWhileFocused()
@@ -144,9 +157,11 @@ internal fun DisplaysAndSchedulePane(
                                         onUpdateCustomCoordinates(lat, lon, "Custom (${"%.2f".format(lat)}, ${"%.2f".format(lon)})")
                                     }
                                 },
+                                enabled = latError == null && lonError == null &&
+                                    customLatText.isNotBlank() && customLonText.isNotBlank(),
                                 modifier = Modifier.testTag("apply_custom_coords_button")
                             ) {
-                                Text("Apply")
+                                Text(stringResource(R.string.apply))
                             }
                         }
                     }
@@ -176,7 +191,7 @@ internal fun DisplaysAndSchedulePane(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Display & Preferences", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.display_preferences), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -209,7 +224,7 @@ internal fun DisplaysAndSchedulePane(
 
                 if (uiState.capabilities.connectedDisplays.size > 1) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-                    Text("Multi-display fitting mode", style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(R.string.multi_display_fitting_mode), style = MaterialTheme.typography.labelLarge)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -231,7 +246,7 @@ internal fun DisplaysAndSchedulePane(
                 if (disconnectedHistory.isNotEmpty()) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                     Text(
-                        text = "Remembered External Displays (disconnected — never constrain active crops)",
+                        text = stringResource(R.string.remembered_external_displays_disconnecte),
                         style = MaterialTheme.typography.labelLarge
                     )
                     disconnectedHistory.forEach { rec ->
@@ -251,13 +266,13 @@ internal fun DisplaysAndSchedulePane(
                                 onClick = { onForgetRememberedDisplay(rec.key) },
                                 modifier = Modifier.testTag("forget_display_${rec.key}")
                             ) {
-                                Text("Forget")
+                                Text(stringResource(R.string.forget))
                             }
                         }
                     }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-                Text("Apply wallpaper to", style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(R.string.apply_wallpaper_to), style = MaterialTheme.typography.labelLarge)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -279,9 +294,9 @@ internal fun DisplaysAndSchedulePane(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Blurred frame fill for smaller images", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.blurred_frame_fill_for_smaller_images), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Frame smaller artworks with a darkened blurred backdrop instead of rejecting them.",
+                            stringResource(R.string.frame_smaller_artworks_with_a_darkened_b),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -292,40 +307,48 @@ internal fun DisplaysAndSchedulePane(
                     )
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Pause downloads on Battery Saver", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "Defer background catalog refreshes when Battery Saver is active.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = uiState.preferences.deferOnBatterySaver,
-                        onCheckedChange = onToggleBatterySaverDeferral,
-                        modifier = Modifier.testTag("defer_battery_saver_switch")
-                    )
-                }
-
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(onClick = onReopenSetup) {
-                        Text("Setup Guide")
+                        Text(stringResource(R.string.setup_guide))
                     }
                     OutlinedButton(
-                        onClick = onRestoreSystemDefault,
+                        onClick = { showResetConfirm = true },
                         modifier = Modifier.testTag("restore_system_default_button")
                     ) {
                         Icon(SunloomIcons.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Reset to System Default")
+                        Text(stringResource(R.string.reset_to_system_default))
                     }
                 }
             }
         }
     }
+
+    if (showResetConfirm) {
+        ConfirmDestructiveDialog(
+            title = stringResource(R.string.reset_to_system_default_2),
+            message = stringResource(R.string.sunloom_will_put_your_device_s_original),
+            confirmLabel = stringResource(R.string.reset),
+            confirmTestTag = "confirm_reset_default_button",
+            onConfirm = {
+                showResetConfirm = false
+                onRestoreSystemDefault()
+            },
+            onDismiss = { showResetConfirm = false }
+        )
+    }
+}
+
+/**
+ * Validation message for a coordinate text field, or null when [text] is empty (not yet typed) or a
+ * number within [min]..[max]. Shown inline so bad input is explained instead of silently ignored.
+ */
+internal fun coordinateError(text: String, min: Double, max: Double): String? {
+    if (text.isBlank()) return null
+    val value = text.trim().toDoubleOrNull()
+        ?: return "Enter a number, e.g. 37.77"
+    if (!value.isFinite() || value < min || value > max) {
+        return "Must be between ${min.toInt()} and ${max.toInt()}"
+    }
+    return null
 }

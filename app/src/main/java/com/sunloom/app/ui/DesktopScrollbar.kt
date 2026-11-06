@@ -1,6 +1,6 @@
 package com.sunloom.app.ui
 
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -8,8 +8,11 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
@@ -17,6 +20,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 /** Vertical position and size of a scrollbar thumb, in pixels within the viewport. */
 internal data class ScrollbarThumb(val top: Float, val height: Float)
@@ -44,7 +48,7 @@ internal fun scrollbarThumb(viewport: Float, content: Float, offset: Float, minT
  */
 @Composable
 fun Modifier.desktopScrollbar(state: ScrollState): Modifier =
-    scrollbarCore(isScrolling = state.isScrollInProgress) { viewport, minThumb ->
+    scrollbarCore(isScrolling = { state.isScrollInProgress }) { viewport, minThumb ->
         // maxValue is Int.MAX_VALUE until the first measure pass.
         if (state.maxValue == Int.MAX_VALUE) {
             null
@@ -59,7 +63,7 @@ fun Modifier.desktopScrollbar(state: ScrollState): Modifier =
  */
 @Composable
 fun Modifier.desktopScrollbar(state: LazyListState): Modifier =
-    scrollbarCore(isScrolling = state.isScrollInProgress) { viewport, minThumb ->
+    scrollbarCore(isScrolling = { state.isScrollInProgress }) { viewport, minThumb ->
         val info = state.layoutInfo
         val visible = info.visibleItemsInfo
         if (visible.isEmpty() || info.totalItemsCount == 0) {
@@ -79,15 +83,22 @@ private const val ScrollbarActiveAlpha = 0.9f
 
 @Composable
 private fun Modifier.scrollbarCore(
-    isScrolling: Boolean,
+    isScrolling: () -> Boolean,
     thumbProvider: (viewportPx: Float, minThumbPx: Float) -> ScrollbarThumb?
 ): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
-    val hovered by interactionSource.collectIsHoveredAsState()
-    val alpha by animateFloatAsState(
-        targetValue = if (isScrolling || hovered) ScrollbarActiveAlpha else ScrollbarIdleAlpha,
-        label = "scrollbarAlpha"
-    )
+    // Keep hover/scroll/alpha as State objects that are only read in the draw phase, so pointer
+    // enter/exit and scroll start/stop repaint the thumb without recomposing the whole pane.
+    val hovered = interactionSource.collectIsHoveredAsState()
+    val alpha = remember { Animatable(ScrollbarIdleAlpha) }
+    val currentIsScrolling by rememberUpdatedState(isScrolling)
+    LaunchedEffect(Unit) {
+        snapshotFlow { currentIsScrolling() || hovered.value }
+            .distinctUntilChanged()
+            .collect { active ->
+                alpha.animateTo(if (active) ScrollbarActiveAlpha else ScrollbarIdleAlpha)
+            }
+    }
     val color = MaterialTheme.colorScheme.onSurfaceVariant
     return this
         .hoverable(interactionSource)
@@ -96,7 +107,7 @@ private fun Modifier.scrollbarCore(
             val thickness = ScrollbarThickness.toPx()
             val thumb = thumbProvider(size.height, ScrollbarMinThumb.toPx()) ?: return@drawWithContent
             drawRoundRect(
-                color = color.copy(alpha = alpha),
+                color = color.copy(alpha = alpha.value),
                 topLeft = Offset(size.width - thickness - 2.dp.toPx(), thumb.top),
                 size = Size(thickness, thumb.height),
                 cornerRadius = CornerRadius(thickness / 2f)

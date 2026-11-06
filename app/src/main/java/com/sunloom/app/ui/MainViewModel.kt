@@ -40,8 +40,19 @@ enum class DesktopNavTab(val label: String) {
     RESERVE_AND_HISTORY("Reserve"),
     SOURCES_AND_CATEGORIES("Sources"),
     DISPLAYS_AND_SCHEDULE("Schedule"),
-    SAFETY_AND_DECISION_LOG("Diagnostics")
+    SAFETY_AND_DECISION_LOG("Storage & About")
 }
+
+enum class DiscardKind { DISLIKE, REMOVE }
+
+/** A Dislike/Remove that has been performed from the user's point of view but can still be undone. */
+data class PendingDiscard(
+    val token: Long,
+    val recordId: String,
+    val title: String,
+    val kind: DiscardKind,
+    val wasCurrent: Boolean
+)
 
 data class SunloomUiState(
     val activeTab: DesktopNavTab = DesktopNavTab.TODAY_CANVAS,
@@ -69,6 +80,10 @@ data class SunloomUiState(
     val daylightWindow: DaylightWindow = DaylightWindow(LocalTime.of(6, 40), LocalTime.of(17, 15)),
     val showLegibilityZonesOverlay: Boolean = false,
     val isSyncingOnline: Boolean = false,
+    /** A destructive action the user can still undo; it commits when its snackbar times out. */
+    val pendingDiscard: PendingDiscard? = null,
+    /** True while a wallpaper is being decoded/cropped/applied, so controls can show progress. */
+    val isApplyingWallpaper: Boolean = false,
     val statusBannerMessage: String = "Ready"
 ) {
     val totalCacheBytesUsed: Long
@@ -161,10 +176,39 @@ class MainViewModel(
                     next.copy(
                         activeTab = _uiState.value.activeTab,
                         showLegibilityZonesOverlay = _uiState.value.showLegibilityZonesOverlay,
+                        pendingDiscard = _uiState.value.pendingDiscard,
                         isInitialLoading = false
                     )
                 } else {
-                    next.copy(isInitialLoading = false)
+                    next.copy(pendingDiscard = _uiState.value.pendingDiscard, isInitialLoading = false)
+                }
+            }
+        }
+    }
+
+    /** Like [launchGatewayMutation] but surfaces `isApplyingWallpaper` while the (slow) apply runs. */
+    private fun launchApplyMutation(block: suspend (SunloomUiState) -> SunloomUiState) {
+        _uiState.value = _uiState.value.copy(isApplyingWallpaper = true)
+        viewModelScope.launch(workDispatcher) {
+            try {
+                stateMutex.withLock {
+                    val next = try {
+                        block(_uiState.value)
+                    } catch (e: Throwable) {
+                        _uiState.value = _uiState.value.copy(isApplyingWallpaper = false)
+                        throw e
+                    }
+                    _uiState.value = next.copy(
+                        activeTab = _uiState.value.activeTab,
+                        showLegibilityZonesOverlay = _uiState.value.showLegibilityZonesOverlay,
+                        pendingDiscard = _uiState.value.pendingDiscard,
+                        isApplyingWallpaper = false,
+                        isInitialLoading = false
+                    )
+                }
+            } finally {
+                if (_uiState.value.isApplyingWallpaper) {
+                    _uiState.value = _uiState.value.copy(isApplyingWallpaper = false)
                 }
             }
         }
@@ -197,9 +241,24 @@ class MainViewModel(
     }
 
     fun updatePreferences(transform: (UserPreferences) -> UserPreferences) {
+        // Optimistic: reflect the change in the controls immediately (Doherty threshold) while the
+        // persisted save + reconcile runs; the gateway snapshot then replaces this state.
+        val previous = _uiState.value.preferences
+        val updated = transform(previous)
+        if (updated != previous) {
+            _uiState.value = _uiState.value.copy(preferences = updated)
+        }
         launchGatewayMutation { current ->
-            val updated = transform(current.preferences)
-            gateway.savePreferences(updated)
+            try {
+                gateway.savePreferences(updated)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                current.copy(
+                    preferences = previous,
+                    statusBannerMessage = "Couldn't save that setting. Your previous choice was kept."
+                )
+            }
         }
     }
 
@@ -278,9 +337,17 @@ class MainViewModel(
         launchGatewayMutation { gateway.applyNextWallpaper() }
     }
 
+    private val nextInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Coalesces rapid Next presses (button mashing / key repeat) into a single in-flight apply. */
     fun triggerNextWallpaperSmart() {
+        if (!nextInFlight.compareAndSet(false, true)) return
         viewModelScope.launch(workDispatcher) {
-            advanceToNextWallpaperSmart()
+            try {
+                advanceToNextWallpaperSmart()
+            } finally {
+                nextInFlight.set(false)
+            }
         }
     }
 
@@ -296,29 +363,39 @@ class MainViewModel(
      * then replenishes online reserve in the background if unseen count is low.
      */
     suspend fun advanceToNextWallpaperSmart() {
-        stateMutex.withLock {
-            val prevTab = _uiState.value.activeTab
-            val prevOverlay = _uiState.value.showLegibilityZonesOverlay
-            val applied = withContext(workDispatcher) {
-                gateway.applyNextWallpaper()
+        _uiState.value = _uiState.value.copy(isApplyingWallpaper = true)
+        try {
+            stateMutex.withLock {
+                val prevTab = _uiState.value.activeTab
+                val prevOverlay = _uiState.value.showLegibilityZonesOverlay
+                val applied = withContext(workDispatcher) {
+                    gateway.applyNextWallpaper()
+                }
+                _uiState.value = applied.copy(
+                    activeTab = prevTab,
+                    showLegibilityZonesOverlay = prevOverlay,
+                    pendingDiscard = _uiState.value.pendingDiscard,
+                    isApplyingWallpaper = false,
+                    isInitialLoading = false
+                )
             }
-            _uiState.value = applied.copy(
-                activeTab = prevTab,
-                showLegibilityZonesOverlay = prevOverlay,
-                isInitialLoading = false
-            )
+        } finally {
+            if (_uiState.value.isApplyingWallpaper) {
+                _uiState.value = _uiState.value.copy(isApplyingWallpaper = false)
+            }
         }
         if (_uiState.value.unseenCurrentBrightnessCount <= 1 && !_uiState.value.isSyncingOnline) {
-            syncOnlineCatalogNow()
+            // Replenish in the background so local Next presses are never blocked by the network.
+            viewModelScope.launch(workDispatcher) { syncOnlineCatalogNow() }
         }
     }
 
     fun returnToPreviousWallpaper() {
-        launchGatewayMutation { gateway.applyPreviousWallpaper() }
+        launchApplyMutation { gateway.applyPreviousWallpaper() }
     }
 
     fun applySpecificWallpaper(recordId: String) {
-        launchGatewayMutation { gateway.applyWallpaper(recordId) }
+        launchApplyMutation { gateway.applyWallpaper(recordId) }
     }
 
     fun toggleKeepCurrentWallpaper() {
@@ -341,8 +418,54 @@ class MainViewModel(
         launchGatewayMutation { gateway.deleteWallpaperFromReserve(recordId) }
     }
 
+    private var nextDiscardToken = 0L
+
+    /** Dislike the current wallpaper now (switching away immediately), finalizing after the undo window. */
+    fun dislikeCurrentWithUndo() {
+        val current = _uiState.value.currentWallpaper ?: return
+        beginDiscard(current.id, current.title, DiscardKind.DISLIKE)
+    }
+
+    /** Remove a reserve item now (hiding it immediately), finalizing after the undo window. */
+    fun removeFromReserveWithUndo(recordId: String) {
+        val record = _uiState.value.libraryWallpapers.firstOrNull { it.id == recordId }
+        if (record == null) {
+            deleteFromReserve(recordId)
+            return
+        }
+        beginDiscard(record.id, record.title, DiscardKind.REMOVE)
+    }
+
+    private fun beginDiscard(recordId: String, title: String, kind: DiscardKind) {
+        commitPendingDiscard() // only one undoable action at a time; finalize the previous one
+        val wasCurrent = _uiState.value.currentWallpaper?.id == recordId
+        _uiState.value = _uiState.value.copy(
+            pendingDiscard = PendingDiscard(++nextDiscardToken, recordId, title, kind, wasCurrent)
+        )
+        if (wasCurrent) launchGatewayMutation { gateway.applyNextWallpaper() }
+    }
+
+    /** Finalizes the pending Dislike/Remove (snackbar timed out, new action started, or app stopped). */
+    fun commitPendingDiscard() {
+        val pending = _uiState.value.pendingDiscard ?: return
+        _uiState.value = _uiState.value.copy(pendingDiscard = null)
+        when (pending.kind) {
+            DiscardKind.DISLIKE -> launchGatewayMutation { gateway.rejectWallpaperForever(pending.recordId) }
+            DiscardKind.REMOVE -> launchGatewayMutation { gateway.deleteWallpaperFromReserve(pending.recordId) }
+        }
+    }
+
+    /** Cancels the pending Dislike/Remove and, if it was the active wallpaper, brings it back. */
+    fun undoPendingDiscard() {
+        val pending = _uiState.value.pendingDiscard ?: return
+        _uiState.value = _uiState.value.copy(pendingDiscard = null)
+        if (pending.wasCurrent) {
+            launchGatewayMutation { gateway.applyWallpaper(pending.recordId) }
+        }
+    }
+
     fun restoreOriginalBaselineWallpaper() {
-        launchGatewayMutation { gateway.restoreBaselineWallpaper() }
+        launchApplyMutation { gateway.restoreBaselineWallpaper() }
     }
 
     fun restoreSystemDefaultWallpaper() {
@@ -691,14 +814,17 @@ class AndroidSunloomGateway(
     override suspend fun savePreferences(preferences: UserPreferences): SunloomUiState = withGatewayIo { repo ->
         val activeBefore = repo.getCurrentWallpaperId()
         val cleanPreferences = preferences.copy(dryRunPreviewOnly = false)
+        val previousPreferences = repo.loadPreferences()
+        // Schedule-only / toggle-only edits (the common case) skip the reserve-wide reconcile.
+        val reserveAffected = cleanPreferences.affectsReserve(previousPreferences)
         val connectedDisplays = platformAdapter.getConnectedDisplays()
         val display = platformAdapter.getPrimaryOrSharpestDisplayOrNull(connectedDisplays)
         repo.savePreferences(cleanPreferences)
-        if (display != null) {
+        if (display != null && reserveAffected) {
             repo.ensureSeedReserveLoadedForDisplays(connectedDisplays, cleanPreferences.displayPolicy)
             repo.reconcileReserveForDisplaySet(connectedDisplays, cleanPreferences)
         }
-        repo.enforceCacheLimit()
+        if (reserveAffected) repo.enforceCacheLimit()
         platformAdapter.syncPeriodicSchedule(
             autoEnabled = cleanPreferences.autoChangeEnabled,
             isPaused = cleanPreferences.isPaused,
@@ -706,7 +832,7 @@ class AndroidSunloomGateway(
             deferBatterySaver = cleanPreferences.deferOnBatterySaver,
             preferences = cleanPreferences
         )
-        if (display != null) {
+        if (display != null && reserveAffected) {
             reconcileActiveWallpaperForDisplay(repo, display, connectedDisplays, cleanPreferences, activeBefore)
             promoteNonSeedOverSeedIfNeeded(repo, cleanPreferences, display, connectedDisplays)
         }
@@ -842,7 +968,12 @@ class AndroidSunloomGateway(
 
     override suspend fun rejectWallpaperForever(recordId: String): SunloomUiState = withGatewayIo { repo ->
         val current = repo.getWallpaperById(recordId) ?: return@withGatewayIo buildSnapshot(repo, "Wallpaper not found.")
+        val wasActive = repo.getCurrentWallpaperId() == recordId
         repo.rejectWallpaperForever(recordId, "Rejected by user — permanently excluded from rotation")
+        if (!wasActive) {
+            // Already switched away (undo window elapsed): just finalize the exclusion.
+            return@withGatewayIo buildSnapshot(repo, "Disliked '${current.title}'. It won't be shown again.")
+        }
         val nextState = applyNextInternal(repo)
         nextState.copy(
             statusBannerMessage = "Disliked '${current.title}' and switched to '${nextState.currentWallpaper?.title ?: "next wallpaper"}'"
@@ -867,12 +998,17 @@ class AndroidSunloomGateway(
         val connectedDisplays = platformAdapter.getConnectedDisplays()
         val display = platformAdapter.getPrimaryOrSharpestDisplayOrNull(connectedDisplays)
             ?: return@withGatewayIo buildSnapshot(repo, "Display dimensions unknown — connect an active display before syncing.")
+        var syncFailed = false
         val added = try {
             repo.refreshOnlineCatalog(display, connectedDisplays = connectedDisplays)
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (_: Throwable) {
+            syncFailed = true
             0
+        }
+        if (repo.lastSyncAttemptedSources > 0 && repo.lastSyncFailedSources >= repo.lastSyncAttemptedSources) {
+            syncFailed = true
         }
         val prefs = repo.loadPreferences()
         promoteNonSeedOverSeedIfNeeded(repo, prefs, display, connectedDisplays)
@@ -883,6 +1019,8 @@ class AndroidSunloomGateway(
         }
         val msg = if (added > 0) {
             "Prepared $added new high-resolution wallpaper(s) for $targetLabel"
+        } else if (syncFailed) {
+            "Couldn't reach the online catalogs. Your saved reserve is still available; try again when you're connected."
         } else {
             "Reserve is up to date for $targetLabel"
         }
@@ -989,3 +1127,17 @@ class AndroidSunloomGateway(
         )
     }
 }
+
+/**
+ * True when changing from [previous] to this affects which reserve items are eligible, which are
+ * active, or how much cache may be kept, i.e. when the heavy reserve reconcile must run. Pure
+ * schedule, location, network and lock-destination edits do not.
+ */
+internal fun UserPreferences.affectsReserve(previous: UserPreferences): Boolean =
+    isSetupCompleted != previous.isSetupCompleted ||
+        enabledCategories != previous.enabledCategories ||
+        enabledSources != previous.enabledSources ||
+        displayPolicy != previous.displayPolicy ||
+        allowBlurredFrameFill != previous.allowBlurredFrameFill ||
+        maxCacheBytes != previous.maxCacheBytes ||
+        baselineRestorePath != previous.baselineRestorePath

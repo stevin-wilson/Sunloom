@@ -21,7 +21,7 @@ import java.util.Locale
  * - Zero injected safety tags and zero fabricated dimensions.
  */
 class NasaLibrarySourceAdapter(
-    private val httpClient: HttpClient = DefaultHttpsClient()
+    private val httpClient: HttpClient = DefaultHttpsClient.shared
 ) : WallpaperSourceAdapter {
 
     override val sourceId: String = "nasa_library"

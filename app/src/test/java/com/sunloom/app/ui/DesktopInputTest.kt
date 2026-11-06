@@ -129,7 +129,7 @@ class DesktopInputTest {
     }
 
     @Test
-    fun `Delete opens the dislike confirmation instead of rejecting immediately`() {
+    fun `Delete dislikes immediately and relies on the undo snackbar instead of a blocking dialog`() {
         val counters = Counters()
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val snapshot = kotlinx.coroutines.runBlocking { AndroidSunloomGateway(context).loadInitialSnapshot() }
@@ -142,31 +142,10 @@ class DesktopInputTest {
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("next_wallpaper_button").performKeyInput { pressKey(Key.Delete) }
-
-        composeTestRule.onNodeWithTag("confirm_reject_dialog_button").assertExists()
-        assertEquals(0, counters.reject)
-    }
-
-    @Test
-    fun `Escape dismisses the dislike confirmation without rejecting`() {
-        val counters = Counters()
-        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
-        val snapshot = kotlinx.coroutines.runBlocking { AndroidSunloomGateway(context).loadInitialSnapshot() }
-        val state = snapshot.copy(
-            activeTab = DesktopNavTab.TODAY_CANVAS,
-            currentWallpaper = snapshot.currentWallpaper ?: snapshot.libraryWallpapers.first(),
-            preferences = snapshot.preferences.copy(isSetupCompleted = true)
-        )
-        setApp(state, counters)
-        composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("next_wallpaper_button").performKeyInput { pressKey(Key.Delete) }
-        composeTestRule.onNodeWithTag("confirm_reject_dialog_button").assertExists()
-
-        composeTestRule.onNodeWithTag("confirm_reject_dialog_button").performKeyInput { pressKey(Key.Escape) }
         composeTestRule.waitForIdle()
 
+        assertEquals(1, counters.reject)
         composeTestRule.onNodeWithTag("confirm_reject_dialog_button").assertDoesNotExist()
-        assertEquals(0, counters.reject)
     }
 
     @Test
@@ -205,7 +184,7 @@ class DesktopInputTest {
         val white = Color(0xFFFFFFFF)
         assertEquals(21f, contrastRatio(Color.Black, white), 0.01f)
         // Light theme primary on the light surface passes.
-        assertTrue(contrastRatio(Color(0xFF0284C7), white) >= 3f)
+        assertTrue(contrastRatio(Color(0xFF0369A1), white) >= 4.5f)
         // Dark theme primary on the dark surface passes.
         assertTrue(contrastRatio(Color(0xFF38BDF8), Color(0xFF131C31)) >= 3f)
         // The checklist's suggested ring colour would fail on the light theme.
@@ -217,5 +196,16 @@ class DesktopInputTest {
         assertEquals("Next wallpaper (N)", shortcutTooltipText("Next wallpaper", "N"))
         assertEquals("Pause", shortcutTooltipText("Pause", null))
         assertEquals("Pause", shortcutTooltipText("Pause", " "))
+    }
+
+    @Test
+    fun `ctrl digit shortcuts map to tabs in order and ignore other keys`() {
+        assertEquals(DesktopNavTab.TODAY_CANVAS, tabForCtrlShortcut(Key.One))
+        assertEquals(DesktopNavTab.RESERVE_AND_HISTORY, tabForCtrlShortcut(Key.Two))
+        assertEquals(DesktopNavTab.SOURCES_AND_CATEGORIES, tabForCtrlShortcut(Key.Three))
+        assertEquals(DesktopNavTab.DISPLAYS_AND_SCHEDULE, tabForCtrlShortcut(Key.Four))
+        assertEquals(DesktopNavTab.SAFETY_AND_DECISION_LOG, tabForCtrlShortcut(Key.Five))
+        assertEquals(null, tabForCtrlShortcut(Key.Six))
+        assertEquals(null, tabForCtrlShortcut(Key.N))
     }
 }

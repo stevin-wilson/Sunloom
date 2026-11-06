@@ -18,7 +18,7 @@ import java.util.Locale
  * with `images.web` fallback while skipping `.tif` files, and injects zero synthetic tags.
  */
 class ClevelandMuseumCc0SourceAdapter(
-    private val httpClient: HttpClient = DefaultHttpsClient()
+    private val httpClient: HttpClient = DefaultHttpsClient.shared
 ) : WallpaperSourceAdapter {
 
     override val sourceId: String = "cma_cc0"

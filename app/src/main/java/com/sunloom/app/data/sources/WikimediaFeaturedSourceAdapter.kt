@@ -17,7 +17,7 @@ import java.util.Locale
  * and zero injected safety tags.
  */
 class WikimediaFeaturedSourceAdapter(
-    private val httpClient: HttpClient = DefaultHttpsClient()
+    private val httpClient: HttpClient = DefaultHttpsClient.shared
 ) : WallpaperSourceAdapter {
 
     override val sourceId: String = "wikimedia_featured"

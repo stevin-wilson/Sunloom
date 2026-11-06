@@ -148,10 +148,11 @@ class DefaultHttpsClient(
             if (contentLength > MAX_TEXT_BYTES) {
                 throw IllegalArgumentException("JSON payload Content-Length ($contentLength) exceeds limit ($MAX_TEXT_BYTES)")
             }
-            val text = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            val text = conn.inputStream.bufferedReader(Charsets.UTF_8).use { readTextBounded(it, MAX_TEXT_BYTES) }
             val etag = conn.getHeaderField("ETag")?.trim()?.takeIf { it.isNotEmpty() }
             val lastMod = conn.getHeaderField("Last-Modified")?.trim()?.takeIf { it.isNotEmpty() }
-            if (etag != null || lastMod != null) {
+            // Only small bodies are worth retaining; 32 large JSON pages could pin tens of MB.
+            if ((etag != null || lastMod != null) && text.length <= MAX_CACHED_TEXT_CHARS) {
                 synchronized(conditionalTextCache) {
                     conditionalTextCache[url] = CachedTextResponse(etag, lastMod, text)
                 }
@@ -174,7 +175,9 @@ class DefaultHttpsClient(
                 throw IllegalStateException("Unexpected HTML Content-Type '$contentType' when downloading image asset")
             }
             BufferedInputStream(conn.inputStream).use { input ->
-                val buffer = ByteArrayOutputStream()
+                val buffer = ByteArrayOutputStream(
+                    if (contentLength in 1..maxBytes.toLong()) contentLength.toInt() else 64 * 1024
+                )
                 val chunk = ByteArray(16_384)
                 var total = 0
                 while (true) {
@@ -252,6 +255,24 @@ class DefaultHttpsClient(
     companion object {
         const val MAX_REDIRECT_HOPS = 3
         const val MAX_TEXT_BYTES = 5L * 1024L * 1024L
+        private const val MAX_CACHED_TEXT_CHARS = 512 * 1024
+
+        /** Process-wide client so the conditional-GET cache is shared by all adapters and workers. */
+        val shared: DefaultHttpsClient by lazy { DefaultHttpsClient() }
+
+        internal fun readTextBounded(reader: java.io.Reader, maxChars: Long): String {
+            val out = StringBuilder()
+            val buf = CharArray(8 * 1024)
+            while (true) {
+                val n = reader.read(buf)
+                if (n < 0) break
+                out.append(buf, 0, n)
+                if (out.length > maxChars) {
+                    throw IllegalArgumentException("JSON payload exceeds limit ($maxChars)")
+                }
+            }
+            return out.toString()
+        }
         private const val MAX_CONDITIONAL_CACHE_ENTRIES = 32
         private val REDIRECT_STATUS_CODES = setOf(301, 302, 303, 307, 308)
 

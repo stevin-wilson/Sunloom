@@ -16,6 +16,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -96,6 +99,44 @@ fun Modifier.dismissOnEscape(onDismiss: () -> Unit): Modifier = onPreviewKeyEven
     } else {
         false
     }
+}
+
+/**
+ * Lets transient UI (dialogs, menus) hand keyboard focus back to the workspace root when they close,
+ * so single-key accelerators keep working without a click. Provided by [SunloomApp].
+ */
+val LocalRestoreRootFocus = staticCompositionLocalOf<() -> Unit> { {} }
+
+/** Maps Ctrl+1..5 to the workspace tab at that position, or null for any other key. */
+internal fun tabForCtrlShortcut(key: Key): DesktopNavTab? {
+    val index = when (key) {
+        Key.One -> 0
+        Key.Two -> 1
+        Key.Three -> 2
+        Key.Four -> 3
+        Key.Five -> 4
+        else -> return null
+    }
+    return DesktopNavTab.entries.getOrNull(index)
+}
+
+/**
+ * Subtle hover feedback for pointer users (Hover_Parity): tints the element while the pointer is over
+ * it. The hover state is read only in the draw phase, so hovering never recomposes the content.
+ */
+@Composable
+fun Modifier.desktopHover(shape: Shape = RoundedCornerShape(14.dp)): Modifier {
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered = interactionSource.collectIsHoveredAsState()
+    val tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+    return this
+        .hoverable(interactionSource)
+        .drawWithContent {
+            drawContent()
+            if (hovered.value) {
+                drawOutline(outline = shape.createOutline(size, layoutDirection, this), color = tint)
+            }
+        }
 }
 
 /** Hand cursor over clickable, non-text controls (cards, buttons, links). */

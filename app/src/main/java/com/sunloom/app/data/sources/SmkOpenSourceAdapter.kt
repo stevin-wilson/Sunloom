@@ -18,7 +18,7 @@ import java.util.Locale
  * filters to 2D visual art media, and injects zero synthetic tags.
  */
 class SmkOpenSourceAdapter(
-    private val httpClient: HttpClient = DefaultHttpsClient()
+    private val httpClient: HttpClient = DefaultHttpsClient.shared
 ) : WallpaperSourceAdapter {
 
     override val sourceId: String = "smk_open"

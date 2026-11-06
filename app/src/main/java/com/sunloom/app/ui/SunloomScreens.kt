@@ -1,17 +1,25 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +28,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -45,6 +54,15 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -63,9 +81,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.ui.draganddrop.mimeTypes
+import androidx.compose.ui.draganddrop.toAndroidDragEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
@@ -102,7 +127,7 @@ private val SunloomDarkPalette = darkColorScheme(
 )
 
 private val SunloomLightPalette = lightColorScheme(
-    primary = Color(0xFF0284C7),
+    primary = Color(0xFF0369A1),
     onPrimary = Color(0xFFFFFFFF),
     secondary = Color(0xFFD97706),
     onSecondary = Color(0xFFFFFFFF),
@@ -118,6 +143,7 @@ private val SunloomLightPalette = lightColorScheme(
     error = Color(0xFFDC2626)
 )
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SunloomApp(
     uiState: SunloomUiState,
@@ -151,9 +177,12 @@ fun SunloomApp(
     onRestoreSystemDefault: () -> Unit = onRestoreOriginal,
     isFullscreen: Boolean = false,
     onToggleFullscreen: () -> Unit = {},
+    onDropImages: (android.view.DragEvent) -> Boolean = { false },
+    onUndoDiscard: () -> Unit = {},
+    onCommitDiscard: () -> Unit = {},
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
-    var showKeyboardRejectConfirm by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
     val colorScheme = if (darkTheme) SunloomDarkPalette else SunloomLightPalette
     val shortcutGate = remember { ShortcutGate() }
     val rootFocusRequester = remember { FocusRequester() }
@@ -163,13 +192,24 @@ fun SunloomApp(
 
     // Give the root focus once the workspace is usable, and again after the reject dialog
     // closes, so single-key accelerators work without needing a click first.
-    LaunchedEffect(workspaceReady, showKeyboardRejectConfirm) {
-        if (workspaceReady && !showKeyboardRejectConfirm) {
+    LaunchedEffect(workspaceReady, uiState.activeTab) {
+        if (workspaceReady) {
             runCatching { rootFocusRequester.requestFocus() }
         }
     }
+    val restoreRootFocus: () -> Unit = remember(rootFocusRequester) {
+        { runCatching { rootFocusRequester.requestFocus() }; Unit }
+    }
+    val dropTarget = remember(onDropImages) {
+        object : DragAndDropTarget {
+            override fun onDrop(event: DragAndDropEvent): Boolean = onDropImages(event.toAndroidDragEvent())
+        }
+    }
 
-    CompositionLocalProvider(LocalShortcutGate provides shortcutGate) {
+    CompositionLocalProvider(
+        LocalShortcutGate provides shortcutGate,
+        LocalRestoreRootFocus provides restoreRootFocus
+    ) {
     MaterialTheme(colorScheme = colorScheme) {
         Surface(
             modifier = Modifier
@@ -177,6 +217,16 @@ fun SunloomApp(
                 .focusRequester(rootFocusRequester)
                 .focusable()
                 .onKeyEvent { event ->
+                    // Ctrl+1..5 jumps between workspace tabs (works while typing, like desktop apps).
+                    if (event.type == KeyEventType.KeyUp && event.isCtrlPressed &&
+                        !event.isAltPressed && !event.isMetaPressed && workspaceReady
+                    ) {
+                        val tab = tabForCtrlShortcut(event.key)
+                        if (tab != null) {
+                            onSelectTab(tab)
+                            return@onKeyEvent true
+                        }
+                    }
                     if (event.type != KeyEventType.KeyUp || !isPlainKeyEvent(event)) {
                         return@onKeyEvent false
                     }
@@ -205,7 +255,8 @@ fun SunloomApp(
                                 true
                             }
                             Key.Backspace, Key.Delete -> {
-                                showKeyboardRejectConfirm = true
+                                // Acts immediately; the snackbar below offers Undo (no blocking dialog).
+                                if (uiState.currentWallpaper != null) onRejectForever()
                                 true
                             }
                             else -> false
@@ -214,19 +265,25 @@ fun SunloomApp(
                 },
             color = MaterialTheme.colorScheme.background
         ) {
-            if (showKeyboardRejectConfirm && uiState.currentWallpaper != null) {
-                ConfirmDestructiveDialog(
-                    title = "Dislike Wallpaper?",
-                    message = "Permanently exclude '${uiState.currentWallpaper.title}' from rotation and remove its cached file?",
-                    confirmLabel = "Dislike",
-                    confirmTestTag = "confirm_reject_dialog_button",
-                    onConfirm = {
-                        showKeyboardRejectConfirm = false
-                        onRejectForever()
-                    },
-                    onDismiss = { showKeyboardRejectConfirm = false }
-                )
-            }
+          // Edge-to-edge (enforced at targetSdk 36): keep content clear of the caption bar, system
+          // bars, display cutouts and the keyboard, while the background still bleeds to the edges.
+          Box(
+              modifier = Modifier
+                  .fillMaxSize()
+                  .windowInsetsPadding(WindowInsets.safeDrawing)
+                  .dragAndDropTarget(
+                      shouldStartDragAndDrop = { event ->
+                          event.mimeTypes().any { it.startsWith("image/") }
+                      },
+                      target = dropTarget
+                  )
+          ) {
+            UndoSnackbarEffect(
+                pending = uiState.pendingDiscard,
+                snackbarHostState = snackbarHostState,
+                onUndo = onUndoDiscard,
+                onCommit = onCommitDiscard
+            )
 
             when {
                 uiState.isStorageUnavailable -> {
@@ -247,7 +304,7 @@ fun SunloomApp(
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Text(
-                                    text = "Local Library Database Unavailable",
+                                    text = stringResource(R.string.local_library_database_unavailable),
                                     style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.error
@@ -258,12 +315,12 @@ fun SunloomApp(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = "To protect your permanent rejection blocklist, Sunloom fails closed rather than running without persistent storage. Check available device storage and restart Sunloom.",
+                                    text = stringResource(R.string.to_protect_your_permanent_rejection_bloc),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 OutlinedButton(onClick = onRestoreSystemDefault) {
-                                    Text("Restore System Default Wallpaper")
+                                    Text(stringResource(R.string.restore_system_default_wallpaper))
                                 }
                             }
                         }
@@ -305,7 +362,7 @@ fun SunloomApp(
                     onNextWallpaper = onNextWallpaper,
                     onPreviousWallpaper = onPreviousWallpaper,
                     onToggleKeep = onToggleKeep,
-                    onRequestRejectConfirm = { showKeyboardRejectConfirm = true },
+                    onRequestRejectConfirm = { if (uiState.currentWallpaper != null) onRejectForever() },
                     onTogglePause = onTogglePause,
                     onRestoreOriginal = onRestoreOriginal,
                     onRestoreSystemDefault = onRestoreSystemDefault,
@@ -334,8 +391,49 @@ fun SunloomApp(
                     )
                 }
             }
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = if (isCompactWindow()) 88.dp else 16.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite }
+            )
+          }
         }
     }
+    }
+}
+
+@Composable
+private fun isCompactWindow(): Boolean =
+    WorkspaceWidthClass.from(LocalConfiguration.current.screenWidthDp.dp) == WorkspaceWidthClass.Compact
+
+/**
+ * Shows an "Undo" snackbar for a pending Dislike/Remove. Dismiss/timeout commits the action; the
+ * Undo action cancels it. Keyed by token so a new pending action replaces the old snackbar.
+ */
+@Composable
+private fun UndoSnackbarEffect(
+    pending: PendingDiscard?,
+    snackbarHostState: SnackbarHostState,
+    onUndo: () -> Unit,
+    onCommit: () -> Unit
+) {
+    val latestUndo = rememberUpdatedState(onUndo)
+    val latestCommit = rememberUpdatedState(onCommit)
+    LaunchedEffect(pending?.token) {
+        if (pending == null) return@LaunchedEffect
+        val message = when (pending.kind) {
+            DiscardKind.DISLIKE -> "Disliked '${pending.title}'"
+            DiscardKind.REMOVE -> "Removed '${pending.title}' from reserve"
+        }
+        val result = snackbarHostState.showSnackbar(
+            message = message,
+            actionLabel = "Undo",
+            withDismissAction = true,
+            duration = SnackbarDuration.Long
+        )
+        if (result == SnackbarResult.ActionPerformed) latestUndo.value() else latestCommit.value()
     }
 }
 
@@ -385,6 +483,8 @@ fun CityDropdownSelector(
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    val matches = remember(query) { filterCities(query, SolarCalculator.BUNDLED_CITIES) }
     val selectedCity = remember(selectedCityName) {
         SolarCalculator.BUNDLED_CITIES.firstOrNull {
             it.name.equals(selectedCityName, ignoreCase = true) ||
@@ -399,24 +499,37 @@ fun CityDropdownSelector(
         modifier = modifier
     ) {
         OutlinedTextField(
-            value = displayLabel,
-            onValueChange = {},
-            readOnly = true,
+            // Type to filter the 47 bundled cities (Hick's law); shows the current city when closed.
+            value = if (expanded) query else displayLabel,
+            onValueChange = {
+                query = it
+                expanded = true
+            },
             singleLine = true,
-            label = { Text("City & time zone") },
+            label = { Text(stringResource(R.string.city_time_zone)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
             modifier = Modifier
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
                 .fillMaxWidth()
                 .suppressShortcutsWhileFocused()
                 .testTag("city_dropdown_field")
         )
         ExposedDropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onDismissRequest = {
+                expanded = false
+                query = ""
+            }
         ) {
-            SolarCalculator.BUNDLED_CITIES.forEach { city ->
+            if (matches.isEmpty()) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.no_matching_city_try_the_custom_coordina)) },
+                    onClick = {},
+                    enabled = false
+                )
+            }
+            matches.forEach { city ->
                 DropdownMenuItem(
                     text = {
                         Text(
@@ -428,6 +541,7 @@ fun CityDropdownSelector(
                     onClick = {
                         onSelectCity(city)
                         expanded = false
+                        query = ""
                     },
                     contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
                 )
@@ -455,13 +569,13 @@ fun FirstRunSetupScreen(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                text = "Welcome to Sunloom",
+                text = stringResource(R.string.welcome_to_sunloom),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
             )
             Text(
-                text = "Daylight and evening wallpapers tailored to your screen.",
+                text = stringResource(R.string.daylight_and_evening_wallpapers_tailored),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -479,9 +593,9 @@ fun FirstRunSetupScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Automatic wallpaper schedule", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.automatic_wallpaper_schedule), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Switch between bright wallpapers during the day and calm dark wallpapers at night.",
+                            stringResource(R.string.switch_between_bright_wallpapers_during),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -495,7 +609,7 @@ fun FirstRunSetupScreen(
                 if (draftPrefs.autoChangeEnabled) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
 
-                    Text("Schedule", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.schedule), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -536,9 +650,9 @@ fun FirstRunSetupScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Categories", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.categories), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Choose the themes you enjoy.",
+                    stringResource(R.string.choose_the_themes_you_enjoy),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -571,7 +685,7 @@ fun FirstRunSetupScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Apply wallpaper to", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.apply_wallpaper_to), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -594,7 +708,7 @@ fun FirstRunSetupScreen(
         ) {
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "Initial preview",
+                    text = stringResource(R.string.initial_preview),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -607,13 +721,13 @@ fun FirstRunSetupScreen(
 
                     if (sampleLight != null) {
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            WallpaperPreviewSurface(record = sampleLight, showLegibilityZones = false, modifier = Modifier.height(130.dp))
+                            WallpaperPreviewSurface(record = sampleLight, showLegibilityZones = false, modifier = Modifier.height(130.dp), maxDecodeWidth = 640, maxDecodeHeight = 400)
                             TruncatedTitleWithTooltip("Daytime: ${sampleLight.title}", style = MaterialTheme.typography.labelLarge)
                         }
                     }
                     if (sampleDark != null) {
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            WallpaperPreviewSurface(record = sampleDark, showLegibilityZones = false, modifier = Modifier.height(130.dp))
+                            WallpaperPreviewSurface(record = sampleDark, showLegibilityZones = false, modifier = Modifier.height(130.dp), maxDecodeWidth = 640, maxDecodeHeight = 400)
                             TruncatedTitleWithTooltip("Evening: ${sampleDark.title}", style = MaterialTheme.typography.labelLarge)
                         }
                     }
@@ -630,7 +744,7 @@ fun FirstRunSetupScreen(
                         Icon(SunloomIcons.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            if (draftPrefs.autoChangeEnabled) "Start Sunloom" else "Open Sunloom",
+                            if (draftPrefs.autoChangeEnabled) stringResource(R.string.start_sunloom) else stringResource(R.string.open_sunloom),
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -692,44 +806,52 @@ fun DesktopWorkspaceScreen(
                         onToggleKeep = onToggleKeep,
                         onRequestRejectConfirm = onRequestRejectConfirm,
                         onRestoreOriginal = onRestoreOriginal,
+                        onSyncOnline = onSyncOnline,
                         isFullscreen = isFullscreen,
                         onToggleFullscreen = onToggleFullscreen
                     )
-                    DesktopNavTab.RESERVE_AND_HISTORY -> ReserveAndHistoryPane(
-                        uiState = uiState,
-                        onApplySpecific = onApplySpecific,
-                        onDeleteFromReserve = onDeleteFromReserve,
-                        onToggleKeepSpecific = onToggleKeepSpecific,
-                        onPickLocalPhoto = { onPickLocalPhoto(false) },
-                        onPickBaselineRestore = { onPickLocalPhoto(true) }
-                    )
-                    DesktopNavTab.SOURCES_AND_CATEGORIES -> SourcesAndCategoriesPane(
-                        uiState = uiState,
-                        onToggleCategory = onToggleCategory,
-                        onToggleSource = onToggleSource,
-                        onToggleWifiOnly = onToggleWifiOnly,
-                        onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
-                        onSyncOnline = onSyncOnline
-                    )
-                    DesktopNavTab.DISPLAYS_AND_SCHEDULE -> DisplaysAndSchedulePane(
-                        uiState = uiState,
-                        onSelectCity = onSelectCity,
-                        onUpdateScheduleMode = onUpdateScheduleMode,
-                        onUpdateLockPolicy = onUpdateLockPolicy,
-                        onToggleBlurredFill = onToggleBlurredFill,
-                        onUpdateFixedHours = onUpdateFixedHours,
-                        onUpdateCustomCoordinates = onUpdateCustomCoordinates,
-                        onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
-                        onUpdateDisplayPolicy = onUpdateDisplayPolicy,
-                        onForgetRememberedDisplay = onForgetRememberedDisplay,
-                        onRestoreSystemDefault = onRestoreSystemDefault,
-                        onReopenSetup = onReopenSetup
-                    )
-                    DesktopNavTab.SAFETY_AND_DECISION_LOG -> DiagnosticsPane(
-                        uiState = uiState,
-                        onToggleLegibilityOverlay = onToggleLegibilityOverlay,
-                        onUpdateMaxCacheBytes = onUpdateMaxCacheBytes
-                    )
+                    else -> ReadableWidth {
+                        when (uiState.activeTab) {
+                        DesktopNavTab.RESERVE_AND_HISTORY -> ReserveAndHistoryPane(
+                            uiState = uiState,
+                            onApplySpecific = onApplySpecific,
+                            onDeleteFromReserve = onDeleteFromReserve,
+                            onToggleKeepSpecific = onToggleKeepSpecific,
+                            onPickLocalPhoto = { onPickLocalPhoto(false) },
+                            onPickBaselineRestore = { onPickLocalPhoto(true) },
+                            onSyncOnline = onSyncOnline
+                        )
+                        DesktopNavTab.SOURCES_AND_CATEGORIES -> SourcesAndCategoriesPane(
+                            uiState = uiState,
+                            onToggleCategory = onToggleCategory,
+                            onToggleSource = onToggleSource,
+                            onToggleWifiOnly = onToggleWifiOnly,
+                            onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
+                            onSyncOnline = onSyncOnline
+                        )
+                        DesktopNavTab.DISPLAYS_AND_SCHEDULE -> DisplaysAndSchedulePane(
+                            uiState = uiState,
+                            onSelectCity = onSelectCity,
+                            onUpdateScheduleMode = onUpdateScheduleMode,
+                            onUpdateLockPolicy = onUpdateLockPolicy,
+                            onToggleBlurredFill = onToggleBlurredFill,
+                            onUpdateFixedHours = onUpdateFixedHours,
+                            onUpdateCustomCoordinates = onUpdateCustomCoordinates,
+                            onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
+                            onUpdateDisplayPolicy = onUpdateDisplayPolicy,
+                            onForgetRememberedDisplay = onForgetRememberedDisplay,
+                            onRestoreSystemDefault = onRestoreSystemDefault,
+                            onReopenSetup = onReopenSetup
+                        )
+                        DesktopNavTab.SAFETY_AND_DECISION_LOG -> DiagnosticsPane(
+                            uiState = uiState,
+                            onToggleLegibilityOverlay = onToggleLegibilityOverlay,
+                            onUpdateMaxCacheBytes = onUpdateMaxCacheBytes
+                        )
+                
+                            else -> Unit
+                        }
+                    }
                 }
             }
         }
@@ -739,6 +861,7 @@ fun DesktopWorkspaceScreen(
                 workspace(Modifier.weight(1f).fillMaxWidth())
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surface,
+                    windowInsets = WindowInsets(0, 0, 0, 0),
                     modifier = Modifier.testTag("workspace_nav_bar")
                 ) {
                     DesktopNavTab.entries.forEach { tab ->
@@ -746,8 +869,8 @@ fun DesktopWorkspaceScreen(
                             selected = uiState.activeTab == tab,
                             onClick = { onSelectTab(tab) },
                             modifier = Modifier.desktopControl(RoundedCornerShape(16.dp)).testTag("nav_${tab.name}"),
-                            icon = { Icon(navIcon(tab), contentDescription = tab.label) },
-                            label = { Text(tab.label, fontSize = 11.sp, maxLines = 1) }
+                            icon = { Icon(navIcon(tab), contentDescription = null) }, // the visible label names it
+                            label = { Text(tab.label, fontSize = 12.sp, maxLines = 1) }
                         )
                     }
                 }
@@ -757,11 +880,12 @@ fun DesktopWorkspaceScreen(
             Row(modifier = Modifier.fillMaxSize()) {
                 NavigationRail(
                     containerColor = MaterialTheme.colorScheme.surface,
+                    windowInsets = WindowInsets(0, 0, 0, 0),
                     modifier = Modifier.fillMaxHeight().testTag("workspace_nav_rail")
                 ) {
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        text = "Sunloom",
+                        text = stringResource(R.string.sunloom),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
@@ -772,9 +896,9 @@ fun DesktopWorkspaceScreen(
                             selected = uiState.activeTab == tab,
                             onClick = { onSelectTab(tab) },
                             modifier = Modifier.desktopControl(RoundedCornerShape(16.dp)).testTag("nav_${tab.name}"),
-                            icon = { Icon(navIcon(tab), contentDescription = tab.label) },
+                            icon = { Icon(navIcon(tab), contentDescription = if (showLabels) null else tab.label) },
                             label = if (showLabels) {
-                                { Text(tab.label, fontSize = 11.sp) }
+                                { Text(tab.label, fontSize = 12.sp) }
                             } else {
                                 null
                             },
@@ -795,6 +919,16 @@ private fun navIcon(tab: DesktopNavTab) = when (tab) {
     DesktopNavTab.DISPLAYS_AND_SCHEDULE -> SunloomIcons.Schedule
     DesktopNavTab.SAFETY_AND_DECISION_LOG -> SunloomIcons.Info
 }
+
+/** Caps line length on text-heavy panes so wide free-form windows stay readable. */
+@Composable
+private fun ColumnScope.ReadableWidth(content: @Composable () -> Unit) {
+    Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopCenter) {
+        Box(modifier = Modifier.widthIn(max = ReadableContentMaxWidth).fillMaxSize()) { content() }
+    }
+}
+
+private val ReadableContentMaxWidth = 1100.dp
 
 @Composable
 private fun TopStatusBanner(
@@ -832,7 +966,7 @@ private fun TopStatusBanner(
                         contentDescription = null,
                         tint = if (isDaytime) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.tertiary
                     )
-                    Column {
+                    Column(modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
                         Text(
                             text = uiState.statusBannerMessage,
                             style = MaterialTheme.typography.bodyMedium,
@@ -852,7 +986,7 @@ private fun TopStatusBanner(
                 }
                 if (showPauseResume) {
                     ShortcutTooltip(
-                        if (uiState.preferences.isPaused) "Resume automatic scheduling" else "Pause automatic scheduling"
+                        if (uiState.preferences.isPaused) stringResource(R.string.resume_automatic_scheduling) else stringResource(R.string.pause_automatic_scheduling)
                     ) {
                         OutlinedButton(
                             onClick = onTogglePause,
@@ -864,14 +998,24 @@ private fun TopStatusBanner(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(Modifier.width(6.dp))
-                            Text(if (uiState.preferences.isPaused) "Resume" else "Pause")
+                            Text(if (uiState.preferences.isPaused) stringResource(R.string.resume) else stringResource(R.string.pause))
                         }
                     }
                 }
             }
-            if (uiState.isSyncingOnline) {
+            if (uiState.isSyncingOnline || uiState.isApplyingWallpaper) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
         }
+    }
+}
+
+/** Case-insensitive, all-words match of [query] against each city's dropdown label; blank returns all. */
+internal fun filterCities(query: String, cities: List<CityCoordinates>): List<CityCoordinates> {
+    val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    if (words.isEmpty()) return cities
+    return cities.filter { city ->
+        val label = city.dropdownLabel.lowercase()
+        words.all { it in label }
     }
 }

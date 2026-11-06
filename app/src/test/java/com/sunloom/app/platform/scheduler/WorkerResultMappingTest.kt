@@ -102,4 +102,20 @@ class WorkerResultMappingTest {
         assertEquals(Result.success(), changeResult)
         assertEquals(Result.success(), refreshResult)
     }
+
+    @Test
+    fun change_rearmsScheduleOnlyWhenRetriesAreExhausted() {
+        var rearmed = 0
+        fun run(attempt: Int, exec: suspend () -> WallpaperStatus?) =
+            runBlocking { mapChangeWorkResult(attempt, exec, onGiveUp = { rearmed++ }) { } }
+
+        run(1) { WallpaperStatus.FAILED_TEMPORARILY }
+        run(0) { throw IllegalStateException("boom") }
+        assertEquals(0, rearmed)
+
+        run(3) { WallpaperStatus.FAILED_TEMPORARILY }
+        assertEquals(1, rearmed)
+        run(3) { throw IllegalStateException("boom") }
+        assertEquals(2, rearmed)
+    }
 }
