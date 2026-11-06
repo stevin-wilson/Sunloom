@@ -6,6 +6,7 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -72,6 +73,27 @@ fun Modifier.desktopScrollbar(state: LazyListState): Modifier =
             val average = visible.sumOf { it.size }.toFloat() / visible.size
             val content = average * info.totalItemsCount
             val offset = state.firstVisibleItemIndex * average + state.firstVisibleItemScrollOffset
+            scrollbarThumb(viewport, content, offset, minThumb)
+        }
+    }
+
+/**
+ * Scrollbar for a LazyVerticalGrid. Rows are estimated from the visible cells: cells sharing a top
+ * offset form one row, so the thumb stays proportional regardless of the column count.
+ */
+@Composable
+fun Modifier.desktopScrollbar(state: LazyGridState): Modifier =
+    scrollbarCore(isScrolling = { state.isScrollInProgress }) { viewport, minThumb ->
+        val info = state.layoutInfo
+        val visible = info.visibleItemsInfo
+        if (visible.isEmpty() || info.totalItemsCount == 0) {
+            null
+        } else {
+            val rowsVisible = visible.map { it.offset.y }.distinct().size.coerceAtLeast(1)
+            val perRow = visible.size.toFloat() / rowsVisible
+            val rowHeight = visible.sumOf { it.size.height }.toFloat() / visible.size
+            val content = rowHeight * (info.totalItemsCount / perRow)
+            val offset = (state.firstVisibleItemIndex / perRow) * rowHeight + state.firstVisibleItemScrollOffset
             scrollbarThumb(viewport, content, offset, minThumb)
         }
     }

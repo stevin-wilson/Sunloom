@@ -30,19 +30,39 @@ class ArtInstituteCc0SourceAdapter(
         offset: Int,
         targetWidthPx: Int
     ): List<CandidateAsset> {
-        if (SafeCategory.SCENIC_FINE_ART !in enabledCategories && SafeCategory.LANDSCAPES_NATURE !in enabledCategories) {
+        if (SafeCategory.SCENIC_FINE_ART !in enabledCategories &&
+            SafeCategory.LANDSCAPES_NATURE !in enabledCategories &&
+            SafeCategory.BOTANICAL_FLORA !in enabledCategories) {
             return emptyList()
         }
         val page = ((offset / limit.coerceAtLeast(1)) % 8) + 1
+        // Alternate between the enabled themes; each query's results are filed under the category it serves.
+        val queries = buildList {
+            if (SafeCategory.SCENIC_FINE_ART in enabledCategories || SafeCategory.LANDSCAPES_NATURE in enabledCategories) {
+                val landscapeCategory = if (SafeCategory.SCENIC_FINE_ART in enabledCategories) {
+                    SafeCategory.SCENIC_FINE_ART
+                } else {
+                    SafeCategory.LANDSCAPES_NATURE
+                }
+                add("landscape%20mountains%20seascape%20clouds%20valley" to landscapeCategory)
+            }
+            if (SafeCategory.BOTANICAL_FLORA in enabledCategories) {
+                add("botanical%20flowers%20garden%20orchard%20foliage" to SafeCategory.BOTANICAL_FLORA)
+            }
+        }
+        val (query, queryCategory) = queries[((offset / limit.coerceAtLeast(1)) / 8) % queries.size]
         val apiUrl = "https://api.artic.edu/api/v1/artworks/search" +
-            "?q=landscape%20mountains%20seascape%20clouds%20valley" +
+            "?q=$query" +
             "&fields=id,title,artist_title,image_id,is_public_domain,classification_title,subject_titles,term_titles" +
             "&limit=$limit&page=$page"
         val jsonText = httpClient.fetchTextOrNull(apiUrl) ?: return emptyList()
-        return parseResponse(jsonText).take(limit)
+        return parseResponse(jsonText, queryCategory).take(limit)
     }
 
-    fun parseResponse(jsonText: String): List<CandidateAsset> {
+    fun parseResponse(
+        jsonText: String,
+        category: SafeCategory = SafeCategory.SCENIC_FINE_ART
+    ): List<CandidateAsset> {
         val out = ArrayList<CandidateAsset>()
         val root = SimpleJson.parseObject(jsonText) ?: return emptyList()
         val dataArr = root.arr("data") ?: return emptyList()
@@ -106,7 +126,7 @@ class ArtInstituteCc0SourceAdapter(
                     id = "artic-$id",
                     title = title,
                     description = "$title — $artist (Art Institute of Chicago Open Access CC0)",
-                    category = SafeCategory.SCENIC_FINE_ART,
+                    category = category,
                     rawCategoriesAndTags = tags,
                     downloadUrl = iiifUrl,
                     fallbackDownloadUrls = listOf(iiifFallbackUrl),

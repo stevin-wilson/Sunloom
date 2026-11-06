@@ -38,18 +38,33 @@ class MetMuseumCc0SourceAdapter(
             setOf(
                 SafeCategory.SCENIC_FINE_ART,
                 SafeCategory.LANDSCAPES_NATURE,
-                SafeCategory.ARCHITECTURE_CITYSCAPES
+                SafeCategory.ARCHITECTURE_CITYSCAPES,
+                SafeCategory.BOTANICAL_FLORA
             )
         )
         if (targetCategories.isEmpty()) return emptyList()
 
-        val searchTerms = listOf(
-            "landscape mountains",
-            "seascape ocean horizon",
-            "sunset valley river",
-            "architecture garden courtyard"
-        )
-        val term = searchTerms[(offset / 4).coerceAtLeast(0) % searchTerms.size]
+        // Each search term carries the category its results are stored under, so a record is only ever
+        // filed under a category the user enabled (WallpaperMatcher drops everything else).
+        val searchTerms = buildList {
+            if (SafeCategory.BOTANICAL_FLORA in targetCategories) {
+                add("botanical flowers garden flora" to SafeCategory.BOTANICAL_FLORA)
+            }
+            if (SafeCategory.SCENIC_FINE_ART in targetCategories || SafeCategory.LANDSCAPES_NATURE in targetCategories) {
+                val landscapeCategory = if (SafeCategory.SCENIC_FINE_ART in targetCategories) {
+                    SafeCategory.SCENIC_FINE_ART
+                } else {
+                    SafeCategory.LANDSCAPES_NATURE
+                }
+                add("landscape mountains" to landscapeCategory)
+                add("seascape ocean horizon" to landscapeCategory)
+                add("sunset valley river" to landscapeCategory)
+            }
+            if (SafeCategory.ARCHITECTURE_CITYSCAPES in targetCategories) {
+                add("architecture garden courtyard" to SafeCategory.ARCHITECTURE_CITYSCAPES)
+            }
+        }
+        val (term, termCategory) = searchTerms[(offset / 4).coerceAtLeast(0) % searchTerms.size]
         val encodedTerm = URLEncoder.encode(term, "UTF-8")
         val searchUrl = "https://collectionapi.metmuseum.org/public/collection/v1/search" +
             "?isPublicDomain=true&hasImages=true&q=$encodedTerm"
@@ -78,12 +93,15 @@ class MetMuseumCc0SourceAdapter(
             val objRaw = httpClient.fetchTextOrNull(objectUrl) {
                 return results
             } ?: continue
-            parseObjectResponse(objRaw)?.let { results.add(it) }
+            parseObjectResponse(objRaw, termCategory)?.let { results.add(it) }
         }
         return results
     }
 
-    fun parseObjectResponse(jsonString: String): CandidateAsset? {
+    fun parseObjectResponse(
+        jsonString: String,
+        category: SafeCategory = SafeCategory.SCENIC_FINE_ART
+    ): CandidateAsset? {
         val obj = SimpleJson.parseObject(jsonString) ?: return null
         if (!obj.bool("isPublicDomain", false)) return null
 
@@ -142,7 +160,7 @@ class MetMuseumCc0SourceAdapter(
             title = title,
             description = listOf(medium, classification, department).filter { it.isNotBlank() }.joinToString(" • ")
                 .ifEmpty { "Open-access public-domain artwork from The Metropolitan Museum of Art" },
-            category = SafeCategory.SCENIC_FINE_ART,
+            category = category,
             rawCategoriesAndTags = tags,
             downloadUrl = downloadUrl,
             provenance = ProvenanceRecord(

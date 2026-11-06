@@ -37,7 +37,9 @@ class NasaLibrarySourceAdapter(
         offset: Int,
         targetWidthPx: Int
     ): List<CandidateAsset> {
-        if (SafeCategory.SPACE_ASTRONOMY !in enabledCategories && SafeCategory.LANDSCAPES_NATURE !in enabledCategories) {
+        if (SafeCategory.SPACE_ASTRONOMY !in enabledCategories &&
+            SafeCategory.LANDSCAPES_NATURE !in enabledCategories &&
+            SafeCategory.AERIAL_EARTH !in enabledCategories) {
             return emptyList()
         }
         val page = ((offset / limit.coerceAtLeast(1)) % 5) + 1
@@ -45,6 +47,9 @@ class NasaLibrarySourceAdapter(
         val spacingMs = SourceRegistry.get(sourceId)?.minRequestSpacingMs ?: 150L
 
         val queries = buildList {
+            if (SafeCategory.AERIAL_EARTH in enabledCategories) {
+                add("earth%20orbital%20horizon%20coastline" to SafeCategory.AERIAL_EARTH)
+            }
             if (SafeCategory.LANDSCAPES_NATURE in enabledCategories) {
                 add("earth%20clouds%20ocean%20glacier%20daylight" to SafeCategory.LANDSCAPES_NATURE)
             }

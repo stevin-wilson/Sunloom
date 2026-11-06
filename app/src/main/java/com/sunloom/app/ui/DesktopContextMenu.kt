@@ -82,6 +82,7 @@ fun ContextMenuHost(
     modifier: Modifier = Modifier,
     focusShape: Shape = RoundedCornerShape(14.dp),
     onActivate: (() -> Unit)? = null,
+    onExtraKeyEvent: ((androidx.compose.ui.input.key.KeyEvent) -> Boolean)? = null,
     menuContent: @Composable ColumnScope.(dismiss: () -> Unit) -> Unit,
     content: @Composable () -> Unit
 ) {
@@ -91,6 +92,7 @@ fun ContextMenuHost(
     val density = LocalDensity.current
     val openFromKeyboard = rememberUpdatedState { anchor = Offset.Zero; expanded = true }
     val activate = rememberUpdatedState(onActivate)
+    val extraKey = rememberUpdatedState(onExtraKeyEvent)
 
     Box(
         modifier = modifier
@@ -98,6 +100,7 @@ fun ContextMenuHost(
             .desktopFocusRing(focusShape, selfOnly = true)
             .desktopHover(focusShape)
             .onKeyEvent { event ->
+                if (extraKey.value?.invoke(event) == true) return@onKeyEvent true
                 val isMenuChord = event.key == Key.Menu || (event.isShiftPressed && event.key == Key.F10)
                 val isActivate = (event.key == Key.Enter || event.key == Key.NumPadEnter) && activate.value != null
                 if (isMenuChord) {

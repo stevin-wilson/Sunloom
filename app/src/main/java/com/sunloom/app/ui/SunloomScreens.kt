@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -59,7 +60,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -77,6 +77,13 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.isShiftPressed
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import com.sunloom.app.domain.attribution.AttributionFormatter
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -178,6 +185,8 @@ fun SunloomApp(
     isFullscreen: Boolean = false,
     onToggleFullscreen: () -> Unit = {},
     onDropImages: (android.view.DragEvent) -> Boolean = { false },
+    onSaveAs: (com.sunloom.app.domain.model.WallpaperRecord) -> Unit = {},
+    onDeleteManyFromReserve: (Collection<String>) -> Unit = { ids -> ids.forEach(onDeleteFromReserve) },
     onUndoDiscard: () -> Unit = {},
     onCommitDiscard: () -> Unit = {},
     darkTheme: Boolean = isSystemInDarkTheme()
@@ -200,6 +209,27 @@ fun SunloomApp(
     val restoreRootFocus: () -> Unit = remember(rootFocusRequester) {
         { runCatching { rootFocusRequester.requestFocus() }; Unit }
     }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val attributionCopiedMessage = stringResource(R.string.attribution_copied)
+    val showMessage: (String) -> Unit = remember(scope, snackbarHostState) {
+        { message -> scope.launch { snackbarHostState.showSnackbar(message) }; Unit }
+    }
+    // Remembered: LocalWallpaperActions is a static local, so a new instance per recomposition would
+    // recompose the whole workspace every time.
+    val copyAttribution: (com.sunloom.app.domain.model.WallpaperRecord) -> Unit =
+        remember(context, showMessage, attributionCopiedMessage) {
+            { record ->
+                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                clipboard?.setPrimaryClip(
+                    android.content.ClipData.newPlainText(record.title, AttributionFormatter.format(record))
+                )
+                showMessage(attributionCopiedMessage)
+            }
+        }
+    val wallpaperActions = remember(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage) {
+        WallpaperActions(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage)
+    }
     val dropTarget = remember(onDropImages) {
         object : DragAndDropTarget {
             override fun onDrop(event: DragAndDropEvent): Boolean = onDropImages(event.toAndroidDragEvent())
@@ -208,12 +238,14 @@ fun SunloomApp(
 
     CompositionLocalProvider(
         LocalShortcutGate provides shortcutGate,
-        LocalRestoreRootFocus provides restoreRootFocus
+        LocalRestoreRootFocus provides restoreRootFocus,
+        LocalWallpaperActions provides wallpaperActions
     ) {
     MaterialTheme(colorScheme = colorScheme) {
         Surface(
             modifier = Modifier
                 .fillMaxSize()
+                .busyCursor(uiState.isApplyingWallpaper || uiState.isSyncingOnline)
                 .focusRequester(rootFocusRequester)
                 .focusable()
                 .onKeyEvent { event ->
@@ -226,6 +258,25 @@ fun SunloomApp(
                             onSelectTab(tab)
                             return@onKeyEvent true
                         }
+                        val current = uiState.currentWallpaper
+                        when (
+                            ctrlActionFor(
+                                key = event.key,
+                                shift = event.isShiftPressed,
+                                textInputFocused = shortcutGate.isTextInputFocused,
+                                hasPendingUndo = uiState.pendingDiscard != null,
+                                hasCurrentWallpaper = current != null
+                            )
+                        ) {
+                            CtrlAction.UNDO -> { onUndoDiscard(); return@onKeyEvent true }
+                            CtrlAction.COPY_ATTRIBUTION -> { current?.let(copyAttribution); return@onKeyEvent true }
+                            CtrlAction.SAVE_AS -> { current?.let(onSaveAs); return@onKeyEvent true }
+                            CtrlAction.OPEN_SCHEDULE -> {
+                                onSelectTab(DesktopNavTab.DISPLAYS_AND_SCHEDULE)
+                                return@onKeyEvent true
+                            }
+                            null -> Unit
+                        }
                     }
                     if (event.type != KeyEventType.KeyUp || !isPlainKeyEvent(event)) {
                         return@onKeyEvent false
@@ -237,6 +288,12 @@ fun SunloomApp(
                         }
                         event.key == Key.Escape && isFullscreen -> {
                             onToggleFullscreen()
+                            true
+                        }
+                        // Esc backs out of whatever has focus (a text field, chip or button) to the
+                        // workspace, so single-key accelerators work again (Keyboard_Exit).
+                        event.key == Key.Escape && workspaceReady -> {
+                            restoreRootFocus()
                             true
                         }
                         // Single-key accelerators never fire while typing or before setup is complete.
@@ -267,7 +324,7 @@ fun SunloomApp(
         ) {
           // Edge-to-edge (enforced at targetSdk 36): keep content clear of the caption bar, system
           // bars, display cutouts and the keyboard, while the background still bleeds to the edges.
-          Box(
+          BoxWithConstraints(
               modifier = Modifier
                   .fillMaxSize()
                   .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -319,7 +376,7 @@ fun SunloomApp(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                OutlinedButton(onClick = onRestoreSystemDefault) {
+                                OutlinedButton(onClick = onRestoreSystemDefault, modifier = Modifier.desktopControl(RoundedCornerShape(50))) {
                                     Text(stringResource(R.string.restore_system_default_wallpaper))
                                 }
                             }
@@ -395,7 +452,9 @@ fun SunloomApp(
                 hostState = snackbarHostState,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = if (isCompactWindow()) 88.dp else 16.dp)
+                    .padding(
+                        bottom = if (WorkspaceWidthClass.from(maxWidth) == WorkspaceWidthClass.Compact) 88.dp else 16.dp
+                    )
                     .semantics { liveRegion = LiveRegionMode.Polite }
             )
           }
@@ -403,10 +462,6 @@ fun SunloomApp(
     }
     }
 }
-
-@Composable
-private fun isCompactWindow(): Boolean =
-    WorkspaceWidthClass.from(LocalConfiguration.current.screenWidthDp.dp) == WorkspaceWidthClass.Compact
 
 /**
  * Shows an "Undo" snackbar for a pending Dislike/Remove. Dismiss/timeout commits the action; the
@@ -425,7 +480,11 @@ private fun UndoSnackbarEffect(
         if (pending == null) return@LaunchedEffect
         val message = when (pending.kind) {
             DiscardKind.DISLIKE -> "Disliked '${pending.title}'"
-            DiscardKind.REMOVE -> "Removed '${pending.title}' from reserve"
+            DiscardKind.REMOVE -> if (pending.additionalRecordIds.isEmpty()) {
+                "Removed '${pending.title}' from reserve"
+            } else {
+                "Removed ${pending.title} from reserve"
+            }
         }
         val result = snackbarHostState.showSnackbar(
             message = message,
@@ -482,8 +541,8 @@ fun CityDropdownSelector(
     onSelectCity: (CityCoordinates) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
     val matches = remember(query) { filterCities(query, SolarCalculator.BUNDLED_CITIES) }
     val selectedCity = remember(selectedCityName) {
         SolarCalculator.BUNDLED_CITIES.firstOrNull {
@@ -512,6 +571,15 @@ fun CityDropdownSelector(
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
                 .fillMaxWidth()
+                .onPreviewKeyEvent { event ->
+                    // First Esc clears the search text; the next one leaves the field (Keyboard_Exit).
+                    if (event.key == Key.Escape && query.isNotEmpty()) {
+                        if (event.type == KeyEventType.KeyUp) query = ""
+                        true
+                    } else {
+                        false
+                    }
+                }
                 .suppressShortcutsWhileFocused()
                 .testTag("city_dropdown_field")
         )
@@ -556,7 +624,10 @@ fun FirstRunSetupScreen(
     uiState: SunloomUiState,
     onCompleteSetup: (UserPreferences) -> Unit
 ) {
-    var draftPrefs by remember(uiState.preferences) { mutableStateOf(uiState.preferences) }
+    var draftPrefs by rememberSaveable(
+        uiState.preferences,
+        stateSaver = setupDraftSaver(uiState.preferences)
+    ) { mutableStateOf(uiState.preferences) }
     val scrollState = rememberScrollState()
 
     Column(
@@ -564,6 +635,9 @@ fun FirstRunSetupScreen(
             .fillMaxSize()
             .desktopScrollbar(scrollState)
             .verticalScroll(scrollState)
+            // Keep setup a readable column on ultra-wide windows (UI_Secondary_Elements).
+            .wrapContentWidth(Alignment.CenterHorizontally)
+            .widthIn(max = 760.dp)
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -602,7 +676,7 @@ fun FirstRunSetupScreen(
                     }
                     Switch(
                         checked = draftPrefs.autoChangeEnabled,
-                        onCheckedChange = { draftPrefs = draftPrefs.copy(autoChangeEnabled = it) }
+                        onCheckedChange = { draftPrefs = draftPrefs.copy(autoChangeEnabled = it) }, modifier = Modifier.desktopControl(RoundedCornerShape(50))
                     )
                 }
 
@@ -618,7 +692,7 @@ fun FirstRunSetupScreen(
                             FilterChip(
                                 selected = draftPrefs.scheduleMode == mode,
                                 onClick = { draftPrefs = draftPrefs.copy(scheduleMode = mode) },
-                                label = { Text(mode.label) }
+                                label = { Text(mode.label) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
                             )
                         }
                     }
@@ -672,7 +746,7 @@ fun FirstRunSetupScreen(
                                 }
                                 draftPrefs = draftPrefs.copy(enabledCategories = next)
                             },
-                            label = { Text(cat.displayName) }
+                            label = { Text(cat.displayName) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
                         )
                     }
                 }
@@ -694,7 +768,7 @@ fun FirstRunSetupScreen(
                         FilterChip(
                             selected = draftPrefs.lockWorkspacePolicy == policy,
                             onClick = { draftPrefs = draftPrefs.copy(lockWorkspacePolicy = policy) },
-                            label = { Text(policy.label) }
+                            label = { Text(policy.label) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
                         )
                     }
                 }
@@ -739,7 +813,7 @@ fun FirstRunSetupScreen(
                 ) {
                     Button(
                         onClick = { onCompleteSetup(draftPrefs.copy(dryRunPreviewOnly = false)) },
-                        modifier = Modifier.testTag("enable_sunloom_button")
+                        modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("enable_sunloom_button")
                     ) {
                         Icon(SunloomIcons.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
@@ -796,7 +870,11 @@ fun DesktopWorkspaceScreen(
                 modifier = paneModifier.padding(contentPadding),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                TopStatusBanner(uiState = uiState, onTogglePause = onTogglePause)
+                TopStatusBanner(
+                    uiState = uiState,
+                    onTogglePause = onTogglePause,
+                    onRetryApply = { uiState.retryApplyRecordId?.let(onApplySpecific) }
+                )
 
                 when (uiState.activeTab) {
                     DesktopNavTab.TODAY_CANVAS -> TodayCanvasPane(
@@ -933,7 +1011,8 @@ private val ReadableContentMaxWidth = 1100.dp
 @Composable
 private fun TopStatusBanner(
     uiState: SunloomUiState,
-    onTogglePause: () -> Unit
+    onTogglePause: () -> Unit,
+    onRetryApply: () -> Unit = {}
 ) {
     val solarNote = when {
         uiState.daylightWindow.isPolarDay -> "24h Daylight"
@@ -983,6 +1062,13 @@ private fun TopStatusBanner(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
+                }
+                if (uiState.retryApplyRecordId != null) {
+                    OutlinedButton(
+                        onClick = onRetryApply,
+                        enabled = !uiState.isApplyingWallpaper,
+                        modifier = Modifier.desktopControl().testTag("retry_apply_button")
+                    ) { Text(stringResource(R.string.try_again)) }
                 }
                 if (showPauseResume) {
                     ShortcutTooltip(

@@ -419,4 +419,25 @@ class SafetyGateTest {
             GateTrace.failedAt(layer = "L3", reasonCode = "CORRUPT_BITMAP_HEADER")
         )
     }
+
+    @Test
+    fun `testBotanicalFloraAndAerialEarthAssetsPassMetadataScreening`() {
+        val orchardFruit = validCandidate(
+            title = "Ripening Pears in a Summer Orchard",
+            description = "High-resolution botanical photograph of pear branches with sunlight filtering through leaves.",
+            category = SafeCategory.BOTANICAL_FLORA,
+            tags = listOf("orchard", "fruit", "botanical", "leaf", "tree")
+        )
+        val verdictFlora = safetyGate.evaluateMetadata(orchardFruit)
+        assertTrue("Expected orchard/fruit candidate to be Approved, got $verdictFlora", verdictFlora is SafetyVerdict.Approved)
+
+        val aerialDelta = validCandidate(
+            title = "Aerial View of the Yukon River Delta",
+            description = "High-altitude aerial photography of the winding glacial river delta and coastal wetlands.",
+            category = SafeCategory.AERIAL_EARTH,
+            tags = listOf("aerial", "delta", "river", "coast", "wetlands")
+        )
+        val verdictAerial = safetyGate.evaluateMetadata(aerialDelta)
+        assertTrue("Expected aerial delta candidate to be Approved, got $verdictAerial", verdictAerial is SafetyVerdict.Approved)
+    }
 }

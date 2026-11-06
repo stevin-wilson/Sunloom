@@ -1,8 +1,11 @@
 package com.sunloom.app.ui
 
 import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
 import android.hardware.display.DisplayManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -31,12 +34,17 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.sunloom.app.BuildConfig
 import com.sunloom.app.R
+import com.sunloom.app.domain.model.WallpaperRecord
+import com.sunloom.app.platform.export.WallpaperExporter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
     companion object {
         private const val DISPLAY_EVENT_DEBOUNCE_MS = 1_500L
+        private const val STATE_FULLSCREEN = "sunloom.fullscreen"
     }
 
     private lateinit var gateway: SunloomGateway
@@ -46,8 +54,21 @@ class MainActivity : ComponentActivity() {
     /** True while the system bars are hidden for unobstructed wallpaper viewing (F11). */
     private var isFullscreen by mutableStateOf(false)
     private var lastNightMask = Int.MIN_VALUE
-    private val dropPermissions = mutableListOf<android.view.DragAndDropPermissions>()
     private var hasStartedBefore = false
+
+    // Save as…: the approved rendition is written through the system file picker (Article VI §6).
+    private val exporter by lazy { WallpaperExporter(contentResolver, cacheDir) }
+    private var pendingExport: WallpaperRecord? = null
+    private var exportMimeType = "image/jpeg"
+    private val exportImageLauncher = registerForActivityResult(
+        object : ActivityResultContracts.CreateDocument("*/*") {
+            override fun createIntent(context: Context, input: String): Intent =
+                super.createIntent(context, input).setType(exportMimeType)
+        }
+    ) { uri -> onExportImageTargetChosen(uri) }
+    private val exportAttributionLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri -> onExportAttributionTargetChosen(uri) }
     private val debouncedDisplayRunnable = Runnable {
         notifyDisplaysChangedNow()
     }
@@ -90,6 +111,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         lastNightMask = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        isFullscreen = savedInstanceState?.getBoolean(STATE_FULLSCREEN, false) ?: false
 
         gateway = AndroidSunloomGateway(applicationContext)
         viewModel = ViewModelProvider(
@@ -101,6 +123,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         )[MainViewModel::class.java]
+
+        // A cold start from "Open with" / Share carries the images; a recreate must not re-import them.
+        // Relaunching from Recents re-delivers the original intent with FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY;
+        // that must not import (and apply) the same images a second time.
+        if (savedInstanceState == null && !intent.isFromHistory()) importFromIntent(intent)
 
         setContent {
             val uiState by viewModel.uiState.collectAsState()
@@ -148,6 +175,8 @@ class MainActivity : ComponentActivity() {
                 isFullscreen = isFullscreen,
                 onToggleFullscreen = { applyFullscreen(!isFullscreen) },
                 onDropImages = { dragEvent -> importDroppedImages(dragEvent) },
+                onSaveAs = { saveWallpaperAs(it) },
+                onDeleteManyFromReserve = { viewModel.removeManyFromReserveWithUndo(it) },
                 onPickLocalPhoto = { asBaseline ->
                     pickingAsBaselineRestore = asBaseline
                     photoPickerLauncher.launch(
@@ -161,21 +190,105 @@ class MainActivity : ComponentActivity() {
     /** Imports images dropped from the Files app or another window (each becomes a reserve item). */
     private fun importDroppedImages(dragEvent: DragEvent): Boolean {
         val clip = dragEvent.clipData ?: return false
-        // Cross-app content URIs are only readable while this grant is held.
-        requestDragAndDropPermissions(dragEvent)?.let { dropPermissions.add(it) }
-        var imported = 0
-        for (i in 0 until clip.itemCount) {
-            val uri = clip.getItemAt(i).uri ?: continue
-            val type = contentResolver.getType(uri)
-            if (type != null && !type.startsWith("image/")) continue
-            viewModel.importLocalUri(uri.toString(), asBaselineRestore = false)
-            imported++
+        val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }.filter(::looksLikeImage)
+        if (uris.isEmpty()) return false
+        // Cross-app content URIs are only readable while this grant is held; release it as soon as the
+        // batch finishes so grants never accumulate for the life of the window.
+        val grant = requestDragAndDropPermissions(dragEvent)
+        viewModel.importLocalUris(uris.map { it.toString() }) { grant?.release() }
+        return true
+    }
+
+    /** Imports images delivered by the Share sheet or "Open with" (SEND, SEND_MULTIPLE, VIEW). */
+    private fun importFromIntent(source: Intent?) {
+        val uris = ShareIntentImport.extractImageUris(source).filter(::looksLikeImage)
+        if (uris.isEmpty()) return
+        viewModel.importLocalUris(uris.map { it.toString() })
+    }
+
+    /** MIME is a routing hint only; the L3 payload check is what actually decides (Article VII §4). */
+    private fun looksLikeImage(uri: Uri): Boolean {
+        val type = runCatching { contentResolver.getType(uri) }.getOrNull()
+        return type == null || type.startsWith("image/")
+    }
+
+    private fun saveWallpaperAs(record: WallpaperRecord) {
+        if (!exporter.isExportable(record)) {
+            viewModel.announce(getString(R.string.export_failed))
+            return
         }
-        return imported > 0
+        pendingExport = record
+        exportMimeType = exporter.mimeTypeFor(record)
+        exportImageLauncher.launch(exporter.suggestedImageName(record))
+    }
+
+    private fun onExportImageTargetChosen(uri: Uri?) {
+        val record = pendingExport
+        if (uri == null || record == null) {
+            pendingExport = null
+            return
+        }
+        lifecycleScope.launch {
+            val written = withContext(Dispatchers.IO) { exporter.writeImage(record, uri) }
+            when {
+                !written -> {
+                    pendingExport = null
+                    viewModel.announce(getString(R.string.export_failed))
+                }
+                exporter.requiresAttributionFile(record) -> {
+                    viewModel.announce(getString(R.string.export_attribution_prompt))
+                    exportAttributionLauncher.launch(exporter.suggestedAttributionName(record))
+                }
+                else -> {
+                    pendingExport = null
+                    viewModel.announce(getString(R.string.export_saved))
+                }
+            }
+        }
+    }
+
+    private fun onExportAttributionTargetChosen(uri: Uri?) {
+        val record = pendingExport
+        pendingExport = null
+        if (record == null) return
+        if (uri == null) {
+            // Image already saved; make clear the credit file is still owed for CC BY / CC BY-SA.
+            viewModel.announce(getString(R.string.export_attribution_prompt))
+            return
+        }
+        lifecycleScope.launch {
+            val written = withContext(Dispatchers.IO) { exporter.writeAttribution(record, uri) }
+            viewModel.announce(getString(if (written) R.string.export_saved else R.string.export_failed))
+        }
+    }
+
+    private fun Intent.isFromHistory(): Boolean =
+        flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // singleTask: a second launch focuses this window instead of opening another one.
+        importFromIntent(intent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_FULLSCREEN, isFullscreen)
     }
 
     private fun applyFullscreen(enabled: Boolean) {
         isFullscreen = enabled
+        // Desktop windowing: ask the system to move this window to/from true fullscreen (API 35+).
+        // The immersive bar hiding below remains the behaviour on older releases and on phones.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            runCatching {
+                requestFullscreenMode(
+                    if (enabled) FULLSCREEN_MODE_REQUEST_ENTER else FULLSCREEN_MODE_REQUEST_EXIT,
+                    null
+                )
+            }
+        }
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         if (enabled) {
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -235,6 +348,11 @@ class MainActivity : ComponentActivity() {
                 KeyboardShortcutInfo(getString(R.string.shortcut_go_sources), KeyEvent.KEYCODE_3, KeyEvent.META_CTRL_ON),
                 KeyboardShortcutInfo(getString(R.string.shortcut_go_schedule), KeyEvent.KEYCODE_4, KeyEvent.META_CTRL_ON),
                 KeyboardShortcutInfo(getString(R.string.shortcut_go_storage), KeyEvent.KEYCODE_5, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_dislike), KeyEvent.KEYCODE_DEL, 0),
+                KeyboardShortcutInfo(getString(R.string.shortcut_undo), KeyEvent.KEYCODE_Z, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_copy_attribution), KeyEvent.KEYCODE_C, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_save_as), KeyEvent.KEYCODE_S, KeyEvent.META_CTRL_ON),
+                KeyboardShortcutInfo(getString(R.string.shortcut_open_schedule), KeyEvent.KEYCODE_COMMA, KeyEvent.META_CTRL_ON),
                 KeyboardShortcutInfo(getString(R.string.shortcut_escape), KeyEvent.KEYCODE_ESCAPE, 0)
             )
         )

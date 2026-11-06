@@ -25,6 +25,7 @@ import com.sunloom.app.domain.solar.SolarCalculator
 import com.sunloom.app.platform.GoogleBookPlatformAdapter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -51,8 +52,15 @@ data class PendingDiscard(
     val recordId: String,
     val title: String,
     val kind: DiscardKind,
-    val wasCurrent: Boolean
-)
+    val wasCurrent: Boolean,
+    /** Extra records removed in the same batch (multi-select). Empty for a single Dislike/Remove. */
+    val additionalRecordIds: List<String> = emptyList(),
+    /** The active wallpaper at the time of the action, restored by Undo (may be in [additionalRecordIds]). */
+    val currentRecordId: String? = null
+) {
+    /** Every record hidden from the UI while this action can still be undone. */
+    val allRecordIds: List<String> get() = listOf(recordId) + additionalRecordIds
+}
 
 data class SunloomUiState(
     val activeTab: DesktopNavTab = DesktopNavTab.TODAY_CANVAS,
@@ -84,7 +92,9 @@ data class SunloomUiState(
     val pendingDiscard: PendingDiscard? = null,
     /** True while a wallpaper is being decoded/cropped/applied, so controls can show progress. */
     val isApplyingWallpaper: Boolean = false,
-    val statusBannerMessage: String = "Ready"
+    val statusBannerMessage: String = "Ready",
+    /** Set when the last apply failed in a way that may succeed on a second try; drives the banner's Retry. */
+    val retryApplyRecordId: String? = null
 ) {
     val totalCacheBytesUsed: Long
         get() = if (allCachedBytesUsed >= 0L) allCachedBytesUsed else libraryWallpapers.sumOf { it.fileSizeBytes }
@@ -115,7 +125,8 @@ interface SunloomGateway {
     suspend fun loadInitialSnapshot(): SunloomUiState
     suspend fun savePreferences(preferences: UserPreferences): SunloomUiState
     suspend fun applyWallpaper(recordId: String): SunloomUiState
-    suspend fun applyNextWallpaper(): SunloomUiState
+    /** [excludeIds] are records the caller is about to remove and must not be chosen. */
+    suspend fun applyNextWallpaper(excludeIds: Set<String> = emptySet()): SunloomUiState
     suspend fun applyPreviousWallpaper(): SunloomUiState
     suspend fun restoreBaselineWallpaper(): SunloomUiState
     suspend fun restoreSystemDefaultWallpaper(): SunloomUiState = restoreBaselineWallpaper()
@@ -123,7 +134,8 @@ interface SunloomGateway {
     suspend fun rejectWallpaperForever(recordId: String): SunloomUiState
     suspend fun deleteWallpaperFromReserve(recordId: String): SunloomUiState = rejectWallpaperForever(recordId)
     suspend fun refreshFromInternet(): SunloomUiState
-    suspend fun importLocalUri(uriString: String, asBaselineRestore: Boolean): SunloomUiState
+    /** [applyAfterImport] false adds the image to the reserve without changing the wallpaper (batch imports). */
+    suspend fun importLocalUri(uriString: String, asBaselineRestore: Boolean, applyAfterImport: Boolean = true): SunloomUiState
     suspend fun resetSourceFailureIfTransient(sourceId: String) {}
     suspend fun onDisplaysChanged(): SunloomUiState = loadInitialSnapshot()
     suspend fun forgetRememberedDisplay(key: String): SunloomUiState = loadInitialSnapshot()
@@ -167,8 +179,8 @@ class MainViewModel(
     private fun launchGatewayMutation(
         preserveNavigation: Boolean = true,
         block: suspend (SunloomUiState) -> SunloomUiState
-    ) {
-        viewModelScope.launch(workDispatcher) {
+    ): Job {
+        return viewModelScope.launch(workDispatcher) {
             stateMutex.withLock {
                 val before = _uiState.value
                 val next = block(before)
@@ -214,6 +226,11 @@ class MainViewModel(
         }
     }
 
+    /** Shows a short result message in the status banner (used by one-shot platform actions like export). */
+    fun announce(message: String) {
+        _uiState.value = _uiState.value.copy(statusBannerMessage = message, retryApplyRecordId = null)
+    }
+
     fun selectTab(tab: DesktopNavTab) {
         _uiState.value = _uiState.value.copy(activeTab = tab)
     }
@@ -256,7 +273,8 @@ class MainViewModel(
             } catch (e: Exception) {
                 current.copy(
                     preferences = previous,
-                    statusBannerMessage = "Couldn't save that setting. Your previous choice was kept."
+                    statusBannerMessage = "Couldn't save that setting. Your previous choice was kept.",
+                    retryApplyRecordId = null
                 )
             }
         }
@@ -436,13 +454,49 @@ class MainViewModel(
         beginDiscard(record.id, record.title, DiscardKind.REMOVE)
     }
 
-    private fun beginDiscard(recordId: String, title: String, kind: DiscardKind) {
-        commitPendingDiscard() // only one undoable action at a time; finalize the previous one
-        val wasCurrent = _uiState.value.currentWallpaper?.id == recordId
-        _uiState.value = _uiState.value.copy(
-            pendingDiscard = PendingDiscard(++nextDiscardToken, recordId, title, kind, wasCurrent)
+    /**
+     * Removes several reserve items at once (multi-select) behind a single timed Undo, matching the
+     * single-item flow of Article XII §3. Unknown ids are ignored.
+     */
+    fun removeManyFromReserveWithUndo(recordIds: Collection<String>) {
+        val known = _uiState.value.libraryWallpapers.filter { it.id in recordIds }
+        if (known.isEmpty()) return
+        if (known.size == 1) {
+            beginDiscard(known.first().id, known.first().title, DiscardKind.REMOVE)
+            return
+        }
+        beginDiscard(
+            recordId = known.first().id,
+            title = "${known.size} wallpapers",
+            kind = DiscardKind.REMOVE,
+            additionalRecordIds = known.drop(1).map { it.id }
         )
-        if (wasCurrent) launchGatewayMutation { gateway.applyNextWallpaper() }
+    }
+
+    private fun beginDiscard(
+        recordId: String,
+        title: String,
+        kind: DiscardKind,
+        additionalRecordIds: List<String> = emptyList()
+    ) {
+        commitPendingDiscard() // only one undoable action at a time; finalize the previous one
+        val currentId = _uiState.value.currentWallpaper?.id
+        val wasCurrent = currentId != null && (currentId == recordId || currentId in additionalRecordIds)
+        _uiState.value = _uiState.value.copy(
+            pendingDiscard = PendingDiscard(
+                token = ++nextDiscardToken,
+                recordId = recordId,
+                title = title,
+                kind = kind,
+                wasCurrent = wasCurrent,
+                additionalRecordIds = additionalRecordIds,
+                currentRecordId = currentId
+            )
+        )
+        if (wasCurrent) {
+            val hidden = (listOf(recordId) + additionalRecordIds).toSet()
+            launchGatewayMutation { gateway.applyNextWallpaper(hidden) }
+        }
     }
 
     /** Finalizes the pending Dislike/Remove (snackbar timed out, new action started, or app stopped). */
@@ -451,7 +505,11 @@ class MainViewModel(
         _uiState.value = _uiState.value.copy(pendingDiscard = null)
         when (pending.kind) {
             DiscardKind.DISLIKE -> launchGatewayMutation { gateway.rejectWallpaperForever(pending.recordId) }
-            DiscardKind.REMOVE -> launchGatewayMutation { gateway.deleteWallpaperFromReserve(pending.recordId) }
+            DiscardKind.REMOVE -> launchGatewayMutation { current ->
+                var state = current
+                for (id in pending.allRecordIds) state = gateway.deleteWallpaperFromReserve(id)
+                state
+            }
         }
     }
 
@@ -460,7 +518,7 @@ class MainViewModel(
         val pending = _uiState.value.pendingDiscard ?: return
         _uiState.value = _uiState.value.copy(pendingDiscard = null)
         if (pending.wasCurrent) {
-            launchGatewayMutation { gateway.applyWallpaper(pending.recordId) }
+            launchGatewayMutation { gateway.applyWallpaper(pending.currentRecordId ?: pending.recordId) }
         }
     }
 
@@ -482,9 +540,11 @@ class MainViewModel(
         val prevTab = _uiState.value.activeTab
         val prevOverlay = _uiState.value.showLegibilityZonesOverlay
         val prevBanner = _uiState.value.statusBannerMessage
+        val prevRetry = _uiState.value.retryApplyRecordId
         _uiState.value = _uiState.value.copy(
             isSyncingOnline = true,
-            statusBannerMessage = "Fetching high-resolution wallpapers from online catalogs..."
+            statusBannerMessage = "Fetching high-resolution wallpapers from online catalogs...",
+            retryApplyRecordId = null
         )
         try {
             val refreshed = withContext(workDispatcher) {
@@ -501,13 +561,15 @@ class MainViewModel(
         } catch (cancel: CancellationException) {
             _uiState.value = _uiState.value.copy(
                 isSyncingOnline = false,
-                statusBannerMessage = prevBanner
+                statusBannerMessage = prevBanner,
+                retryApplyRecordId = prevRetry
             )
             throw cancel
         } catch (t: Throwable) {
             _uiState.value = _uiState.value.copy(
                 isSyncingOnline = false,
-                statusBannerMessage = "Online sync interrupted: ${t.message ?: "check connection"}"
+                statusBannerMessage = "Online sync interrupted: ${t.message ?: "check connection"}",
+                retryApplyRecordId = null
             )
         } finally {
             if (_uiState.value.isSyncingOnline) {
@@ -519,6 +581,33 @@ class MainViewModel(
 
     fun importLocalUri(uriString: String, asBaselineRestore: Boolean) {
         launchGatewayMutation { gateway.importLocalUri(uriString, asBaselineRestore) }
+    }
+
+    /**
+     * Imports several user-provided images (drag-and-drop, Share sheet, Open with) in one serialized
+     * mutation. Each URI still goes through the full L3-L5 import pipeline; [onFinished] runs when the
+     * batch ends (success or failure) so callers can release one-shot URI grants.
+     */
+    fun importLocalUris(uriStrings: List<String>, onFinished: () -> Unit = {}) {
+        if (uriStrings.isEmpty()) {
+            onFinished()
+            return
+        }
+        launchGatewayMutation { current ->
+            var state = current
+            // One image behaves like the picker (imported and applied). A batch only fills the reserve:
+            // changing the system wallpaper once per image would flash through all of them.
+            val applyAfterImport = uriStrings.size == 1
+            for (uri in uriStrings) {
+                state = gateway.importLocalUri(uri, false, applyAfterImport)
+            }
+            if (uriStrings.size > 1) {
+                state = state.copy(
+                    statusBannerMessage = "Checked ${uriStrings.size} images — approved ones are in your reserve."
+                )
+            }
+            state
+        }.invokeOnCompletion { onFinished() }
     }
 
     /**
@@ -891,22 +980,32 @@ class AndroidSunloomGateway(
                 preloadedPrefs = prefs
             )
         } else {
+            // Say what happened in plain words (Article V §2). Only a temporary failure is worth retrying;
+            // an unsupported host will refuse again, so it gets an explanation instead of a button.
+            val retryable = status == WallpaperStatus.FAILED_TEMPORARILY
             buildSnapshot(
                 repo = repo,
-                bannerMessage = "Status: ${status.label} while applying '${record.title}'",
-                preloadedPrefs = prefs
+                bannerMessage = when (status) {
+                    WallpaperStatus.FAILED_TEMPORARILY ->
+                        "Couldn't set '${record.title}' just now. Your current wallpaper is unchanged."
+                    WallpaperStatus.UNSUPPORTED_BY_SYSTEM ->
+                        "This system doesn't allow Sunloom to change the wallpaper."
+                    else -> "Status: ${status.label} while applying '${record.title}'"
+                },
+                preloadedPrefs = prefs,
+                retryApplyRecordId = record.id.takeIf { retryable }
             )
         }
     }
 
-    override suspend fun applyNextWallpaper(): SunloomUiState = withGatewayIo { repo ->
-        applyNextInternal(repo)
+    override suspend fun applyNextWallpaper(excludeIds: Set<String>): SunloomUiState = withGatewayIo { repo ->
+        applyNextInternal(repo, excludeIds)
     }
 
-    private fun applyNextInternal(repo: LocalLibraryRepository): SunloomUiState {
+    private fun applyNextInternal(repo: LocalLibraryRepository, excludeIds: Set<String> = emptySet()): SunloomUiState {
         val prefs = repo.loadPreferences()
         val all = repo.getAllWallpapers()
-        val activePool = filterActiveLibraryPool(all, prefs)
+        val activePool = filterActiveLibraryPool(all, prefs).filter { it.id !in excludeIds }
         val solarSnapshot = solarCalculator.resolveSolarSnapshot(
             preferences = prefs,
             isSystemInDarkTheme = isSystemInDarkTheme()
@@ -976,7 +1075,8 @@ class AndroidSunloomGateway(
         }
         val nextState = applyNextInternal(repo)
         nextState.copy(
-            statusBannerMessage = "Disliked '${current.title}' and switched to '${nextState.currentWallpaper?.title ?: "next wallpaper"}'"
+            statusBannerMessage = "Disliked '${current.title}' and switched to '${nextState.currentWallpaper?.title ?: "next wallpaper"}'",
+            retryApplyRecordId = null
         )
     }
 
@@ -987,7 +1087,8 @@ class AndroidSunloomGateway(
         if (wasActive) {
             val nextState = applyNextInternal(repo)
             nextState.copy(
-                statusBannerMessage = "Deleted '${target.title}' from reserve"
+                statusBannerMessage = "Deleted '${target.title}' from reserve",
+                retryApplyRecordId = null
             )
         } else {
             buildSnapshot(repo, "Deleted '${target.title}' from reserve")
@@ -1033,7 +1134,7 @@ class AndroidSunloomGateway(
         }
     }
 
-    override suspend fun importLocalUri(uriString: String, asBaselineRestore: Boolean): SunloomUiState = withGatewayIo { repo ->
+    override suspend fun importLocalUri(uriString: String, asBaselineRestore: Boolean, applyAfterImport: Boolean): SunloomUiState = withGatewayIo { repo ->
         val display = platformAdapter.getPrimaryOrSharpestDisplayOrNull()
             ?: return@withGatewayIo buildSnapshot(repo, "Display dimensions unknown — waiting for an active display.")
         val uri = uriString.toUri()
@@ -1041,6 +1142,8 @@ class AndroidSunloomGateway(
             ?: return@withGatewayIo buildSnapshot(repo, "Could not import selected image (check format, bounds, or blocklist).")
         if (asBaselineRestore) {
             buildSnapshot(repo, "Saved '${record.title}' as your permanent Original Wallpaper Restore Point.")
+        } else if (!applyAfterImport) {
+            buildSnapshot(repo, "Added '${record.title}' to your reserve.")
         } else {
             applyWallpaperInternal(repo, record.id)
         }
@@ -1070,7 +1173,8 @@ class AndroidSunloomGateway(
     private fun buildSnapshot(
         repo: LocalLibraryRepository,
         bannerMessage: String,
-        preloadedPrefs: UserPreferences? = null
+        preloadedPrefs: UserPreferences? = null,
+        retryApplyRecordId: String? = null
     ): SunloomUiState {
         val prefs = preloadedPrefs ?: repo.loadPreferences()
         val caps = platformAdapter.probeCapabilities(prefs.displayPolicy)
@@ -1123,7 +1227,8 @@ class AndroidSunloomGateway(
             sourceDiagnostics = repo.getSourceDiagnostics(),
             targetBrightnessNow = targetBrightness,
             daylightWindow = daylight,
-            statusBannerMessage = bannerMessage
+            statusBannerMessage = bannerMessage,
+            retryApplyRecordId = retryApplyRecordId
         )
     }
 }

@@ -15,6 +15,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -50,6 +54,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -140,7 +145,7 @@ internal fun TodayCanvasPane(
 ) {
     val current = uiState.currentWallpaper
     val scrollState = rememberScrollState()
-    var showAbout by remember { mutableStateOf(false) }
+    var showAbout by rememberSaveable { mutableStateOf(false) }
     val restricted = uiState.isWallpaperChangeRestricted
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -153,6 +158,7 @@ internal fun TodayCanvasPane(
                 if (restricted) {
                     HostRestrictionNotice()
                 }
+                val actions = LocalWallpaperActions.current
                 ContextMenuHost(
                     modifier = Modifier.fillMaxWidth(),
                     focusShape = RoundedCornerShape(16.dp),
@@ -169,6 +175,12 @@ internal fun TodayCanvasPane(
                                 "ctx_keep"
                             ) { dismiss(); onToggleKeep() }
                             ContextMenuItem("About this image\u2026", "ctx_about") { dismiss(); showAbout = true }
+                            ContextMenuItem(stringResource(R.string.copy_attribution), "ctx_copy_attribution") {
+                                dismiss(); actions.copyAttribution(current)
+                            }
+                            ContextMenuItem(stringResource(R.string.save_wallpaper_as), "ctx_save_as") {
+                                dismiss(); actions.saveAs(current)
+                            }
                             if (!restricted) {
                                 ContextMenuItem(stringResource(R.string.restore_original_wallpaper), "ctx_restore") { dismiss(); onRestoreOriginal() }
                             }
@@ -218,13 +230,23 @@ internal fun TodayCanvasPane(
 
                             if (current != null) {
                                 val previewAspect = primaryDisplayAspect(uiState, 0.75f, 2.6f)
-                                WallpaperPreviewSurface(
-                                    record = current,
-                                    showLegibilityZones = uiState.showLegibilityZonesOverlay,
+                                val zoomState = remember(current.id) { mutableStateOf(ZoomState()) }
+                                val previewDescription = stringResource(R.string.today_preview_description)
+                                Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .aspectRatio(previewAspect)
-                                )
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .zoomablePreview(zoomState)
+                                        .semantics { contentDescription = previewDescription }
+                                        .testTag("today_preview")
+                                ) {
+                                    WallpaperPreviewSurface(
+                                        record = current,
+                                        showLegibilityZones = uiState.showLegibilityZonesOverlay,
+                                        modifier = Modifier.fillMaxSize().applyZoom(zoomState.value)
+                                    )
+                                }
                             }
 
                             Row(
@@ -362,21 +384,29 @@ internal fun TodayCanvasPane(
             .fillMaxSize()
             .desktopScrollbar(scrollState)
             .verticalScroll(scrollState)
-        if (stacked) {
-            Column(
-                modifier = scrollingModifier,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                previewColumn(Modifier.fillMaxWidth())
-                provenanceCard(Modifier.fillMaxWidth())
-            }
-        } else {
-            Row(
-                modifier = scrollingModifier.testTag("today_side_by_side"),
-                horizontalArrangement = Arrangement.spacedBy(18.dp)
-            ) {
-                previewColumn(Modifier.weight(1.35f))
-                provenanceCard(Modifier.weight(1f))
+        // The scroll container (and its scrollbar) spans the window; only the content is capped and
+        // centred so an ultra-wide display does not stretch the preview and cards across the screen.
+        val contentModifier = Modifier
+            .wrapContentWidth(Alignment.CenterHorizontally)
+            .widthIn(max = TodayCanvasMaxWidth)
+            .fillMaxWidth()
+        Box(modifier = scrollingModifier) {
+            if (stacked) {
+                Column(
+                    modifier = contentModifier,
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    previewColumn(Modifier.fillMaxWidth())
+                    provenanceCard(Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(
+                    modifier = contentModifier.testTag("today_side_by_side"),
+                    horizontalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    previewColumn(Modifier.weight(1.35f))
+                    provenanceCard(Modifier.weight(1f))
+                }
             }
         }
     }
@@ -442,6 +472,8 @@ internal fun ProvenanceRow(label: String, value: String) {
 @Composable
 internal fun ProvenanceLinkRow(label: String, displayText: String, url: String) {
     val uriHandler = LocalUriHandler.current
+    val actions = LocalWallpaperActions.current
+    val noBrowserMessage = stringResource(R.string.no_browser_for_link)
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         TooltipBox(
@@ -461,8 +493,11 @@ internal fun ProvenanceLinkRow(label: String, displayText: String, url: String) 
                 modifier = Modifier
                     .testTag("source_page_link")
                     .then(if (url.startsWith("https://")) Modifier.handCursor() else Modifier)
-                    .desktopFocusRing(RoundedCornerShape(4.dp))
-                    // Grow the hit area to a comfortable 48dp target (Fitts) without changing the text.
+                    // The 48dp target IS the visual: the focus ring and hover tint are drawn by modifiers
+                    // OUTSIDE minimumInteractiveComponentSize, so they wrap the whole hit area and the
+                    // cursor target matches what the user sees (Cursor_Target_Size).
+                    .desktopFocusRing(RoundedCornerShape(8.dp))
+                    .then(if (url.startsWith("https://")) Modifier.desktopHover(RoundedCornerShape(8.dp)) else Modifier)
                     .minimumInteractiveComponentSize()
                     .clickable(
                         enabled = url.startsWith("https://"),
@@ -470,7 +505,9 @@ internal fun ProvenanceLinkRow(label: String, displayText: String, url: String) 
                         role = androidx.compose.ui.semantics.Role.Button
                     ) {
                         if (url.startsWith("https://")) {
+                            // No browser installed (or the host blocks it): say so instead of failing silently.
                             runCatching { uriHandler.openUri(url) }
+                                .onFailure { actions.showMessage(noBrowserMessage) }
                         }
                     }
             )

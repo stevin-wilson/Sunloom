@@ -75,7 +75,8 @@ internal fun DiagnosticsPane(
                             selected = uiState.showLegibilityZonesOverlay,
                             onClick = onToggleLegibilityOverlay,
                             leadingIcon = { Icon(SunloomIcons.Visibility, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                            label = { Text(stringResource(R.string.legibility_overlay)) }
+                            label = { Text(stringResource(R.string.legibility_overlay)) },
+                            modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
                         )
                     }
                     LinearProgressIndicator(
@@ -88,7 +89,7 @@ internal fun DiagnosticsPane(
                             FilterChip(
                                 selected = uiState.preferences.maxCacheBytes == bytes,
                                 onClick = { onUpdateMaxCacheBytes(bytes) },
-                                label = { Text("$mb MB cap") }
+                                label = { Text("$mb MB cap") }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
                             )
                         }
                     }

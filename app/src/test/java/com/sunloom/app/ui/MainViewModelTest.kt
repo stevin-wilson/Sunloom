@@ -54,7 +54,13 @@ class MainViewModelTest {
             return state
         }
 
-        override suspend fun applyNextWallpaper(): SunloomUiState = applyWallpaper("seed-2")
+        var lastExcludeIds: Set<String>? = null
+        val importApplyFlags = mutableListOf<Boolean>()
+
+        override suspend fun applyNextWallpaper(excludeIds: Set<String>): SunloomUiState {
+            lastExcludeIds = excludeIds
+            return applyWallpaper("seed-2")
+        }
         override suspend fun applyPreviousWallpaper(): SunloomUiState = applyWallpaper(state.previousWallpaperId ?: "seed-1")
         override suspend fun restoreBaselineWallpaper(): SunloomUiState = applyWallpaper("seed-1")
 
@@ -88,7 +94,8 @@ class MainViewModelTest {
             return state
         }
 
-        override suspend fun importLocalUri(uriString: String, asBaselineRestore: Boolean): SunloomUiState {
+        override suspend fun importLocalUri(uriString: String, asBaselineRestore: Boolean, applyAfterImport: Boolean): SunloomUiState {
+            importApplyFlags += applyAfterImport
             state = state.copy(statusBannerMessage = "Imported $uriString")
             return state
         }
@@ -280,6 +287,49 @@ class MainViewModelTest {
         // seed-2 removal was committed; seed-1 dislike is now the pending one.
         assertEquals("seed-1", viewModel.uiState.value.pendingDiscard?.recordId)
         assertFalse(viewModel.uiState.value.libraryWallpapers.any { it.id == "seed-2" })
+    }
+
+    @Test
+    fun `removing several reserve items shares one undo and finalizes them together`() {
+        viewModel.removeManyFromReserveWithUndo(listOf("seed-1", "seed-2"))
+        val pending = viewModel.uiState.value.pendingDiscard
+        assertEquals(setOf("seed-1", "seed-2"), pending?.allRecordIds?.toSet())
+        assertEquals("2 wallpapers", pending?.title)
+        // Nothing is deleted until the undo window ends.
+        assertEquals(2, viewModel.uiState.value.libraryWallpapers.size)
+
+        viewModel.commitPendingDiscard()
+        assertEquals(0, viewModel.uiState.value.libraryWallpapers.size)
+    }
+
+    @Test
+    fun `removing the active item never picks another item that is also being removed`() {
+        viewModel.removeManyFromReserveWithUndo(listOf("seed-1", "seed-2"))
+        assertEquals(setOf("seed-1", "seed-2"), fakeGateway.lastExcludeIds)
+    }
+
+    @Test
+    fun `a batch import only fills the reserve while a single import applies`() {
+        viewModel.importLocalUris(listOf("content://a/1"))
+        viewModel.importLocalUris(listOf("content://a/2", "content://a/3"))
+        assertEquals(listOf(true, false, false), fakeGateway.importApplyFlags)
+    }
+
+    @Test
+    fun `undoing a batch removal restores the wallpaper that was active`() {
+        viewModel.removeManyFromReserveWithUndo(listOf("seed-2", "seed-1"))
+        // seed-1 was active, so the app moved on; undo must bring seed-1 back even though it is not the first id.
+        viewModel.undoPendingDiscard()
+        assertEquals(null, viewModel.uiState.value.pendingDiscard)
+        assertEquals("seed-1", viewModel.uiState.value.currentWallpaper?.id)
+        assertEquals(2, viewModel.uiState.value.libraryWallpapers.size)
+    }
+
+    @Test
+    fun `removing a single id through the batch api behaves like a normal removal`() {
+        viewModel.removeManyFromReserveWithUndo(listOf("seed-2"))
+        assertEquals("seed-2", viewModel.uiState.value.pendingDiscard?.recordId)
+        assertEquals(emptyList<String>(), viewModel.uiState.value.pendingDiscard?.additionalRecordIds)
     }
 
     @Test

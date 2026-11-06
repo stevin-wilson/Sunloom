@@ -95,7 +95,7 @@ internal fun DisplaysAndSchedulePane(
                         FilterChip(
                             selected = uiState.preferences.scheduleMode == mode,
                             onClick = { onUpdateScheduleMode(mode) },
-                            label = { Text(mode.label) }
+                            label = { Text(mode.label) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
                         )
                     }
                 }
@@ -113,7 +113,7 @@ internal fun DisplaysAndSchedulePane(
                     FilterChip(
                         selected = showCustomCoords,
                         onClick = { showCustomCoords = !showCustomCoords },
-                        label = { Text(stringResource(R.string.custom_coordinates)) }
+                        label = { Text(stringResource(R.string.custom_coordinates)) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
                     )
                     if (showCustomCoords) {
                         val latError = coordinateError(customLatText, -90.0, 90.0)
@@ -159,7 +159,7 @@ internal fun DisplaysAndSchedulePane(
                                 },
                                 enabled = latError == null && lonError == null &&
                                     customLatText.isNotBlank() && customLonText.isNotBlank(),
-                                modifier = Modifier.testTag("apply_custom_coords_button")
+                                modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("apply_custom_coords_button")
                             ) {
                                 Text(stringResource(R.string.apply))
                             }
@@ -177,7 +177,7 @@ internal fun DisplaysAndSchedulePane(
                             FilterChip(
                                 selected = uiState.preferences.fixedLightHour == lHour && uiState.preferences.fixedDarkHour == dHour,
                                 onClick = { onUpdateFixedHours(lHour, dHour) },
-                                label = { Text("${lHour}:00 / ${dHour}:00") }
+                                label = { Text("${lHour}:00 / ${dHour}:00") }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
                             )
                         }
                     }
@@ -236,7 +236,7 @@ internal fun DisplaysAndSchedulePane(
                             FilterChip(
                                 selected = uiState.preferences.displayPolicy == policy,
                                 onClick = { onUpdateDisplayPolicy(policy) },
-                                label = { Text(shortText) }
+                                label = { Text(shortText) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
                             )
                         }
                     }
@@ -264,7 +264,7 @@ internal fun DisplaysAndSchedulePane(
                             )
                             TextButton(
                                 onClick = { onForgetRememberedDisplay(rec.key) },
-                                modifier = Modifier.testTag("forget_display_${rec.key}")
+                                modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("forget_display_${rec.key}")
                             ) {
                                 Text(stringResource(R.string.forget))
                             }
@@ -281,7 +281,7 @@ internal fun DisplaysAndSchedulePane(
                         FilterChip(
                             selected = uiState.preferences.lockWorkspacePolicy == policy,
                             onClick = { onUpdateLockPolicy(policy) },
-                            label = { Text(policy.label) }
+                            label = { Text(policy.label) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
                         )
                     }
                 }
@@ -303,17 +303,17 @@ internal fun DisplaysAndSchedulePane(
                     }
                     Switch(
                         checked = uiState.preferences.allowBlurredFrameFill,
-                        onCheckedChange = onToggleBlurredFill
+                        onCheckedChange = onToggleBlurredFill, modifier = Modifier.desktopControl(RoundedCornerShape(50))
                     )
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = onReopenSetup) {
+                    OutlinedButton(onClick = onReopenSetup, modifier = Modifier.desktopControl(RoundedCornerShape(50))) {
                         Text(stringResource(R.string.setup_guide))
                     }
                     OutlinedButton(
                         onClick = { showResetConfirm = true },
-                        modifier = Modifier.testTag("restore_system_default_button")
+                        modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("restore_system_default_button")
                     ) {
                         Icon(SunloomIcons.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
