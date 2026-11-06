@@ -12,6 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -25,12 +26,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -109,187 +112,279 @@ internal fun TodayCanvasPane(
     onPreviousWallpaper: () -> Unit,
     onToggleKeep: () -> Unit,
     onRequestRejectConfirm: () -> Unit,
-    onRestoreOriginal: () -> Unit
+    onRestoreOriginal: () -> Unit,
+    isFullscreen: Boolean = false,
+    onToggleFullscreen: () -> Unit = {}
 ) {
     val current = uiState.currentWallpaper
     val scrollState = rememberScrollState()
+    var showAbout by remember { mutableStateOf(false) }
+    val restricted = uiState.isWallpaperChangeRestricted
 
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState),
-        horizontalArrangement = Arrangement.spacedBy(18.dp)
-    ) {
-        Column(
-            modifier = Modifier.weight(1.35f),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val stacked = maxWidth < TodayCanvasStackBreakpoint
+        val previewColumn: @Composable (Modifier) -> Unit = { columnModifier ->
+            Column(
+                modifier = columnModifier,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                if (restricted) {
+                    HostRestrictionNotice()
+                }
+                ContextMenuHost(
+                    modifier = Modifier.fillMaxWidth(),
+                    focusShape = RoundedCornerShape(16.dp),
+                    menuContent = { dismiss ->
+                        if (current != null) {
+                            if (!restricted) {
+                                ContextMenuItem("Next wallpaper", "ctx_next") { dismiss(); onNextWallpaper() }
+                            }
+                            if (uiState.previousWallpaperId != null && !restricted) {
+                                ContextMenuItem("Previous wallpaper", "ctx_previous") { dismiss(); onPreviousWallpaper() }
+                            }
+                            ContextMenuItem(
+                                if (current.isFavorite) "Remove from favorites" else "Add to favorites",
+                                "ctx_keep"
+                            ) { dismiss(); onToggleKeep() }
+                            ContextMenuItem("About this image\u2026", "ctx_about") { dismiss(); showAbout = true }
+                            if (!restricted) {
+                                ContextMenuItem("Restore original wallpaper", "ctx_restore") { dismiss(); onRestoreOriginal() }
+                            }
+                            HorizontalDivider()
+                            ContextMenuItem("Dislike and exclude\u2026", "ctx_dislike", destructive = true) {
+                                dismiss()
+                                onRequestRejectConfirm()
+                            }
+                        }
+                    }
+                ) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                TruncatedTitleWithTooltip(
+                                    title = current?.title ?: "No Wallpaper Selected",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                if (current != null) {
+                                    Text(
+                                        text = "${current.category.displayName} • ${current.provenance.sourceName}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            if (current != null) {
+                                val previewAspect = primaryDisplayAspect(uiState, 0.75f, 2.6f)
+                                WallpaperPreviewSurface(
+                                    record = current,
+                                    showLegibilityZones = uiState.showLegibilityZonesOverlay,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(previewAspect)
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    ShortcutTooltip(if (restricted) HostRestrictedTooltip else "Next wallpaper", if (restricted) null else "N") {
+                                        Button(
+                                            onClick = onNextWallpaper,
+                                            enabled = !uiState.isSyncingOnline && !restricted,
+                                            modifier = Modifier.desktopControl().testTag("next_wallpaper_button")
+                                        ) {
+                                            Icon(
+                                                imageVector = if (uiState.isSyncingOnline) SunloomIcons.Refresh else SunloomIcons.SkipNext,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(if (uiState.isSyncingOnline) "Updating..." else "Next")
+                                        }
+                                    }
+
+                                    ShortcutTooltip(if (restricted) HostRestrictedTooltip else "Previous wallpaper", if (restricted) null else "P") {
+                                        OutlinedButton(
+                                            onClick = onPreviousWallpaper,
+                                            enabled = uiState.previousWallpaperId != null && !restricted,
+                                            modifier = Modifier.desktopControl().testTag("previous_wallpaper_button")
+                                        ) {
+                                            Icon(SunloomIcons.SkipPrevious, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Previous")
+                                        }
+                                    }
+
+                                    ShortcutTooltip(
+                                        if (current?.isFavorite == true) "Remove from favorites" else "Keep in favorites",
+                                        "K"
+                                    ) {
+                                        OutlinedIconButton(
+                                            onClick = onToggleKeep,
+                                            modifier = Modifier.desktopControl(CircleShape).testTag("keep_wallpaper_button")
+                                        ) {
+                                            Icon(
+                                                imageVector = if (current?.isFavorite == true) SunloomIcons.Favorite else SunloomIcons.FavoriteBorder,
+                                                contentDescription = if (current?.isFavorite == true) "Remove from favorites" else "Add to favorites",
+                                                tint = if (current?.isFavorite == true) Color(0xFFF43F5E) else MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    ShortcutTooltip(if (restricted) HostRestrictedTooltip else "Restore original wallpaper") {
+                                        OutlinedButton(
+                                            onClick = onRestoreOriginal,
+                                            enabled = !restricted,
+                                            modifier = Modifier.desktopControl().testTag("restore_original_button")
+                                        ) {
+                                            Icon(SunloomIcons.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Restore")
+                                        }
+                                    }
+
+                                    ShortcutTooltip(if (isFullscreen) "Exit fullscreen" else "View fullscreen", "F11") {
+                                    OutlinedIconButton(
+                                        onClick = onToggleFullscreen,
+                                        modifier = Modifier.desktopControl(CircleShape).testTag("fullscreen_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isFullscreen) SunloomIcons.FullscreenExit else SunloomIcons.Fullscreen,
+                                            contentDescription = if (isFullscreen) "Exit fullscreen" else "View fullscreen",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+
+                                ShortcutTooltip("Dislike and exclude", "Del") {
+                                        OutlinedIconButton(
+                                            onClick = onRequestRejectConfirm,
+                                            modifier = Modifier.desktopControl(CircleShape).testTag("reject_wallpaper_button")
+                                        ) {
+                                            Icon(
+                                                imageVector = SunloomIcons.ThumbDown,
+                                                contentDescription = "Dislike wallpaper",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        val provenanceCard: @Composable (Modifier) -> Unit = { cardModifier ->
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = cardModifier
             ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        TruncatedTitleWithTooltip(
-                            title = current?.title ?: "No Wallpaper Selected",
-                            style = MaterialTheme.typography.titleLarge,
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(SunloomIcons.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = "About this wallpaper",
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        if (current != null) {
-                            Text(
-                                text = "${current.category.displayName} • ${current.provenance.sourceName}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
                     }
 
                     if (current != null) {
-                        val activeDisplay = uiState.capabilities.connectedDisplays
-                            .maxByOrNull { it.widthPx.toLong() * it.heightPx.toLong() }
-                        val previewAspect = (activeDisplay?.aspectRatio?.toFloat() ?: (16f / 10f))
-                            .coerceIn(0.75f, 2.6f)
-                        WallpaperPreviewSurface(
-                            record = current,
-                            showLegibilityZones = uiState.showLegibilityZonesOverlay,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(previewAspect)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Button(
-                                onClick = onNextWallpaper,
-                                enabled = !uiState.isSyncingOnline,
-                                modifier = Modifier.testTag("next_wallpaper_button")
-                            ) {
-                                Icon(
-                                    imageVector = if (uiState.isSyncingOnline) SunloomIcons.Refresh else SunloomIcons.SkipNext,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(if (uiState.isSyncingOnline) "Updating..." else "Next")
-                            }
-
-                            OutlinedButton(
-                                onClick = onPreviousWallpaper,
-                                enabled = uiState.previousWallpaperId != null,
-                                modifier = Modifier.testTag("previous_wallpaper_button")
-                            ) {
-                                Icon(SunloomIcons.SkipPrevious, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Previous")
-                            }
-
-                            OutlinedIconButton(
-                                onClick = onToggleKeep,
-                                modifier = Modifier.testTag("keep_wallpaper_button")
-                            ) {
-                                Icon(
-                                    imageVector = if (current?.isFavorite == true) SunloomIcons.Favorite else SunloomIcons.FavoriteBorder,
-                                    contentDescription = if (current?.isFavorite == true) "Remove from favorites" else "Add to favorites",
-                                    tint = if (current?.isFavorite == true) Color(0xFFF43F5E) else MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = onRestoreOriginal,
-                                modifier = Modifier.testTag("restore_original_button")
-                            ) {
-                                Icon(SunloomIcons.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Restore")
-                            }
-
-                            OutlinedIconButton(
-                                onClick = onRequestRejectConfirm,
-                                modifier = Modifier.testTag("reject_wallpaper_button")
-                            ) {
-                                Icon(
-                                    imageVector = SunloomIcons.ThumbDown,
-                                    contentDescription = "Dislike wallpaper",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
+                        ProvenanceDetails(current)
                     }
                 }
             }
         }
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.weight(1f)
-        ) {
+        val scrollingModifier = Modifier
+            .fillMaxSize()
+            .desktopScrollbar(scrollState)
+            .verticalScroll(scrollState)
+        if (stacked) {
             Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = scrollingModifier,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(SunloomIcons.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Text(
-                        text = "About this wallpaper",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                if (current != null) {
-                    ProvenanceRow("Creator", current.provenance.creatorName)
-                    ProvenanceRow("Source", current.provenance.sourceName)
-                    val licenseLabel = if (current.provenance.licenseVersion.isNotBlank()) {
-                        "${current.provenance.licenseType.label} (v${current.provenance.licenseVersion})"
-                    } else {
-                        current.provenance.licenseType.label
-                    }
-                    if (current.provenance.licenseUrl.isNotBlank()) {
-                        ProvenanceLinkRow(
-                            label = "License",
-                            displayText = licenseLabel,
-                            url = current.provenance.licenseUrl
-                        )
-                    } else {
-                        ProvenanceRow("License", licenseLabel)
-                    }
-                    if (current.provenance.originalPageUrl.isNotBlank()) {
-                        ProvenanceLinkRow(
-                            label = "Source page",
-                            displayText = current.provenance.originalPageUrl,
-                            url = current.provenance.originalPageUrl
-                        )
-                    } else {
-                        ProvenanceRow("Origin", "On-device")
-                    }
-                    ProvenanceRow(
-                        "Fit & Resolution",
-                        "Cropped without stretching (${current.provenance.originalWidth} × ${current.provenance.originalHeight} → ${current.provenance.renditionWidth} × ${current.provenance.renditionHeight})"
-                    )
-                }
+                previewColumn(Modifier.fillMaxWidth())
+                provenanceCard(Modifier.fillMaxWidth())
+            }
+        } else {
+            Row(
+                modifier = scrollingModifier.testTag("today_side_by_side"),
+                horizontalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                previewColumn(Modifier.weight(1.35f))
+                provenanceCard(Modifier.weight(1f))
             }
         }
+    }
+
+    if (showAbout && current != null) {
+        WallpaperAboutDialog(record = current, onDismiss = { showAbout = false })
+    }
+}
+
+/** Creator, source, license, origin and fit details for one wallpaper. */
+@Composable
+internal fun ProvenanceDetails(current: WallpaperRecord) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    ProvenanceRow("Creator", current.provenance.creatorName)
+    ProvenanceRow("Source", current.provenance.sourceName)
+    val licenseLabel = if (current.provenance.licenseVersion.isNotBlank()) {
+        "${current.provenance.licenseType.label} (v${current.provenance.licenseVersion})"
+    } else {
+        current.provenance.licenseType.label
+    }
+    if (current.provenance.licenseUrl.isNotBlank()) {
+        ProvenanceLinkRow(
+            label = "License",
+            displayText = licenseLabel,
+            url = current.provenance.licenseUrl
+        )
+    } else {
+        ProvenanceRow("License", licenseLabel)
+    }
+    if (current.provenance.originalPageUrl.isNotBlank()) {
+        ProvenanceLinkRow(
+            label = "Source page",
+            displayText = current.provenance.originalPageUrl,
+            url = current.provenance.originalPageUrl
+        )
+    } else {
+        ProvenanceRow("Origin", "On-device")
+    }
+    ProvenanceRow(
+        "Fit & Resolution",
+        "Cropped without stretching (${current.provenance.originalWidth} × ${current.provenance.originalHeight} → ${current.provenance.renditionWidth} × ${current.provenance.renditionHeight})"
+    )
     }
 }
 
@@ -331,6 +426,8 @@ internal fun ProvenanceLinkRow(label: String, displayText: String, url: String) 
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .testTag("source_page_link")
+                    .then(if (url.startsWith("https://")) Modifier.handCursor() else Modifier)
+                    .desktopFocusRing(RoundedCornerShape(4.dp))
                     .clickable(enabled = url.startsWith("https://")) {
                         if (url.startsWith("https://")) {
                             runCatching { uriHandler.openUri(url) }
@@ -421,6 +518,49 @@ fun WallpaperPreviewSurface(
                     color = Color.White
                 )
             }
+        }
+    }
+}
+
+/** True once capabilities are probed and the host forbids changing the system wallpaper. */
+internal val SunloomUiState.isWallpaperChangeRestricted: Boolean
+    get() = !isInitialLoading && (!capabilities.isWallpaperSupported || !capabilities.isSetWallpaperAllowed)
+
+internal const val HostRestrictedTooltip = "Unavailable: system wallpaper changes are restricted on this device"
+
+internal const val HostRestrictionMessage =
+    "System wallpaper changes are restricted by this device's host environment. " +
+        "You can still browse and preview wallpapers in your reserve."
+
+/** Aspect ratio (w/h) of the largest connected display, defaulting to 16:10, clamped to [min, max]. */
+internal fun primaryDisplayAspect(uiState: SunloomUiState, min: Float, max: Float): Float {
+    val display = uiState.capabilities.connectedDisplays
+        .maxByOrNull { it.widthPx.toLong() * it.heightPx.toLong() }
+    return (display?.aspectRatio?.toFloat() ?: (16f / 10f)).coerceIn(min, max)
+}
+
+@Composable
+internal fun HostRestrictionNotice() {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().testTag("host_restriction_notice")
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                SunloomIcons.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Text(
+                text = HostRestrictionMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
         }
     }
 }

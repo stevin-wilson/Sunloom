@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -38,8 +39,10 @@ internal fun DiagnosticsPane(
     val usedMb = uiState.totalCacheBytesUsed.toDouble() / (1024.0 * 1024.0)
     val maxMb = uiState.preferences.maxCacheBytes.toDouble() / (1024.0 * 1024.0)
 
+    val listState = rememberLazyListState()
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        state = listState,
+        modifier = Modifier.fillMaxSize().desktopScrollbar(listState),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item(key = "diag_header") {

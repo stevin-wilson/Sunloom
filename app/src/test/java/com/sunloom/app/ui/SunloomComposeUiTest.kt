@@ -160,8 +160,11 @@ class SunloomComposeUiTest {
         }
         composeTestRule.waitForIdle()
 
-        // Clicking delete button on individual reserve item triggers onDeleteFromReserve
+        // Clicking delete asks for confirmation first; only confirming triggers onDeleteFromReserve
         composeTestRule.onNodeWithTag("delete_reserve_item_$firstId").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        org.junit.Assert.assertNull(deletedId)
+        composeTestRule.onNodeWithTag("confirm_delete_reserve_button").performClick()
         composeTestRule.waitForIdle()
         org.junit.Assert.assertEquals(firstId, deletedId)
 

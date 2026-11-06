@@ -34,11 +34,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -76,6 +71,7 @@ internal fun DisplaysAndSchedulePane(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .desktopScrollbar(scrollState)
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -127,10 +123,7 @@ internal fun DisplaysAndSchedulePane(
                                 singleLine = true,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .onKeyEvent {
-                                        it.type == KeyEventType.KeyUp &&
-                                            it.key in setOf(Key.N, Key.P, Key.K, Key.Backspace, Key.Delete)
-                                    }
+                                    .suppressShortcutsWhileFocused()
                                     .testTag("custom_lat_input")
                             )
                             OutlinedTextField(
@@ -140,10 +133,7 @@ internal fun DisplaysAndSchedulePane(
                                 singleLine = true,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .onKeyEvent {
-                                        it.type == KeyEventType.KeyUp &&
-                                            it.key in setOf(Key.N, Key.P, Key.K, Key.Backspace, Key.Delete)
-                                    }
+                                    .suppressShortcutsWhileFocused()
                                     .testTag("custom_lon_input")
                             )
                             OutlinedButton(

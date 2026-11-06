@@ -7,6 +7,10 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.StrictMode
+import android.view.KeyEvent
+import android.view.KeyboardShortcutGroup
+import android.view.KeyboardShortcutInfo
+import android.view.Menu
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -17,6 +21,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -32,6 +39,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var gateway: SunloomGateway
     private lateinit var viewModel: MainViewModel
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** True while the system bars are hidden for unobstructed wallpaper viewing (F11). */
+    private var isFullscreen by mutableStateOf(false)
     private val debouncedDisplayRunnable = Runnable {
         notifyDisplaysChangedNow()
     }
@@ -60,6 +70,13 @@ class MainActivity : ComponentActivity() {
                     .detectDiskReads()
                     .detectDiskWrites()
                     .detectNetwork()
+                    .penaltyLog()
+                    .build()
+            )
+            StrictMode.setVmPolicy(
+                StrictMode.VmPolicy.Builder()
+                    .detectLeakedClosableObjects()
+                    .detectLeakedSqlLiteObjects()
                     .penaltyLog()
                     .build()
             )
@@ -118,6 +135,8 @@ class MainActivity : ComponentActivity() {
                 onToggleBatterySaverDeferral = { enabled -> viewModel.toggleBatterySaverDeferral(enabled) },
                 onUpdateDisplayPolicy = { pol -> viewModel.updateDisplayPolicy(pol) },
                 onForgetRememberedDisplay = { key -> viewModel.forgetRememberedDisplay(key) },
+                isFullscreen = isFullscreen,
+                onToggleFullscreen = { applyFullscreen(!isFullscreen) },
                 onPickLocalPhoto = { asBaseline ->
                     pickingAsBaselineRestore = asBaseline
                     photoPickerLauncher.launch(
@@ -126,6 +145,23 @@ class MainActivity : ComponentActivity() {
                 }
             )
         }
+    }
+
+    private fun applyFullscreen(enabled: Boolean) {
+        isFullscreen = enabled
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        if (enabled) {
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        } else {
+            controller.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The system may restore bars while we were away; re-assert the user's choice.
+        if (isFullscreen) applyFullscreen(true)
     }
 
     override fun onStart() {
@@ -145,6 +181,26 @@ class MainActivity : ComponentActivity() {
             }
         }
         super.onStop()
+    }
+
+    /** Feeds the system Keyboard Shortcuts Helper (Meta+/) with Sunloom's accelerators. */
+    override fun onProvideKeyboardShortcuts(
+        data: MutableList<KeyboardShortcutGroup>,
+        menu: Menu?,
+        deviceId: Int
+    ) {
+        super.onProvideKeyboardShortcuts(data, menu, deviceId)
+        data += KeyboardShortcutGroup(
+            "Wallpaper",
+            listOf(
+                KeyboardShortcutInfo("Next wallpaper", KeyEvent.KEYCODE_N, 0),
+                KeyboardShortcutInfo("Previous wallpaper", KeyEvent.KEYCODE_P, 0),
+                KeyboardShortcutInfo("Keep in favorites", KeyEvent.KEYCODE_K, 0),
+                KeyboardShortcutInfo("Dislike and exclude (asks first)", KeyEvent.KEYCODE_FORWARD_DEL, 0),
+                KeyboardShortcutInfo("Toggle fullscreen", KeyEvent.KEYCODE_F11, 0),
+                KeyboardShortcutInfo("Close dialog or exit fullscreen", KeyEvent.KEYCODE_ESCAPE, 0)
+            )
+        )
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
