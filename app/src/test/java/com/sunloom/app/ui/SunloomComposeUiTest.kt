@@ -280,7 +280,7 @@ class SunloomComposeUiTest {
                 return state
             }
             override suspend fun applyWallpaper(recordId: String): SunloomUiState = state
-            override suspend fun applyNextWallpaper(): SunloomUiState = state
+            override suspend fun applyNextWallpaper(excludeIds: Set<String>): SunloomUiState = state
             override suspend fun applyPreviousWallpaper(): SunloomUiState = state
             override suspend fun restoreBaselineWallpaper(): SunloomUiState = state
             override suspend fun toggleKeepWallpaper(recordId: String): SunloomUiState = state
@@ -291,7 +291,7 @@ class SunloomComposeUiTest {
                 state = state.copy(statusBannerMessage = "Prepared 2 new high-resolution wallpaper(s)")
                 return state
             }
-            override suspend fun importLocalUri(uriString: String, asBaselineRestore: Boolean): SunloomUiState = state
+            override suspend fun importLocalUri(uriString: String, asBaselineRestore: Boolean, applyAfterImport: Boolean): SunloomUiState = state
         }
 
         val vm = MainViewModel(fakeGateway, workDispatcher = kotlinx.coroutines.Dispatchers.Unconfined)

@@ -243,18 +243,53 @@ internal fun shortcutTooltipText(label: String, shortcut: String?): String =
 
 
 /**
- * Reports primary-button (or touch) presses together with the Ctrl/Shift state, without consuming the
- * event, so list items can implement Ctrl+click / Shift+click selection (Input_Combinations).
+ * Lets a list item tell presses on its own surface from presses on controls inside it (Apply, Keep,
+ * Delete). Controls mark themselves with [ignoredBySelection]; the item reads the flag in
+ * [pointerPressWithModifiers].
+ */
+class SelectionPressGuard {
+    internal var onControl = false
+}
+
+val LocalSelectionPressGuard = androidx.compose.runtime.compositionLocalOf<SelectionPressGuard?> { null }
+
+/** Marks this region as a control: presses inside it never change the surrounding item's selection. */
+fun Modifier.ignoredBySelection(): Modifier = composed {
+    val guard = LocalSelectionPressGuard.current
+    if (guard == null) {
+        Modifier
+    } else {
+        Modifier.pointerInput(guard) {
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                    if (event.type == androidx.compose.ui.input.pointer.PointerEventType.Press) guard.onControl = true
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Reports primary-button (or touch) presses on the item itself, together with the Ctrl/Shift state,
+ * without consuming the event, so list items can implement Ctrl+click / Shift+click selection
+ * (Input_Combinations). Presses on regions marked [ignoredBySelection] are skipped.
  */
 fun Modifier.pointerPressWithModifiers(
+    guard: SelectionPressGuard? = null,
     onPress: (ctrl: Boolean, shift: Boolean, isTouch: Boolean) -> Unit
 ): Modifier = composed {
     val latest = androidx.compose.runtime.rememberUpdatedState(onPress)
-    pointerInput(Unit) {
+    pointerInput(guard) {
         awaitPointerEventScope {
             while (true) {
-                val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                if (event.type != androidx.compose.ui.input.pointer.PointerEventType.Press) continue
+                val initial = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                if (initial.type != androidx.compose.ui.input.pointer.PointerEventType.Press) continue
+                // Children see the press after this Initial pass; wait for the Final pass to learn whether
+                // one of them claimed it.
+                guard?.onControl = false
+                val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Final)
+                if (guard?.onControl == true) continue
                 val change = event.changes.firstOrNull() ?: continue
                 val isTouch = change.type == androidx.compose.ui.input.pointer.PointerType.Touch
                 if (isTouch || event.buttons.isPrimaryPressed) {

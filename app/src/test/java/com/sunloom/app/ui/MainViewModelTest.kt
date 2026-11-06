@@ -54,7 +54,13 @@ class MainViewModelTest {
             return state
         }
 
-        override suspend fun applyNextWallpaper(): SunloomUiState = applyWallpaper("seed-2")
+        var lastExcludeIds: Set<String>? = null
+        val importApplyFlags = mutableListOf<Boolean>()
+
+        override suspend fun applyNextWallpaper(excludeIds: Set<String>): SunloomUiState {
+            lastExcludeIds = excludeIds
+            return applyWallpaper("seed-2")
+        }
         override suspend fun applyPreviousWallpaper(): SunloomUiState = applyWallpaper(state.previousWallpaperId ?: "seed-1")
         override suspend fun restoreBaselineWallpaper(): SunloomUiState = applyWallpaper("seed-1")
 
@@ -88,7 +94,8 @@ class MainViewModelTest {
             return state
         }
 
-        override suspend fun importLocalUri(uriString: String, asBaselineRestore: Boolean): SunloomUiState {
+        override suspend fun importLocalUri(uriString: String, asBaselineRestore: Boolean, applyAfterImport: Boolean): SunloomUiState {
+            importApplyFlags += applyAfterImport
             state = state.copy(statusBannerMessage = "Imported $uriString")
             return state
         }
@@ -293,6 +300,19 @@ class MainViewModelTest {
 
         viewModel.commitPendingDiscard()
         assertEquals(0, viewModel.uiState.value.libraryWallpapers.size)
+    }
+
+    @Test
+    fun `removing the active item never picks another item that is also being removed`() {
+        viewModel.removeManyFromReserveWithUndo(listOf("seed-1", "seed-2"))
+        assertEquals(setOf("seed-1", "seed-2"), fakeGateway.lastExcludeIds)
+    }
+
+    @Test
+    fun `a batch import only fills the reserve while a single import applies`() {
+        viewModel.importLocalUris(listOf("content://a/1"))
+        viewModel.importLocalUris(listOf("content://a/2", "content://a/3"))
+        assertEquals(listOf(true, false, false), fakeGateway.importApplyFlags)
     }
 
     @Test

@@ -30,6 +30,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -133,6 +134,19 @@ internal fun ReserveAndHistoryPane(
                 when {
                     event.key == Key.Escape && selection.selected.isNotEmpty() -> {
                         if (event.type == KeyEventType.KeyDown) selection = SelectionState()
+                        true
+                    }
+                    // With a selection, Delete/Backspace removes the selection (one Undo) instead of bubbling to the
+                    // workspace accelerator, which would permanently reject the unrelated current wallpaper.
+                    (event.key == Key.Delete || event.key == Key.Backspace) && selection.selected.isNotEmpty() &&
+                        !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed -> {
+                        // The workspace accelerator fires on key-up, so act (and consume) on key-up too; the
+                        // key-down is consumed so it is not treated as an unhandled key.
+                        if (event.type == KeyEventType.KeyUp) {
+                            val ids = selection.selected.toList()
+                            selection = SelectionState()
+                            actions.removeMany(ids)
+                        }
                         true
                     }
                     event.type == KeyEventType.KeyUp && event.key == Key.A && event.isCtrlPressed && order.isNotEmpty() -> {
@@ -427,11 +441,13 @@ private fun ReserveItemCard(
     val actions = LocalWallpaperActions.current
     val isActive = uiState.currentWallpaper?.id == item.id
     val shape = RoundedCornerShape(14.dp)
+    val pressGuard = remember { SelectionPressGuard() }
+    CompositionLocalProvider(LocalSelectionPressGuard provides pressGuard) {
     ContextMenuHost(
         modifier = Modifier
             .fillMaxWidth()
             .focusRequester(focusRequester)
-            .pointerPressWithModifiers(onPress)
+            .pointerPressWithModifiers(pressGuard, onPress)
             .semantics { this.selected = selected }
             .testTag("reserve_card_${item.id}"),
         focusShape = shape,
@@ -539,6 +555,7 @@ private fun ReserveItemCard(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -593,6 +610,7 @@ private fun ReserveItemActions(
     onToggleKeepSpecific: (String) -> Unit
 ) {
     FlowRow(
+        modifier = Modifier.ignoredBySelection(),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalArrangement = Arrangement.Center
     ) {

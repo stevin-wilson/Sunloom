@@ -125,7 +125,9 @@ class MainActivity : ComponentActivity() {
         )[MainViewModel::class.java]
 
         // A cold start from "Open with" / Share carries the images; a recreate must not re-import them.
-        if (savedInstanceState == null) importFromIntent(intent)
+        // Relaunching from Recents re-delivers the original intent with FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY;
+        // that must not import (and apply) the same images a second time.
+        if (savedInstanceState == null && !intent.isFromHistory()) importFromIntent(intent)
 
         setContent {
             val uiState by viewModel.uiState.collectAsState()
@@ -259,6 +261,9 @@ class MainActivity : ComponentActivity() {
             viewModel.announce(getString(if (written) R.string.export_saved else R.string.export_failed))
         }
     }
+
+    private fun Intent.isFromHistory(): Boolean =
+        flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

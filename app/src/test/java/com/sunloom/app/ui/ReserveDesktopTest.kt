@@ -38,6 +38,7 @@ class ReserveDesktopTest {
     private lateinit var ids: List<String>
     private val removedMany = mutableListOf<Collection<String>>()
     private var undoCount = 0
+    private var rejectCount = 0
 
     private fun content(state: SunloomUiState) {
         val holder = mutableStateOf(state)
@@ -49,7 +50,7 @@ class ReserveDesktopTest {
                 onNextWallpaper = {},
                 onPreviousWallpaper = {},
                 onToggleKeep = {},
-                onRejectForever = {},
+                onRejectForever = { rejectCount++ },
                 onTogglePause = {},
                 onRestoreOriginal = {},
                 onApplySpecific = {},
@@ -95,6 +96,7 @@ class ReserveDesktopTest {
     fun resetCollectors() {
         removedMany.clear()
         undoCount = 0
+        rejectCount = 0
     }
 
     @Test
@@ -154,6 +156,32 @@ class ReserveDesktopTest {
         composeTestRule.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("reserve_card_${ids[1]}").assertIsFocused()
+    }
+
+    @Test
+    fun `delete with a selection removes the selection and never rejects the current wallpaper`() {
+        content(reserveState())
+        ctrlClick("reserve_card_${ids[0]}")
+        ctrlClick("reserve_card_${ids[1]}")
+        composeTestRule.onRoot().performKeyInput { pressKey(Key.Delete) }
+        composeTestRule.waitForIdle()
+        assertEquals(1, removedMany.size)
+        assertEquals(setOf(ids[0], ids[1]), removedMany.single().toSet())
+        assertEquals(0, rejectCount)
+    }
+
+    @Test
+    fun `clicking a card button does not change the selection`() {
+        content(reserveState())
+        ctrlClick("reserve_card_${ids[0]}")
+        composeTestRule.onNodeWithTag("reserve_selection_bar").assertExists()
+        // The selection bar's own buttons live outside the cards, so use a card's Keep button instead.
+        composeTestRule.onNodeWithTag("favorite_reserve_item_${ids[1]}").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("reserve_selection_bar").assertExists()
+        composeTestRule.onNodeWithTag("reserve_selection_clear").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("reserve_selection_bar").assertDoesNotExist()
     }
 
     @Test

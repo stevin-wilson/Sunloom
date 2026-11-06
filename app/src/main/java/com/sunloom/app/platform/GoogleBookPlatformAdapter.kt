@@ -122,7 +122,8 @@ class DefaultSystemWallpaperGateway(private val context: Context) : SystemWallpa
             hostRefusedLastApply = true
             Log.w(TAG, "Host refused wallpaper change", e)
             false
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // Includes OutOfMemoryError from large multi-display envelopes: a failed apply must never crash the app or worker.
             Log.w(TAG, "Wallpaper change failed", e)
             false
         }
