@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,7 +60,7 @@ internal fun ReserveAndHistoryPane(
     val listState = rememberLazyListState()
     val restricted = uiState.isWallpaperChangeRestricted
     val thumbnailAspect = primaryDisplayAspect(uiState, 1.2f, 2.2f)
-    var aboutRecord by remember { mutableStateOf<WallpaperRecord?>(null) }
+    var aboutRecordId by rememberSaveable { mutableStateOf<String?>(null) }
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize().desktopScrollbar(listState),
@@ -168,7 +169,7 @@ internal fun ReserveAndHistoryPane(
                     }
                     ContextMenuItem("About this image\u2026", "ctx_about_${item.id}") {
                         dismiss()
-                        aboutRecord = item
+                        aboutRecordId = item.id
                     }
                     HorizontalDivider()
                     ContextMenuItem(stringResource(R.string.remove_from_reserve), "ctx_delete_${item.id}", destructive = true) {
@@ -289,7 +290,10 @@ internal fun ReserveAndHistoryPane(
         }
     }
 
-    aboutRecord?.let { record ->
-        WallpaperAboutDialog(record = record, onDismiss = { aboutRecord = null })
+    aboutRecordId?.let { id ->
+        // Resolve by id so the open dialog survives recreation and disappears if the item is removed.
+        uiState.libraryWallpapers.firstOrNull { it.id == id }?.let { record ->
+            WallpaperAboutDialog(record = record, onDismiss = { aboutRecordId = null })
+        }
     }
 }

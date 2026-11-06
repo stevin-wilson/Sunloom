@@ -25,6 +25,7 @@ import com.sunloom.app.domain.solar.SolarCalculator
 import com.sunloom.app.platform.GoogleBookPlatformAdapter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -167,8 +168,8 @@ class MainViewModel(
     private fun launchGatewayMutation(
         preserveNavigation: Boolean = true,
         block: suspend (SunloomUiState) -> SunloomUiState
-    ) {
-        viewModelScope.launch(workDispatcher) {
+    ): Job {
+        return viewModelScope.launch(workDispatcher) {
             stateMutex.withLock {
                 val before = _uiState.value
                 val next = block(before)
@@ -519,6 +520,30 @@ class MainViewModel(
 
     fun importLocalUri(uriString: String, asBaselineRestore: Boolean) {
         launchGatewayMutation { gateway.importLocalUri(uriString, asBaselineRestore) }
+    }
+
+    /**
+     * Imports several user-provided images (drag-and-drop, Share sheet, Open with) in one serialized
+     * mutation. Each URI still goes through the full L3-L5 import pipeline; [onFinished] runs when the
+     * batch ends (success or failure) so callers can release one-shot URI grants.
+     */
+    fun importLocalUris(uriStrings: List<String>, onFinished: () -> Unit = {}) {
+        if (uriStrings.isEmpty()) {
+            onFinished()
+            return
+        }
+        launchGatewayMutation { current ->
+            var state = current
+            for (uri in uriStrings) {
+                state = gateway.importLocalUri(uri, false)
+            }
+            if (uriStrings.size > 1) {
+                state = state.copy(
+                    statusBannerMessage = "Checked ${uriStrings.size} images — approved ones are in your reserve."
+                )
+            }
+            state
+        }.invokeOnCompletion { onFinished() }
     }
 
     /**

@@ -59,7 +59,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -77,6 +76,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -267,7 +267,7 @@ fun SunloomApp(
         ) {
           // Edge-to-edge (enforced at targetSdk 36): keep content clear of the caption bar, system
           // bars, display cutouts and the keyboard, while the background still bleeds to the edges.
-          Box(
+          BoxWithConstraints(
               modifier = Modifier
                   .fillMaxSize()
                   .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -395,7 +395,9 @@ fun SunloomApp(
                 hostState = snackbarHostState,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = if (isCompactWindow()) 88.dp else 16.dp)
+                    .padding(
+                        bottom = if (WorkspaceWidthClass.from(maxWidth) == WorkspaceWidthClass.Compact) 88.dp else 16.dp
+                    )
                     .semantics { liveRegion = LiveRegionMode.Polite }
             )
           }
@@ -403,10 +405,6 @@ fun SunloomApp(
     }
     }
 }
-
-@Composable
-private fun isCompactWindow(): Boolean =
-    WorkspaceWidthClass.from(LocalConfiguration.current.screenWidthDp.dp) == WorkspaceWidthClass.Compact
 
 /**
  * Shows an "Undo" snackbar for a pending Dislike/Remove. Dismiss/timeout commits the action; the
@@ -482,8 +480,8 @@ fun CityDropdownSelector(
     onSelectCity: (CityCoordinates) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
     val matches = remember(query) { filterCities(query, SolarCalculator.BUNDLED_CITIES) }
     val selectedCity = remember(selectedCityName) {
         SolarCalculator.BUNDLED_CITIES.firstOrNull {
@@ -556,7 +554,10 @@ fun FirstRunSetupScreen(
     uiState: SunloomUiState,
     onCompleteSetup: (UserPreferences) -> Unit
 ) {
-    var draftPrefs by remember(uiState.preferences) { mutableStateOf(uiState.preferences) }
+    var draftPrefs by rememberSaveable(
+        uiState.preferences,
+        stateSaver = setupDraftSaver(uiState.preferences)
+    ) { mutableStateOf(uiState.preferences) }
     val scrollState = rememberScrollState()
 
     Column(

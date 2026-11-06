@@ -1,8 +1,11 @@
 package com.sunloom.app.ui
 
 import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
 import android.hardware.display.DisplayManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -37,6 +40,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val DISPLAY_EVENT_DEBOUNCE_MS = 1_500L
+        private const val STATE_FULLSCREEN = "sunloom.fullscreen"
     }
 
     private lateinit var gateway: SunloomGateway
@@ -46,7 +50,6 @@ class MainActivity : ComponentActivity() {
     /** True while the system bars are hidden for unobstructed wallpaper viewing (F11). */
     private var isFullscreen by mutableStateOf(false)
     private var lastNightMask = Int.MIN_VALUE
-    private val dropPermissions = mutableListOf<android.view.DragAndDropPermissions>()
     private var hasStartedBefore = false
     private val debouncedDisplayRunnable = Runnable {
         notifyDisplaysChangedNow()
@@ -90,6 +93,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         lastNightMask = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        isFullscreen = savedInstanceState?.getBoolean(STATE_FULLSCREEN, false) ?: false
 
         gateway = AndroidSunloomGateway(applicationContext)
         viewModel = ViewModelProvider(
@@ -101,6 +105,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
         )[MainViewModel::class.java]
+
+        // A cold start from "Open with" / Share carries the images; a recreate must not re-import them.
+        if (savedInstanceState == null) importFromIntent(intent)
 
         setContent {
             val uiState by viewModel.uiState.collectAsState()
@@ -161,21 +168,52 @@ class MainActivity : ComponentActivity() {
     /** Imports images dropped from the Files app or another window (each becomes a reserve item). */
     private fun importDroppedImages(dragEvent: DragEvent): Boolean {
         val clip = dragEvent.clipData ?: return false
-        // Cross-app content URIs are only readable while this grant is held.
-        requestDragAndDropPermissions(dragEvent)?.let { dropPermissions.add(it) }
-        var imported = 0
-        for (i in 0 until clip.itemCount) {
-            val uri = clip.getItemAt(i).uri ?: continue
-            val type = contentResolver.getType(uri)
-            if (type != null && !type.startsWith("image/")) continue
-            viewModel.importLocalUri(uri.toString(), asBaselineRestore = false)
-            imported++
-        }
-        return imported > 0
+        val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }.filter(::looksLikeImage)
+        if (uris.isEmpty()) return false
+        // Cross-app content URIs are only readable while this grant is held; release it as soon as the
+        // batch finishes so grants never accumulate for the life of the window.
+        val grant = requestDragAndDropPermissions(dragEvent)
+        viewModel.importLocalUris(uris.map { it.toString() }) { grant?.release() }
+        return true
+    }
+
+    /** Imports images delivered by the Share sheet or "Open with" (SEND, SEND_MULTIPLE, VIEW). */
+    private fun importFromIntent(source: Intent?) {
+        val uris = ShareIntentImport.extractImageUris(source).filter(::looksLikeImage)
+        if (uris.isEmpty()) return
+        viewModel.importLocalUris(uris.map { it.toString() })
+    }
+
+    /** MIME is a routing hint only; the L3 payload check is what actually decides (Article VII §4). */
+    private fun looksLikeImage(uri: Uri): Boolean {
+        val type = runCatching { contentResolver.getType(uri) }.getOrNull()
+        return type == null || type.startsWith("image/")
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // singleTask: a second launch focuses this window instead of opening another one.
+        importFromIntent(intent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_FULLSCREEN, isFullscreen)
     }
 
     private fun applyFullscreen(enabled: Boolean) {
         isFullscreen = enabled
+        // Desktop windowing: ask the system to move this window to/from true fullscreen (API 35+).
+        // The immersive bar hiding below remains the behaviour on older releases and on phones.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            runCatching {
+                requestFullscreenMode(
+                    if (enabled) FULLSCREEN_MODE_REQUEST_ENTER else FULLSCREEN_MODE_REQUEST_EXIT,
+                    null
+                )
+            }
+        }
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         if (enabled) {
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE

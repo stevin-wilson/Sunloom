@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.Bitmap
+import android.util.Log
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
@@ -50,6 +51,13 @@ interface SystemWallpaperGateway {
     fun getRememberedDisplays(connectedDisplays: List<DisplayProfile> = getConnectedDisplays()): List<RememberedDisplayRecord> = emptyList()
     fun forgetRememberedDisplay(key: String) {}
     fun applyBitmapToDestination(bitmap: Bitmap, flags: Int): Boolean
+
+    /**
+     * True when the most recent [applyBitmapToDestination] failed because the host environment refused
+     * the change (for example a `SecurityException` on a managed or restricted desktop), as opposed to a
+     * transient failure worth retrying. Lets the UI be honest per Article V §2.
+     */
+    fun lastApplyRefusedByHost(): Boolean = false
     fun getWallpaperId(which: Int): Int = 1
     fun getObservedIndependentLockSupport(): Boolean? = null
     fun clearWallpaper(): Boolean = true
@@ -60,6 +68,7 @@ interface SystemWallpaperGateway {
 class DefaultSystemWallpaperGateway(private val context: Context) : SystemWallpaperGateway {
     companion object {
         internal const val PREF_OBSERVED_LOCK_SUPPORT = "observed_independent_lock_support"
+        private const val TAG = "SunloomWallpaper"
     }
 
     private val appContext = context.applicationContext
@@ -100,8 +109,27 @@ class DefaultSystemWallpaperGateway(private val context: Context) : SystemWallpa
         historyStore.forgetDisplay(key)
     }
 
+    @Volatile
+    private var hostRefusedLastApply = false
+
+    override fun lastApplyRefusedByHost(): Boolean = hostRefusedLastApply
+
     override fun applyBitmapToDestination(bitmap: Bitmap, flags: Int): Boolean {
-        return runCatching {
+        hostRefusedLastApply = false
+        return try {
+            applyBitmapUnchecked(bitmap, flags)
+        } catch (e: SecurityException) {
+            hostRefusedLastApply = true
+            Log.w(TAG, "Host refused wallpaper change", e)
+            false
+        } catch (e: Exception) {
+            Log.w(TAG, "Wallpaper change failed", e)
+            false
+        }
+    }
+
+    private fun applyBitmapUnchecked(bitmap: Bitmap, flags: Int): Boolean {
+        return run {
             val wantsSystem = (flags and WallpaperManager.FLAG_SYSTEM) != 0
             val wantsLock = (flags and WallpaperManager.FLAG_LOCK) != 0
             val beforeSysId = if (wantsSystem) getWallpaperId(WallpaperManager.FLAG_SYSTEM) else -1
@@ -128,7 +156,7 @@ class DefaultSystemWallpaperGateway(private val context: Context) : SystemWallpa
                 wantsSystem && wantsLock -> result > 0 || sysChanged
                 else -> result > 0
             }
-        }.getOrDefault(false)
+        }
     }
 
     override fun getWallpaperId(which: Int): Int {
@@ -363,7 +391,13 @@ class GoogleBookPlatformAdapter(
             sourceBitmap.recycle()
         }
 
-        return if (applied) WallpaperStatus.APPLIED_SUCCESSFULLY else WallpaperStatus.FAILED_TEMPORARILY
+        return when {
+            applied -> WallpaperStatus.APPLIED_SUCCESSFULLY
+            // The capability probe fails open; if the host then refuses the change, say so plainly
+            // instead of reporting an endlessly "temporary" failure (Article V §2).
+            gateway.lastApplyRefusedByHost() -> WallpaperStatus.UNSUPPORTED_BY_SYSTEM
+            else -> WallpaperStatus.FAILED_TEMPORARILY
+        }
     }
 
     @SuppressLint("ExifInterface")
