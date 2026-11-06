@@ -14,6 +14,7 @@ import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.sunloom.app.domain.model.ScheduleMode
 import com.sunloom.app.domain.model.UserPreferences
+import com.sunloom.app.Requirement
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -129,6 +130,7 @@ class DesktopInputTest {
     }
 
     @Test
+    @Requirement("XII.3")
     fun `Delete dislikes immediately and relies on the undo snackbar instead of a blocking dialog`() {
         val counters = Counters()
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()

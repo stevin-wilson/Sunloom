@@ -9,6 +9,7 @@ import com.sunloom.app.domain.model.LockWorkspacePolicy
 import com.sunloom.app.domain.model.SafeCategory
 import com.sunloom.app.domain.model.ScheduleMode
 import com.sunloom.app.domain.model.UserPreferences
+import com.sunloom.app.Requirement
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -22,6 +23,7 @@ import java.io.StringReader
 
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
+@Requirement("XII.2")
 class EfficiencyTest {
 
     @Test

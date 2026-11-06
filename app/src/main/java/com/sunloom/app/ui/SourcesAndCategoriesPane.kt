@@ -73,7 +73,7 @@ internal fun SourcesAndCategoriesPane(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(stringResource(R.string.wallpaper_sources), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.wallpaper_sources), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())
                 Text(
                     stringResource(R.string.online_and_user_sources_always_take_prio),
                     style = MaterialTheme.typography.bodySmall,
@@ -115,7 +115,7 @@ internal fun SourcesAndCategoriesPane(
                         }
                         Switch(
                             checked = id in uiState.preferences.enabledSources,
-                            onCheckedChange = { onToggleSource(id) }, modifier = Modifier.desktopControl(RoundedCornerShape(50))
+                            onCheckedChange = { onToggleSource(id) }, modifier = Modifier.desktopControl(RoundedCornerShape(50)).switchLabel(title)
                         )
                     }
                 }
@@ -133,7 +133,7 @@ internal fun SourcesAndCategoriesPane(
                     }
                     Switch(
                         checked = uiState.preferences.wifiOnlyDownloads,
-                        onCheckedChange = onToggleWifiOnly, modifier = Modifier.desktopControl(RoundedCornerShape(50))
+                        onCheckedChange = onToggleWifiOnly, modifier = Modifier.desktopControl(RoundedCornerShape(50)).switchLabel(stringResource(R.string.unmetered_wi_fi_or_ethernet_only))
                     )
                 }
 
@@ -153,7 +153,7 @@ internal fun SourcesAndCategoriesPane(
                     Switch(
                         checked = uiState.preferences.deferOnBatterySaver,
                         onCheckedChange = onToggleBatterySaverDeferral,
-                        modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("defer_battery_saver_switch")
+                        modifier = Modifier.desktopControl(RoundedCornerShape(50)).switchLabel(stringResource(R.string.pause_downloads_on_battery_saver)).testTag("defer_battery_saver_switch")
                     )
                 }
             }
@@ -165,7 +165,7 @@ internal fun SourcesAndCategoriesPane(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(stringResource(R.string.categories), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.categories), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)

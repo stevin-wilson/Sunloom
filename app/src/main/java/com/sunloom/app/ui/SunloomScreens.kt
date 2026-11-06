@@ -667,7 +667,7 @@ fun FirstRunSetupScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.automatic_wallpaper_schedule), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.automatic_wallpaper_schedule), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.sectionHeading())
                         Text(
                             stringResource(R.string.switch_between_bright_wallpapers_during),
                             style = MaterialTheme.typography.bodySmall,
@@ -676,7 +676,7 @@ fun FirstRunSetupScreen(
                     }
                     Switch(
                         checked = draftPrefs.autoChangeEnabled,
-                        onCheckedChange = { draftPrefs = draftPrefs.copy(autoChangeEnabled = it) }, modifier = Modifier.desktopControl(RoundedCornerShape(50))
+                        onCheckedChange = { draftPrefs = draftPrefs.copy(autoChangeEnabled = it) }, modifier = Modifier.desktopControl(RoundedCornerShape(50)).switchLabel(stringResource(R.string.automatic_wallpaper_schedule))
                     )
                 }
 
@@ -724,7 +724,7 @@ fun FirstRunSetupScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(stringResource(R.string.categories), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.categories), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.sectionHeading())
                 Text(
                     stringResource(R.string.choose_the_themes_you_enjoy),
                     style = MaterialTheme.typography.bodySmall,
@@ -759,7 +759,7 @@ fun FirstRunSetupScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.apply_wallpaper_to), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.apply_wallpaper_to), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.sectionHeading())
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -783,6 +783,7 @@ fun FirstRunSetupScreen(
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     text = stringResource(R.string.initial_preview),
+                    modifier = Modifier.sectionHeading(),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )

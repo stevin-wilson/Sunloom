@@ -86,7 +86,7 @@ internal fun DisplaysAndSchedulePane(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.schedule), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.schedule), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -191,7 +191,7 @@ internal fun DisplaysAndSchedulePane(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.display_preferences), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.display_preferences), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -303,7 +303,7 @@ internal fun DisplaysAndSchedulePane(
                     }
                     Switch(
                         checked = uiState.preferences.allowBlurredFrameFill,
-                        onCheckedChange = onToggleBlurredFill, modifier = Modifier.desktopControl(RoundedCornerShape(50))
+                        onCheckedChange = onToggleBlurredFill, modifier = Modifier.desktopControl(RoundedCornerShape(50)).switchLabel(stringResource(R.string.blurred_frame_fill_for_smaller_images))
                     )
                 }
 

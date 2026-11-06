@@ -44,6 +44,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
 /**
@@ -209,6 +212,15 @@ fun Modifier.desktopFocusRing(shape: Shape = RoundedCornerShape(8.dp), selfOnly:
 @Composable
 fun Modifier.desktopControl(shape: Shape = RoundedCornerShape(50)): Modifier =
     this.handCursor().desktopFocusRing(shape)
+
+/** Marks a section title so screen readers can jump between sections (Article XII sec 4). */
+fun Modifier.sectionHeading(): Modifier = this.semantics { heading() }
+
+/**
+ * Names a [androidx.compose.material3.Switch] whose visible label is a sibling Text. Without it a screen
+ * reader announces an anonymous "switch".
+ */
+fun Modifier.switchLabel(label: String): Modifier = this.semantics { contentDescription = label }
 
 /** WCAG contrast ratio between two opaque colours (1.0 .. 21.0). */
 internal fun contrastRatio(a: Color, b: Color): Float {

@@ -309,6 +309,7 @@ private fun ReserveHeader(
                 Column(modifier = Modifier.widthIn(min = 220.dp).weight(1f)) {
                     Text(
                         text = stringResource(R.string.saved_wallpapers),
+                        modifier = Modifier.sectionHeading(),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface

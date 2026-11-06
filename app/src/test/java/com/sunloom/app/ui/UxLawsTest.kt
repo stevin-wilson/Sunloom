@@ -1,12 +1,14 @@
 package com.sunloom.app.ui
 
 import com.sunloom.app.domain.solar.SolarCalculator
+import com.sunloom.app.Requirement
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@Requirement("XII.1")
 class UxLawsTest {
 
     @Test

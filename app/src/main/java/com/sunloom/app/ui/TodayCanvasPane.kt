@@ -368,6 +368,7 @@ internal fun TodayCanvasPane(
                         Icon(SunloomIcons.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Text(
                             text = stringResource(R.string.about_this_wallpaper),
+                            modifier = Modifier.sectionHeading(),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface

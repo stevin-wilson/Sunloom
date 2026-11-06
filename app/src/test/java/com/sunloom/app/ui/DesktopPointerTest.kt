@@ -11,6 +11,7 @@ import androidx.compose.ui.test.rightClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.runBlocking
+import com.sunloom.app.Requirement
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
@@ -101,6 +102,7 @@ class DesktopPointerTest {
     }
 
     @Test
+    @Requirement("XII.3")
     fun `right click remove acts immediately without a blocking dialog`() {
         rightClickCard()
         composeTestRule.onNodeWithTag("ctx_delete_$firstId").performClick()
