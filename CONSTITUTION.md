@@ -1,7 +1,7 @@
 # Wallpaper Tool Development Constitution
 
 - **Product:** Sunloom (`com.sunloom.app`)
-- **Status:** Adopted v0.9 (Governing Engineering Law) **[v0.9]**
+- **Status:** Adopted v0.10 (Governing Engineering Law) **[v0.10]**
 - **Scope:** Product principles, user experience, platform-independent requirements, and platform and distribution obligations confined to Article XVIII **[v0.3]**
 - **Purpose:** Guide product and engineering decisions. Articles I–XVII remain platform-independent; platform-specific obligations live only in Article XVIII so the core law survives a future port. **[v0.3]**
 
@@ -19,6 +19,7 @@
 | v0.7 | 2026-11-06 | Article XII §3 refined: `Reject Forever` and reserve removal act immediately and offer a timed Undo snackbar (committed on timeout, new action, or app stop) instead of a blocking dialog; irreversible resets to system default still require confirmation. Article XII §4 added: Googlebook desktop conduct (edge-to-edge insets, free-form window sizing, Ctrl+1–5 tab shortcuts, hover/focus/48dp targets, drag-and-drop image import, live-region status). Responsive-main-thread budget extended with size-keyed, byte-bounded preview and seed-render caches. |
 | v0.8 | 2026-11-06 | Article VII §4 L2b and Schedule A expanded with recommended categories: Botanical & Flora (including orchard/fruits and botanical art) and Aerial & Earth (high-altitude coastlines, orbital Earth views, and river deltas), expanding `SAFE_DOMAIN_KEYWORDS` with safe natural flora and aerial tokens (`flower`, `blossom`, `petal`, `leaf`, `foliage`, `orchard`, `fruit`, `succulent`, `plant`, `aerial`, `satellite`, `delta`). |
 | v0.9 | 2026-11-06 | Desktop quality pass for the Play desktop badge. Article VI §6 gains export attribution (Save as… carries credit with the file; CC BY / CC BY-SA also require a companion attribution file). Article VI §10 and XVIII §2 admit images handed over by the system Share sheet, Open with, and drag-and-drop, all through the same L3–L5 import gate; export uses the system file picker with no new permissions. Article XII §3 extends timed Undo to multi-select removal and adds Ctrl+Z. Article XII §4 adds Esc, Ctrl+, / Ctrl+C / Ctrl+S, Reserve list/grid, Ctrl/Shift multi-select with arrow-key navigation, Ctrl+wheel and pinch preview zoom, true window fullscreen, busy cursor, and a single-window launch model. Article XVIII adds §6 (window model). |
+| v0.10 | 2026-11-06 | Corrective amendment to v0.8. The L2b allowlist drops the over-broad tokens `plant` and `delta` (industrial plants, brands and organisations pass L2b on those words alone; river deltas and plants are still recognised through `river`, `botanical`, `flora`, `flower` and `leaf`). Source adapters must file each record under a category the user enabled, because the matcher excludes everything else, and the bundled seed reserve returns only seeds in enabled categories. |
 
 ---
 

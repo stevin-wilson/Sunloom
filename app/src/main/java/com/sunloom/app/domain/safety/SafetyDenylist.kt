@@ -176,7 +176,7 @@ object SafetyDenylist {
         "river", "lake", "waterfall", "canyon", "cliff", "rock", "coast",
         "coastal", "shore", "island", "horizon", "botanical", "flora", "meadow",
         "field", "hill", "flower", "blossom", "petal", "leaf", "foliage",
-        "orchard", "fruit", "succulent", "plant", "aerial", "satellite", "delta"
+        "orchard", "fruit", "succulent", "aerial", "satellite"
     ).map { stemToken(normalizeRaw(it)) }.toSet()
 
     fun normalizeRaw(input: String): String {

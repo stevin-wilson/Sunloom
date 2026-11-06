@@ -164,7 +164,6 @@ class BundledSeedSourceAdapter : WallpaperSourceAdapter {
     ): List<CandidateAsset> {
         val targetHeightPx = (targetWidthPx * 10) / 16
         return SEED_SPECS.filter { it.category in enabledCategories || enabledCategories.isEmpty() }
-            .ifEmpty { SEED_SPECS }
             .take(limit)
             .map { spec ->
                 CandidateAsset(
