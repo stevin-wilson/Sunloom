@@ -96,7 +96,7 @@ class FetchWindowTest {
 
     /** The Met retired /v1/search on 2026-10-01 (HTTP 410); /v1.1/search is paginated by offset and limit. */
     @Test
-    fun `Met uses the paginated v1_1 search and moves its window with the cursor`() = runTest {
+    fun `Met uses the paginated v1_1 search and moves through queries and windows with the cursor`() = runTest {
         val urls = mutableListOf<String>()
         val client = object : HttpClient {
             override suspend fun getText(url: String): String {
@@ -106,14 +106,38 @@ class FetchWindowTest {
             override suspend fun getBytes(url: String, maxBytes: Int): ByteArray = ByteArray(0)
         }
         val adapter = MetMuseumCc0SourceAdapter(client)
-        for (offset in listOf(0, 60, 120)) {
+        for (offset in listOf(0, 24, 48, 72)) {
             adapter.fetchCandidates(setOf(SafeCategory.SCENIC_FINE_ART), limit = 8, offset = offset, targetWidthPx = 2560)
         }
         val searches = urls.filter { "/search" in it }
         assertTrue(searches.toString(), searches.all { "/v1.1/search" in it && "limit=" in it && "offset=" in it })
         assertTrue(searches.none { "/v1/search" in it })
-        val starts = searches.map { Regex("offset=(\\d+)").find(it)!!.groupValues[1].toInt() }
-        assertTrue("window should move: $starts", starts.toSet().size == 3)
+        val windows = searches.map { it.substringAfter("q=") }.toSet()
+        assertTrue("query/window pairs should differ: $windows", windows.size == 4)
+    }
+
+    @Test
+    fun `Met examines every id of a window before moving to the next one`() = runTest {
+        val looked = mutableListOf<Pair<String, Int>>() // (search window, object id)
+        var currentWindow = ""
+        val client = object : HttpClient {
+            override suspend fun getText(url: String): String {
+                if ("/search" in url) {
+                    currentWindow = url.substringAfter("q=")
+                    return """{"total":5000,"objectIDs":[1,2,3,4,5,6,7,8,9,10,11,12]}"""
+                }
+                Regex("/objects/(\\d+)").find(url)?.let { looked += currentWindow to it.groupValues[1].toInt() }
+                return "{}"
+            }
+            override suspend fun getBytes(url: String, maxBytes: Int): ByteArray = ByteArray(0)
+        }
+        val adapter = MetMuseumCc0SourceAdapter(client)
+        for (step in 0 until 8) { // eight consecutive syncs of one source: cursor start, start+6, ...
+            adapter.fetchCandidates(setOf(SafeCategory.SCENIC_FINE_ART), limit = 8, offset = step * 6, targetWidthPx = 2560)
+        }
+        val firstWindow = looked.first().first
+        val inFirst = looked.filter { it.first == firstWindow }.map { it.second }.toSet()
+        assertTrue("window not fully covered before moving on: $inFirst", inFirst.size == 12)
     }
 
     @Test
@@ -150,24 +174,5 @@ class FetchWindowTest {
         val found = NasaLibrarySourceAdapter(client).fetchCandidates(allCategories, limit = 8, offset = 0, targetWidthPx = 2560)
         assertTrue(urls.toString(), urls.all { "page_size=20" in it })
         assertTrue(found.map { it.id }.toString(), found.isNotEmpty() && found.all { it.rawCategoriesAndTags.isNotEmpty() })
-    }
-
-    @Test
-    fun `Met object lookups rotate through the whole search window across syncs`() = runTest {
-        val looked = mutableListOf<Int>()
-        val client = object : HttpClient {
-            override suspend fun getText(url: String): String {
-                if ("/search" in url) return """{"total":5000,"objectIDs":[1,2,3,4,5,6,7,8,9,10,11,12]}"""
-                Regex("/objects/(\\d+)").find(url)?.let { looked += it.groupValues[1].toInt() }
-                return "{}"
-            }
-            override suspend fun getBytes(url: String, maxBytes: Int): ByteArray = ByteArray(0)
-        }
-        val adapter = MetMuseumCc0SourceAdapter(client)
-        // The cursor moves in steps of 6, all within the same 12-id window.
-        for (offset in listOf(0, 6, 12, 18)) {
-            adapter.fetchCandidates(setOf(SafeCategory.SCENIC_FINE_ART), limit = 8, offset = offset, targetWidthPx = 2560)
-        }
-        assertTrue("only ${looked.toSet().size} distinct objects examined: $looked", looked.toSet().size >= 9)
     }
 }

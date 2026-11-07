@@ -91,4 +91,20 @@ class ReserveBufferTest {
     fun `the target is a real buffer and not the former three`() {
         assertTrue(ReserveBuffer.TARGET_UNSEEN_PER_MODE >= 10)
     }
+
+    @Test
+    fun `fetching stops once enough unseen images are waiting even if one mode stays short`() {
+        // Dark images are rare: plenty of unseen Light, no Dark. Without a ceiling this would fetch until the cache is full.
+        val plenty = List(ReserveBuffer.MAX_UNSEEN_STOCK) { row(BrightnessClass.LIGHT) }
+        assertFalse(ReserveBuffer.needsTopUp(plenty, all, bytesUsed = 1L, maxBytes = Long.MAX_VALUE))
+        val almost = List(ReserveBuffer.MAX_UNSEEN_STOCK - 1) { row(BrightnessClass.LIGHT) }
+        assertTrue(ReserveBuffer.needsTopUp(almost, all, bytesUsed = 1L, maxBytes = Long.MAX_VALUE))
+    }
+
+    @Test
+    fun `images that were already shown do not block a top up`() {
+        // Everything fetched so far has been shown: the user needs fresh images, however many are stored.
+        val allSeen = List(300) { row(BrightnessClass.LIGHT, applied = 2) }
+        assertTrue(ReserveBuffer.needsTopUp(allSeen, all, bytesUsed = 1L, maxBytes = Long.MAX_VALUE))
+    }
 }

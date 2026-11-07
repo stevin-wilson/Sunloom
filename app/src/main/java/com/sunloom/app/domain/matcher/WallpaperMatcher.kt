@@ -52,11 +52,7 @@ class WallpaperMatcher(
     ): Int {
         val pool = filterEligiblePool(candidates, preferences)
             .filter { it.provenance.sourceId != "seed_reserve" }
-        return pool.count {
-            (it.evaluation.brightnessClass == targetBrightness ||
-                it.evaluation.brightnessClass == BrightnessClass.NEUTRAL) &&
-                it.appliedCount == 0
-        }
+        return pool.count { BrightnessFit.accepts(it.evaluation, targetBrightness) && it.appliedCount == 0 }
     }
 
     fun selectNextWallpaper(
@@ -127,9 +123,11 @@ class WallpaperMatcher(
     }
 
     /**
-     * Ladder (Article XI §1–2): an unused exact-brightness image, then an unused NEUTRAL one, and only
-     * then a recently used exact/NEUTRAL image. Putting NEUTRAL before "repeat a recent match" is what
-     * stops a small pool from ping-ponging between the same two or three wallpapers.
+     * Ladder (Article XI §1–2): an unused exact-brightness image, then an unused NEUTRAL one that fits the
+     * target (see [BrightnessFit]), and only then a recently used exact or fitting NEUTRAL image. Putting
+     * NEUTRAL before "repeat a recent match" is what stops a small pool from ping-ponging between the same
+     * two or three wallpapers. A NEUTRAL image on the wrong side of the Balanced band is a last resort: it
+     * ranks after repeating a recent match, but before crossing to the opposite brightness.
      */
     private fun selectFromPool(
         pool: List<WallpaperRecord>,
@@ -148,7 +146,10 @@ class WallpaperMatcher(
         val recent = recentlyUsedIds + recentWindow(pool)
         val notCurrent = pool.filter { it.id != currentWallpaperId }
         fun exact(list: List<WallpaperRecord>) = list.filter { it.evaluation.brightnessClass == targetBrightness }
-        fun neutral(list: List<WallpaperRecord>) = list.filter { it.evaluation.brightnessClass == BrightnessClass.NEUTRAL }
+        fun neutral(list: List<WallpaperRecord>) = list.filter { BrightnessFit.isFittingNeutral(it.evaluation, targetBrightness) }
+        fun illFittingNeutral(list: List<WallpaperRecord>) = list.filter {
+            it.evaluation.brightnessClass == BrightnessClass.NEUTRAL && !BrightnessFit.isFittingNeutral(it.evaluation, targetBrightness)
+        }
         val notRecent = notCurrent.filter { it.id !in recent }
 
         val rungs = sequenceOf(
@@ -162,11 +163,16 @@ class WallpaperMatcher(
             if (candidates.isNotEmpty()) return choose(candidates, currentSourceId, deterministic, recentShown, taste)
         }
 
-        // Keep the current wallpaper before crossing to the opposite brightness.
-        pool.firstOrNull {
-            it.id == currentWallpaperId &&
-                (it.evaluation.brightnessClass == targetBrightness || it.evaluation.brightnessClass == BrightnessClass.NEUTRAL)
-        }?.let { return it }
+        // Keep a current wallpaper that suits the target before settling for a Balanced image that does not.
+        pool.firstOrNull { it.id == currentWallpaperId && BrightnessFit.accepts(it.evaluation, targetBrightness) }
+            ?.let { return it }
+
+        // Then a Balanced image on the wrong side of the band, or the current one if that is what it is,
+        // before crossing to the opposite brightness.
+        illFittingNeutral(notCurrent).takeIf { it.isNotEmpty() }
+            ?.let { return choose(it, currentSourceId, deterministic, recentShown, taste) }
+        pool.firstOrNull { it.id == currentWallpaperId && it.evaluation.brightnessClass == BrightnessClass.NEUTRAL }
+            ?.let { return it }
 
         // Last resort: this pool only holds wallpapers of the other brightness.
         if (notCurrent.isNotEmpty()) return choose(notCurrent, currentSourceId, deterministic, recentShown, taste)

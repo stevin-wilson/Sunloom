@@ -570,4 +570,21 @@ class LocalLibrarySyncTest {
         assertEquals(0, repo.healMissingFiles())
         assertEquals(row.localFilePath, repo.getWallpaperById("mine-1")!!.localFilePath)
     }
+
+    @Test
+    fun `healing does not overwrite a record that was just re-downloaded`() = kotlinx.coroutines.test.runTest {
+        val base = InMemoryLibraryStore()
+        val repo = LocalLibraryRepository(context = context, httpClient = okClient, sourceAdapters = listOf(FixedAdapter("artic_cc0", listOf(candidate("race-1")))), store = base)
+        repo.refreshOnlineCatalog(display)
+        val fresh = repo.getWallpaperById("race-1")!!
+        // A stale view: the same row as it was before the file was written back.
+        val stale = fresh.copy(localFilePath = "/definitely/missing.jpg")
+        val racingStore = object : LibraryStore by base {
+            override fun getAllWallpapers() = base.getAllWallpapers().map { if (it.id == "race-1") stale else it }
+        }
+        val racing = LocalLibraryRepository(context = context, httpClient = okClient, sourceAdapters = emptyList(), store = racingStore)
+
+        assertEquals(0, racing.healMissingFiles())
+        assertEquals(fresh.localFilePath, base.getWallpaperById("race-1")!!.localFilePath)
+    }
 }

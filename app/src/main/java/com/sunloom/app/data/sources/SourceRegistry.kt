@@ -1,5 +1,7 @@
 package com.sunloom.app.data.sources
 
+import com.sunloom.app.domain.model.SafeCategory
+
 /**
  * Article VI §§3, 4, 7, 8, 9 & Schedule A (Constitution v0.5):
  * Single source of truth for admitted image sources, allowed metadata/image hosts,
@@ -16,6 +18,8 @@ data class SourceRegistration(
     val isAdmitted: Boolean,
     val isBuiltInOffline: Boolean = false,
     val supportsDarkPhotography: Boolean = false,
+    /** Categories this source's queries can supply (empty for the offline sources); see SourceCoverageMatrixTest. */
+    val servedCategories: Set<SafeCategory> = emptySet(),
     val adapterVersion: String = "1.4.0",
     val allowedHosts: Set<String> = emptySet(),
     val maxRequestsPerSync: Int = 6,
@@ -49,6 +53,15 @@ object SourceRegistry {
         ),
         SourceRegistration(
             sourceId = "wikimedia_featured",
+            servedCategories = setOf(
+                SafeCategory.LANDSCAPES_NATURE,
+                SafeCategory.SPACE_ASTRONOMY,
+                SafeCategory.ARCHITECTURE_CITYSCAPES,
+                SafeCategory.ABSTRACT_PATTERNS,
+                SafeCategory.SCENIC_FINE_ART,
+                SafeCategory.BOTANICAL_FLORA,
+                SafeCategory.AERIAL_EARTH
+            ),
             sourceName = "Wikimedia Commons Featured Photography",
             plainDescription = "Key-free MediaWiki API — Curated Featured Pictures (Landscapes, Astronomy & Architecture)",
             licenseSummary = "Public Domain / CC0 / CC BY 2.0–4.0 / CC BY-SA 2.0–4.0 (Verified per asset)",
@@ -65,6 +78,11 @@ object SourceRegistry {
         ),
         SourceRegistration(
             sourceId = "nasa_library",
+            servedCategories = setOf(
+                SafeCategory.SPACE_ASTRONOMY,
+                SafeCategory.AERIAL_EARTH,
+                SafeCategory.LANDSCAPES_NATURE
+            ),
             sourceName = "NASA Space & Earth Image Library",
             plainDescription = "Key-free images-api.nasa.gov — Public Domain daylight Earth & deep-space photography",
             licenseSummary = "Public Domain (NASA / US Government Works)",
@@ -81,6 +99,11 @@ object SourceRegistry {
         ),
         SourceRegistration(
             sourceId = "artic_cc0",
+            servedCategories = setOf(
+                SafeCategory.LANDSCAPES_NATURE,
+                SafeCategory.SCENIC_FINE_ART,
+                SafeCategory.BOTANICAL_FLORA
+            ),
             sourceName = "Art Institute of Chicago Open Access (Landscapes)",
             plainDescription = "Key-free CC0 API — Public domain landscape & architectural works",
             licenseSummary = "CC0 1.0 Universal (Public Domain Dedication)",
@@ -97,6 +120,12 @@ object SourceRegistry {
         ),
         SourceRegistration(
             sourceId = "met_museum_cc0",
+            servedCategories = setOf(
+                SafeCategory.LANDSCAPES_NATURE,
+                SafeCategory.SCENIC_FINE_ART,
+                SafeCategory.BOTANICAL_FLORA,
+                SafeCategory.ARCHITECTURE_CITYSCAPES
+            ),
             sourceName = "The Met Open Access (CC0)",
             plainDescription = "Key-free collectionapi.metmuseum.org — Public domain landscapes, seascapes & fine art",
             licenseSummary = "CC0 1.0 Public Domain (The Metropolitan Museum of Art)",
@@ -112,6 +141,13 @@ object SourceRegistry {
         ),
         SourceRegistration(
             sourceId = "cma_cc0",
+            servedCategories = setOf(
+                SafeCategory.LANDSCAPES_NATURE,
+                SafeCategory.SCENIC_FINE_ART,
+                SafeCategory.BOTANICAL_FLORA,
+                SafeCategory.ARCHITECTURE_CITYSCAPES,
+                SafeCategory.ABSTRACT_PATTERNS
+            ),
             sourceName = "Cleveland Museum of Art Open Access (CC0)",
             plainDescription = "Key-free openaccess-api.clevelandart.org — CC0 landscapes, seascapes, architecture & botanical art",
             licenseSummary = "CC0 1.0 Universal (Public Domain Dedication)",
@@ -132,6 +168,12 @@ object SourceRegistry {
         ),
         SourceRegistration(
             sourceId = "smk_open",
+            servedCategories = setOf(
+                SafeCategory.LANDSCAPES_NATURE,
+                SafeCategory.SCENIC_FINE_ART,
+                SafeCategory.BOTANICAL_FLORA,
+                SafeCategory.ARCHITECTURE_CITYSCAPES
+            ),
             sourceName = "SMK — National Gallery of Denmark (Open)",
             plainDescription = "Key-free api.smk.dk — Public domain Golden Age seascapes, Nordic landscapes & architecture",
             licenseSummary = "Public Domain Mark 1.0 / CC0 1.0 (SMK Open)",

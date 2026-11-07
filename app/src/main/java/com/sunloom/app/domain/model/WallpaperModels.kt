@@ -52,7 +52,8 @@ enum class DisplayQualityTier(
     val minLongEdgePx: Int,
     val shortLabel: String
 ) {
-    STANDARD_100(1.0, 0, "100% native floor (<120 PPI)"),
+    /** Article IV §2 (v0.15): 98%, so a source a few pixels short of the display is enlarged by at most 2%. */
+    STANDARD_100(0.98, 0, "98% native floor (<120 PPI)"),
     MID_80(0.80, 0, "80% mid-PPI floor (120–209 PPI)"),
     HIGH_65(0.65, 1600, "65% Retina floor (≥210 PPI, ≥1600px)")
 }

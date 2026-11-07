@@ -135,6 +135,16 @@ class ClevelandMuseumCc0SourceAdapter(
             if (validUrls.isEmpty()) continue
             val primaryDownloadUrl = validUrls.first()
             val fallbackUrls = validUrls.drop(1)
+            // The catalog states each rendition's pixel size: pass on that of the one we will download, so a
+            // portrait work or a rendition too small for the display is skipped before it costs a download.
+            val primaryRendition = listOf(
+                printUrl to imagesObj.obj("print"),
+                fullUrl to fullObj,
+                webUrl to imagesObj.obj("web")
+            ).firstOrNull { it.first == primaryDownloadUrl }?.second
+            val advertisedW = primaryRendition?.int("width", 0) ?: 0
+            val advertisedH = primaryRendition?.int("height", 0) ?: 0
+            val hasAdvertisedSize = advertisedW > 0 && advertisedH > 0
 
             val creator = extractCreator(item)
             val accession = item.str("accession_number", "").trim()
@@ -193,8 +203,8 @@ class ClevelandMuseumCc0SourceAdapter(
                         licenseType = LicenseType.CC0,
                         attributionText = "$creator — $title (CC0 1.0 Public Domain, Cleveland Museum of Art)",
                         retrievedAtEpochMs = System.currentTimeMillis(),
-                        originalWidth = 0,
-                        originalHeight = 0,
+                        originalWidth = if (hasAdvertisedSize) advertisedW else 0,
+                        originalHeight = if (hasAdvertisedSize) advertisedH else 0,
                         renditionWidth = 0,
                         renditionHeight = 0,
                         safetyClassification = SafetyClassification.SAFE,

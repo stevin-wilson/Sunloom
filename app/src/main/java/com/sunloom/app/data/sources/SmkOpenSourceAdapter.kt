@@ -109,6 +109,12 @@ class SmkOpenSourceAdapter(
             )
             if (iiifUrls.isEmpty()) continue
 
+            // The catalog states the original image's pixel size; use it to skip unsuitable works before downloading.
+            val (advertisedW, advertisedH) = item.int("image_width", 0).let { w ->
+                val h = item.int("image_height", 0)
+                if (w > 0 && h > 0) w to h else 0 to 0
+            }
+
             val creator = extractCreator(item)
             val frontendUrl = item.str("frontend_url", "").trim()
             val canonicalPageUrl = if (frontendUrl.startsWith("https://") &&
@@ -150,8 +156,8 @@ class SmkOpenSourceAdapter(
                         licenseType = licenseType,
                         attributionText = "$creator — $title (${licenseType.label}, SMK — Statens Museum for Kunst)",
                         retrievedAtEpochMs = System.currentTimeMillis(),
-                        originalWidth = 0,
-                        originalHeight = 0,
+                        originalWidth = advertisedW,
+                        originalHeight = advertisedH,
                         renditionWidth = 0,
                         renditionHeight = 0,
                         safetyClassification = SafetyClassification.SAFE,

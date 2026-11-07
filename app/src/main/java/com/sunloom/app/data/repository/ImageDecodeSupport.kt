@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import androidx.core.graphics.scale
+import com.sunloom.app.domain.evaluator.GridAverager
 import java.io.File
 
 /**
@@ -80,6 +81,18 @@ internal fun decodeSampledBitmapSafely(
         null
     } catch (_: Throwable) {
         null
+    }
+}
+
+/**
+ * The grid the evaluator judges: every cell is the average of all the pixels it covers (see [GridAverager]).
+ * Use [sampleBitmapToRgbGrid] only for the perceptual hash, whose stored values (including the permanent
+ * blocklist) were computed from that sampling and must keep matching.
+ */
+internal fun sampleBitmapToEvaluationGrid(bitmap: Bitmap, gridW: Int, gridH: Int): IntArray {
+    val width = bitmap.width
+    return GridAverager.average(width, bitmap.height, gridW, gridH) { y, into ->
+        bitmap.getPixels(into, 0, width, 0, y, width, 1)
     }
 }
 

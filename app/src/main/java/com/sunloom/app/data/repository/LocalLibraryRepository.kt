@@ -90,6 +90,7 @@ class LocalLibraryRepository(
         private const val KEY_SOFT_SWEEP_VERSION = "soft_rejections_denylist_version"
         private const val FETCH_CURSOR_STEP = 6
         private const val STUCK_CURSOR_FAILURES = 3
+        private val LIBRARY_WRITE_LOCK = Any()
         private val HEAL_EXEMPT_SOURCES = setOf("seed_reserve", "user_local")
         private const val FETCH_CURSOR_WRAP = 1_000_000
 
@@ -676,6 +677,7 @@ class LocalLibraryRepository(
             val gridW = 32
             val gridH = 20
             val rgbGrid = sampleBitmapToRgbGrid(decoded, gridW, gridH)
+            val evalGrid = sampleBitmapToEvaluationGrid(decoded, gridW, gridH)
             decoded.recycle()
             val dHash = SafetyGate.computePerceptualDHashFromPixels(rgbGrid, gridW, gridH)
             if (!record.isBaselineRestore &&
@@ -708,7 +710,7 @@ class LocalLibraryRepository(
                 val eval = imageEvaluator.evaluateRgbGrid(
                     imageWidth = origW,
                     imageHeight = origH,
-                    rgbGrid = rgbGrid,
+                    rgbGrid = evalGrid,
                     gridWidth = gridW,
                     gridHeight = gridH,
                     display = display,
@@ -1382,34 +1384,20 @@ class LocalLibraryRepository(
                 }
                 val advertisedW = candidate.provenance.originalWidth
                 val advertisedH = candidate.provenance.originalHeight
-                if (advertisedW > 0 && advertisedH > 0 && !preferences.allowBlurredFrameFill &&
-                    CropRenderer.visibleAreaFraction(advertisedW, advertisedH, display) < CropRenderer.MIN_VISIBLE_AREA
-                ) {
+                val sizeRejection = CropRenderer.advertisedSizeRejection(
+                    advertisedW, advertisedH, display, preferences.allowBlurredFrameFill
+                )
+                if (sizeRejection != null) {
                     recordRejection(
                         RejectionRecord(
                             assetId = candidate.id,
                             sourceId = adapter.sourceId,
-                            reasonCode = "COMPOSITION_CROPS_TOO_MUCH",
-                            explanation = "A ${display.resolutionLabel} crop would keep under half of the ${advertisedW}×${advertisedH} picture; not downloaded.",
-                            timestampEpochMs = System.currentTimeMillis(),
-                            isPermanent = false,
-                            displaySignature = displaySetSignature
-                        )
-                    )
-                    displayScopedRejectedIds.add(candidate.id)
-                    continue
-                }
-                if (advertisedW > 0 && advertisedH > 0 &&
-                    !CropRenderer.canSourceSatisfyDisplay(
-                        maxOf(advertisedW, advertisedH), display, preferences.allowBlurredFrameFill
-                    )
-                ) {
-                    recordRejection(
-                        RejectionRecord(
-                            assetId = candidate.id,
-                            sourceId = adapter.sourceId,
-                            reasonCode = "INSUFFICIENT_ADVERTISED_RESOLUTION",
-                            explanation = "Source advertises ${advertisedW}×${advertisedH}, too small for ${display.resolutionLabel}; not downloaded.",
+                            reasonCode = sizeRejection,
+                            explanation = if (sizeRejection == "COMPOSITION_CROPS_TOO_MUCH") {
+                                "A ${display.resolutionLabel} crop would keep under half of the ${advertisedW}×${advertisedH} picture; not downloaded."
+                            } else {
+                                "Source advertises ${advertisedW}×${advertisedH}, too small for ${display.resolutionLabel}; not downloaded."
+                            },
                             timestampEpochMs = System.currentTimeMillis(),
                             isPermanent = false,
                             displaySignature = displaySetSignature
@@ -1514,6 +1502,7 @@ class LocalLibraryRepository(
                     val gridW = 32
                     val gridH = 20
                     val rgbGrid = sampleBitmapToRgbGrid(decoded, gridW, gridH)
+                    val evalGrid = sampleBitmapToEvaluationGrid(decoded, gridW, gridH)
                     decoded.recycle()
 
                     val dHash = SafetyGate.computePerceptualDHashFromPixels(rgbGrid, gridW, gridH)
@@ -1561,7 +1550,7 @@ class LocalLibraryRepository(
                     val eval = imageEvaluator.evaluateRgbGrid(
                         imageWidth = srcW,
                         imageHeight = srcH,
-                        rgbGrid = rgbGrid,
+                        rgbGrid = evalGrid,
                         gridWidth = gridW,
                         gridHeight = gridH,
                         display = display,
@@ -1648,7 +1637,7 @@ class LocalLibraryRepository(
                             )
                         } ?: fresh
                     }
-                    upsertWallpaper(record)
+                    synchronized(LIBRARY_WRITE_LOCK) { upsertWallpaper(record) }
                     existingIds.add(candidate.id)
                     diversityGuard.noteAdded(adapter.sourceId, candidate.provenance.creatorName, dHash)
                     newlyAdded++
@@ -1708,8 +1697,18 @@ class LocalLibraryRepository(
             if (record.isRejected || record.isBaselineRestore || record.provenance.sourceId in HEAL_EXEMPT_SOURCES) continue
             if (record.localFilePath.isBlank() && record.fileSizeBytes == 0L) continue
             if (hasUsableFile(record)) continue
-            upsertWallpaper(record.copy(localFilePath = "", croppedFilePath = "", fileSizeBytes = 0L))
-            healed++
+            // Re-read the row: a sync may have re-downloaded it since the list was read, and blanking a fresh
+            // record would orphan its new file.
+            // The lock is shared with the sync's write of a downloaded record (any repository instance), so the
+            // check and the blanking write cannot interleave with a fresh download.
+            synchronized(LIBRARY_WRITE_LOCK) {
+                val current = getWallpaperById(record.id) ?: return@synchronized
+                if (current.isRejected || current.isBaselineRestore || current.provenance.sourceId in HEAL_EXEMPT_SOURCES ||
+                    hasUsableFile(current)
+                ) return@synchronized
+                upsertWallpaper(current.copy(localFilePath = "", croppedFilePath = "", fileSizeBytes = 0L))
+                healed++
+            }
         }
         return healed
     }

@@ -33,6 +33,11 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.remember
+import com.sunloom.app.domain.matcher.SourceRejectionGroup
+import com.sunloom.app.domain.matcher.SourceStockRow
+import com.sunloom.app.domain.model.SourceDiagnostics
+import com.sunloom.app.domain.model.SourceHealthState
 import com.sunloom.app.domain.safety.SafetyGate
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -44,6 +49,11 @@ internal fun DiagnosticsPane(
 ) {
     val usedMb = uiState.totalCacheBytesUsed.toDouble() / (1024.0 * 1024.0)
     val maxMb = uiState.preferences.maxCacheBytes.toDouble() / (1024.0 * 1024.0)
+
+    val stockRows = remember(uiState.libraryWallpapers, uiState.preferences.enabledCategories, uiState.sourceDiagnostics) {
+        uiState.reserveBySource
+    }
+    val rejectionGroups = remember(uiState.rejectionLog) { uiState.rejectionSummary }
 
     val listState = rememberLazyListState()
     LazyColumn(
@@ -102,6 +112,35 @@ internal fun DiagnosticsPane(
                     }
                 }
             }
+        }
+
+        if (stockRows.isNotEmpty()) {
+            item(key = "diag_sources_header") {
+                DiagnosticsListHeader(
+                    text = "Reserve by source",
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            items(stockRows.size, key = { "diag_src_${stockRows[it].sourceId}" }) { index ->
+                val row = stockRows[index]
+                val diag = uiState.sourceDiagnostics.firstOrNull { it.sourceId == row.sourceId }
+                DiagnosticsListRow(text = sourceStockLine(row), monospace = false)
+                sourceSyncLine(diag)?.let { DiagnosticsListRow(text = "    $it", monospace = false, secondary = true) }
+            }
+            item(key = "diag_sources_gap") { Spacer(Modifier.height(14.dp)) }
+        }
+
+        if (rejectionGroups.isNotEmpty()) {
+            item(key = "diag_rejection_groups_header") {
+                DiagnosticsListHeader(
+                    text = "Skipped by source and reason (latest ${uiState.rejectionLog.size})",
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            items(rejectionGroups.size, key = { "diag_rejgrp_$it" }) { index ->
+                DiagnosticsListRow(text = rejectionGroupLine(rejectionGroups[index]), monospace = true)
+            }
+            item(key = "diag_rejection_groups_gap") { Spacer(Modifier.height(14.dp)) }
         }
 
         if (uiState.rejectionLog.isNotEmpty()) {
@@ -183,13 +222,37 @@ private fun DiagnosticsListHeader(text: String, color: androidx.compose.ui.graph
 }
 
 @Composable
-private fun DiagnosticsListRow(text: String, monospace: Boolean) {
+private fun DiagnosticsListRow(text: String, monospace: Boolean, secondary: Boolean = false) {
     Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
         Text(
             text = text,
             style = MaterialTheme.typography.bodySmall,
             fontFamily = if (monospace) FontFamily.Monospace else null,
+            color = if (secondary) MaterialTheme.colorScheme.onSurfaceVariant else androidx.compose.ui.graphics.Color.Unspecified,
             modifier = Modifier.padding(horizontal = 18.dp, vertical = 3.dp)
         )
     }
 }
+
+/** "Wikimedia: 14 images (9 Light, 3 Dark, 2 Balanced), 10 unseen" - what one source holds. */
+internal fun sourceStockLine(row: SourceStockRow): String {
+    if (row.total == 0) return "${row.sourceName}: nothing in the reserve"
+    val noun = if (row.total == 1) "image" else "images"
+    val base = "${row.sourceName}: ${row.total} $noun (${row.light} Light, ${row.dark} Dark, ${row.balanced} Balanced), ${row.unseen} unseen"
+    return if (row.isFallback) "$base, fallback, not counted towards the reserve target" else base
+}
+
+/** Health, last sync and last error for a source on one line, or null when there is nothing to report. */
+internal fun sourceSyncLine(diag: SourceDiagnostics?): String? {
+    if (diag == null) return null
+    val unhealthy = diag.healthState != SourceHealthState.HEALTHY
+    if (!unhealthy && diag.lastSyncSummary.isBlank() && diag.lastError.isBlank()) return null
+    return listOfNotNull(
+        diag.healthState.label,
+        diag.lastSyncSummary.takeIf { it.isNotBlank() }?.let { "Last sync: $it" },
+        diag.lastError.takeIf { it.isNotBlank() }
+    ).joinToString(" • ")
+}
+
+internal fun rejectionGroupLine(group: SourceRejectionGroup): String =
+    "${group.sourceId}: ${group.reasonCode} × ${group.count}"

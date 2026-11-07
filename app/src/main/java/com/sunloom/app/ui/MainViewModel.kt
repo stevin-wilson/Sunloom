@@ -7,7 +7,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sunloom.app.data.repository.LibraryStoreUnavailableException
 import com.sunloom.app.data.repository.LocalLibraryRepository
+import com.sunloom.app.domain.matcher.BrightnessFit
+import com.sunloom.app.domain.matcher.ReserveBreakdown
 import com.sunloom.app.domain.matcher.ReserveBuffer
+import com.sunloom.app.domain.matcher.SourceRejectionGroup
+import com.sunloom.app.domain.matcher.SourceStockRow
 import com.sunloom.app.domain.matcher.TasteProfile
 import com.sunloom.app.domain.matcher.WallpaperMatcher
 import com.sunloom.app.domain.model.BrightnessClass
@@ -112,6 +116,18 @@ data class SunloomUiState(
             it.hasImage && !it.isRejected && !it.isBaselineRestore && it.evaluation.brightnessClass == BrightnessClass.DARK
         }
 
+    /** What each enabled source (and each fallback) holds, for Diagnostics. */
+    val reserveBySource: List<SourceStockRow>
+        get() = ReserveBreakdown.bySource(
+            libraryWallpapers,
+            preferences.enabledCategories,
+            knownSources = sourceDiagnostics.filter { it.isEnabled && it.isAdmitted }.map { it.sourceId to it.sourceName }
+        )
+
+    /** Skipped candidates grouped by source and reason, for Diagnostics. */
+    val rejectionSummary: List<SourceRejectionGroup>
+        get() = ReserveBreakdown.rejectionsBySourceAndReason(rejectionLog)
+
     /** Fetched images ready to use (a file, eligible, not rejected), seen or not. */
     val fetchedStockCount: Int
         get() = ReserveBuffer.stockCount(libraryWallpapers, preferences.enabledCategories)
@@ -128,8 +144,7 @@ data class SunloomUiState(
                 !it.isRejected &&
                 !it.isBaselineRestore &&
                 it.provenance.sourceId != "seed_reserve" &&
-                (it.evaluation.brightnessClass == targetBrightnessNow ||
-                    it.evaluation.brightnessClass == BrightnessClass.NEUTRAL) &&
+                BrightnessFit.accepts(it.evaluation, targetBrightnessNow) &&
                 it.appliedCount == 0
         }
 }
@@ -1309,7 +1324,8 @@ class AndroidSunloomGateway(
                 candidates = activePool,
                 targetBrightness = targetBrightness,
                 preferences = prefs,
-                deterministic = true
+                deterministic = true,
+                taste = TasteProfile.from(all)
             ) ?: appliedRecord ?: activePool.firstOrNull()
         }
 

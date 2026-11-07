@@ -64,19 +64,25 @@ class MetMuseumCc0SourceAdapter(
                 add("architecture garden courtyard" to SafeCategory.ARCHITECTURE_CITYSCAPES)
             }
         }
-        val (term, termCategory) = searchTerms[(offset / 4).coerceAtLeast(0) % searchTerms.size]
-        val encodedTerm = URLEncoder.encode(term, "UTF-8")
-
         val maxBudget = SourceRegistry.get(sourceId)?.maxRequestsPerSync ?: 7
         val spacingMs = SourceRegistry.get(sourceId)?.minRequestSpacingMs ?: 150L
         val maxLookups = (limit * 2).coerceIn(2, ((maxBudget - 1) / 2).coerceAtLeast(2))
+
+        // One search window holds SEARCH_WINDOW ids and each sync examines maxLookups of them, so a window is
+        // worth ceil(SEARCH_WINDOW / maxLookups) consecutive syncs: finish it, then move to the next query,
+        // then the next window.
+        val syncsPerWindow = (SEARCH_WINDOW + maxLookups - 1) / maxLookups
+        val cursorStep = offset.coerceAtLeast(0) / CURSOR_STEP
+        val windowIndex = cursorStep / syncsPerWindow
+        val (term, termCategory) = searchTerms[windowIndex % searchTerms.size]
+        val encodedTerm = URLEncoder.encode(term, "UTF-8")
 
         // The Met retired /v1/search on 2026-10-01 (HTTP 410). /v1.1/search is paginated: ask for a window of
         // ids at the cursor, and for the first window when the cursor is past the end of a small result set.
         fun searchUrl(start: Int) = "https://collectionapi.metmuseum.org/public/collection/v1.1/search" +
             "?isPublicDomain=true&hasImages=true&q=$encodedTerm&offset=$start&limit=$SEARCH_WINDOW"
 
-        val windowStart = ((offset / 4).coerceAtLeast(0) / searchTerms.size * SEARCH_WINDOW) % MAX_WINDOW_START
+        val windowStart = (windowIndex / searchTerms.size * SEARCH_WINDOW) % MAX_WINDOW_START
         var objectIds = httpClient.fetchTextOrNull(searchUrl(windowStart))
             ?.let { SimpleJson.parseObject(it) }?.arr("objectIDs")
         if ((objectIds == null || objectIds.size == 0) && windowStart > 0) {
@@ -88,7 +94,7 @@ class MetMuseumCc0SourceAdapter(
         val results = ArrayList<CandidateAsset>()
         // The cursor moves in steps of 6 inside one window; advance the lookups by one batch per step so
         // consecutive syncs examine different objects instead of the same few positions.
-        val startIndex = ((offset / CURSOR_STEP) * maxLookups) % objectIds.size
+        val startIndex = ((cursorStep % syncsPerWindow) * maxLookups) % objectIds.size
 
         for (step in 0 until minOf(objectIds.size, maxLookups)) {
             if (results.size >= limit) break
@@ -215,6 +221,7 @@ class MetMuseumCc0SourceAdapter(
 
         /** Size of one fetch-cursor step (see LocalLibraryRepository). */
         private const val CURSOR_STEP = 6
+
 
         /** Deepest window start before wrapping; most themed queries have thousands of public-domain hits. */
         private const val MAX_WINDOW_START = 600

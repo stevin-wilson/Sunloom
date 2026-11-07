@@ -46,17 +46,24 @@ class NasaLibrarySourceAdapter(
         val results = ArrayList<CandidateAsset>()
         val spacingMs = SourceRegistry.get(sourceId)?.minRequestSpacingMs ?: 150L
 
+        // NASA's search needs every word to match, so queries stay at one or two words (the earlier four- and
+        // five-word queries returned nothing). Each category rotates through a few as its fetch window advances.
+        val variant = (offset / limit.coerceAtLeast(1)) / NASA_PAGE_SPAN
+        fun termFor(category: SafeCategory): String {
+            val options = QUERY_TERMS.getValue(category)
+            return options[variant % options.size].replace(" ", "%20")
+        }
         val queries = buildList {
             if (SafeCategory.AERIAL_EARTH in enabledCategories) {
-                add("earth%20orbital%20horizon%20coastline" to SafeCategory.AERIAL_EARTH)
+                add(termFor(SafeCategory.AERIAL_EARTH) to SafeCategory.AERIAL_EARTH)
             }
             if (SafeCategory.LANDSCAPES_NATURE in enabledCategories) {
-                add("earth%20clouds%20ocean%20glacier%20daylight" to SafeCategory.LANDSCAPES_NATURE)
+                add(termFor(SafeCategory.LANDSCAPES_NATURE) to SafeCategory.LANDSCAPES_NATURE)
             }
             if (SafeCategory.SPACE_ASTRONOMY in enabledCategories) {
-                add("nebula%20galaxy%20aurora%20horizon" to SafeCategory.SPACE_ASTRONOMY)
+                add(termFor(SafeCategory.SPACE_ASTRONOMY) to SafeCategory.SPACE_ASTRONOMY)
             }
-        }.ifEmpty { listOf("earth%20horizon%20nebula" to SafeCategory.SPACE_ASTRONOMY) }
+        }.ifEmpty { listOf("nebula" to SafeCategory.SPACE_ASTRONOMY) }
 
         // Ask for a wide page: many records (ISS photographs) have no keywords and the gate rejects those.
         val perQueryLimit = NASA_PAGE_SIZE
@@ -234,6 +241,17 @@ class NasaLibrarySourceAdapter(
     companion object {
         /** NASA search pages walked before wrapping; deep enough that reinstalls and syncs differ. */
         private const val NASA_PAGE_SPAN = 20
+
+        /**
+         * Short queries, each checked against the live API on 2026-11-07. The fetch window pages up to
+         * NASA_PAGE_SPAN x NASA_PAGE_SIZE = 400 results, so every term has at least 400 hits (and most have
+         * well over 1000); a term with fewer would return empty pages near the end of its cycle.
+         */
+        private val QUERY_TERMS: Map<SafeCategory, List<String>> = mapOf(
+            SafeCategory.AERIAL_EARTH to listOf("earth horizon", "earth night", "coast"),
+            SafeCategory.LANDSCAPES_NATURE to listOf("earth clouds", "volcano", "desert", "lake"),
+            SafeCategory.SPACE_ASTRONOMY to listOf("galaxy", "aurora", "milky way")
+        )
         private const val NASA_PAGE_SIZE = 20
 
         private val ESA_WORD_REGEX = Regex("\\besa\\b")

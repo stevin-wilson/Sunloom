@@ -403,6 +403,30 @@ class CropRenderer {
             return if (sourceAspect >= targetAspect) targetAspect / sourceAspect else sourceAspect / targetAspect
         }
 
+        /**
+         * Why a picture advertised at [advertisedWidth] x [advertisedHeight] should not be downloaded for [display]:
+         * `COMPOSITION_CROPS_TOO_MUCH` (a display-shaped crop keeps under half of it, unless blurred fill is allowed)
+         * or `INSUFFICIENT_ADVERTISED_RESOLUTION` (too few pixels for the display's quality tier); null when it may be
+         * downloaded or the size is unknown. Shape is judged first.
+         */
+        fun advertisedSizeRejection(
+            advertisedWidth: Int,
+            advertisedHeight: Int,
+            display: DisplayProfile,
+            allowBlurredFrameFill: Boolean
+        ): String? {
+            if (advertisedWidth <= 0 || advertisedHeight <= 0) return null
+            if (!allowBlurredFrameFill &&
+                visibleAreaFraction(advertisedWidth, advertisedHeight, display) < MIN_VISIBLE_AREA
+            ) {
+                return "COMPOSITION_CROPS_TOO_MUCH"
+            }
+            if (!canSourceSatisfyDisplay(max(advertisedWidth, advertisedHeight), display, allowBlurredFrameFill)) {
+                return "INSUFFICIENT_ADVERTISED_RESOLUTION"
+            }
+            return null
+        }
+
         /** Upper bound on pixels in any bitmap handed to WallpaperManager (~64 MB as ARGB_8888). */
         const val MAX_OUTPUT_PIXELS = 16_000_000
 
@@ -431,7 +455,7 @@ class CropRenderer {
             display: DisplayProfile
         ): Boolean {
             return when (display.qualityTier) {
-                DisplayQualityTier.STANDARD_100 -> minCoverage >= 1.0 - 1e-4
+                DisplayQualityTier.STANDARD_100 -> minCoverage >= DisplayQualityTier.STANDARD_100.minCoverageRatio - 1e-4
                 DisplayQualityTier.MID_80 -> minCoverage >= MID_PPI_COVERAGE_FLOOR - 1e-4
                 DisplayQualityTier.HIGH_65 ->
                     minCoverage >= HIGH_DPI_COVERAGE_FLOOR - 1e-4 &&
