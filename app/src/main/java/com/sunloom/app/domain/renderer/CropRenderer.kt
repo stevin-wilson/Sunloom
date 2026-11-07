@@ -449,8 +449,9 @@ class CropRenderer {
          * showing all of it on every screen.
          */
         fun blurredFillLayout(sourceWidth: Int, sourceHeight: Int, displays: List<DisplayProfile>): BlurredFillLayout {
+            // A display with no size yet (mid-transition) gets a minimal canvas rather than an error.
             val valid = displays.filter { it.widthPx > 0 && it.heightPx > 0 }
-            require(valid.isNotEmpty()) { "blurredFillLayout needs at least one display" }
+                .ifEmpty { listOf(DisplayProfile(0, "Unsized", 64, 64)) }
             val rMin = valid.minOf { it.aspectRatio }
             val rMax = valid.maxOf { it.aspectRatio }
             val canvasAspect = sqrt(rMin * rMax)

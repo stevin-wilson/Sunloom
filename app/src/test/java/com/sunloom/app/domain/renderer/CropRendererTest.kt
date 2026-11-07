@@ -316,4 +316,12 @@ class CropRendererTest {
         )
         assertEquals(4.0 / 3.0, layout.fgWidth.toDouble() / layout.fgHeight, 0.01)
     }
+
+    @Test
+    fun `blurred fill layout does not throw for a display with no size yet`() {
+        val layout = CropRenderer.blurredFillLayout(4000, 3000, listOf(DisplayProfile(0, "Not ready", 0, 0)))
+
+        assertTrue(layout.canvasWidth > 0 && layout.canvasHeight > 0)
+        assertTrue(layout.fgWidth in 1..layout.canvasWidth && layout.fgHeight in 1..layout.canvasHeight)
+    }
 }

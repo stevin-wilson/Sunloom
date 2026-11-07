@@ -365,6 +365,13 @@ class GoogleBookPlatformAdapter(
         var preparedBitmap: Bitmap? = null
         val applied = try {
             preparedBitmap = when {
+                // A user's picture stored as blurred fill stays blurred whatever a re-plan would now choose: it was
+                // kept whole on purpose. The planner still tells us which displays the fill must be laid out for.
+                keepsStoredBlurredFill(record) -> renderBlurredFrameFillBitmap(
+                    sourceBitmap,
+                    effectiveDisplay,
+                    envelopePlan?.satisfiedDisplays?.ifEmpty { null } ?: effectiveDisplays
+                )
                 envelopePlan != null ->
                     prepareEnvelopeBitmap(source = sourceBitmap, plan = envelopePlan, fallbackDisplay = effectiveDisplay)
                 // A bundled seed is rendered for the whole display set (as wide as the widest and as tall as the
@@ -406,6 +413,9 @@ class GoogleBookPlatformAdapter(
         val rendered = record.isBaselineRestore || record.provenance.sourceId == "seed_reserve"
         return !rendered && record.provenance.originalWidth > 0 && record.provenance.originalHeight > 0
     }
+
+    private fun keepsStoredBlurredFill(record: WallpaperRecord): Boolean =
+        record.provenance.sourceId == "user_local" && record.evaluation.cropRect?.usesBlurredFrameFill == true
 
     private fun isSharedSeed(record: WallpaperRecord, displays: List<DisplayProfile>): Boolean =
         record.provenance.sourceId == "seed_reserve" && displays.size > 1

@@ -153,6 +153,36 @@ class GoogleBookPlatformAdapterTest {
     }
 
     @Test
+    fun `a user picture stored as blurred fill stays blurred even when a native crop would now pass`() {
+        val laptop = DisplayProfile(0, "GoogleBook Primary", 2560, 1600, isPrimary = true)
+        val ultrawide = DisplayProfile(1, "External Ultrawide", 3440, 1440, isPrimary = false)
+        val displays = listOf(laptop, ultrawide)
+        val fakeGateway = FakeWallpaperGateway(displays = displays)
+        val adapter = GoogleBookPlatformAdapter(context, fakeGateway)
+
+        val file = java.io.File(context.cacheDir, "user-photo.png")
+        val bmp = Bitmap.createBitmap(4000, 3000, Bitmap.Config.ARGB_8888)
+        file.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        bmp.recycle()
+        val template = repository.ensureSeedReserveLoaded(laptop).first()
+        val record = template.copy(
+            localFilePath = file.absolutePath,
+            provenance = template.provenance.copy(sourceId = "user_local", originalWidth = 4000, originalHeight = 3000),
+            evaluation = template.evaluation.copy(cropRect = CropRect(0, 0, 4000, 3000, 0.5, 0.5, true, 1.0))
+        )
+
+        val status = adapter.applyWallpaperAtomically(
+            record = record, policy = LockWorkspacePolicy.SAME_ON_BOTH, targetDisplay = ultrawide, connectedDisplays = displays
+        )
+
+        assertEquals(WallpaperStatus.APPLIED_SUCCESSFULLY, status)
+        // A blurred-fill canvas sits between the two displays' aspects; a native crop of a 4:3 photo would not.
+        val appliedAspect = fakeGateway.lastAppliedWidth.toDouble() / fakeGateway.lastAppliedHeight
+        assertTrue("canvas aspect $appliedAspect", appliedAspect > laptop.aspectRatio + 0.1)
+        assertTrue("canvas aspect $appliedAspect", appliedAspect < ultrawide.aspectRatio - 0.1)
+    }
+
+    @Test
     fun `applyWallpaperAtomically returns UNSUPPORTED_BY_SYSTEM when OS forbids wallpaper changes`() {
         val restrictedGateway = FakeWallpaperGateway(supported = false, allowed = false)
         val adapter = GoogleBookPlatformAdapter(context, restrictedGateway)
