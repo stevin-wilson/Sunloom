@@ -56,11 +56,11 @@
     <string name="welcome_to_sunloom">Welcome to Sunloom</string>
     <string name="add_to_favorites">Add to favorites</string>
     <string name="apply_wallpaper_now">Apply wallpaper now</string>
-    <string name="applying">Applying...</string>
+    <string name="applying">Applying…</string>
     <string name="dislike_and_exclude">Dislike and exclude</string>
     <string name="exit_fullscreen">Exit fullscreen</string>
     <string name="fetch_wallpapers">Fetch wallpapers</string>
-    <string name="fetching">Fetching...</string>
+    <string name="fetching">Fetching…</string>
     <string name="keep_in_favorites">Keep in favorites</string>
     <string name="next">Next</string>
     <string name="next_wallpaper">Next wallpaper</string>
@@ -78,7 +78,7 @@
     <string name="start_sunloom">Start Sunloom</string>
     <string name="sunloom_will_put_your_device_s_original">Sunloom will put your device\'s original wallpaper back and stop changing it until you apply another one.</string>
     <string name="sync_catalog_now">Sync Catalog Now</string>
-    <string name="syncing">Syncing...</string>
+    <string name="syncing">Syncing…</string>
     <string name="view_fullscreen">View fullscreen</string>
     <string name="shortcut_group_wallpaper">Wallpaper</string>
     <string name="shortcut_next">Next wallpaper</string>
@@ -113,5 +113,66 @@
     <plurals name="reserve_selected_count">
         <item quantity="one">%d selected</item>
         <item quantity="other">%d selected</item>
+    </plurals>
+
+    <!-- Status messages built by the gateway -->
+    <string name="msg_local_wallpaper_database_is_unavailable">Local wallpaper database is unavailable — automatic changes are suspended.</string>
+    <string name="msg_display_dimensions_unknown_waiting_for">Display dimensions unknown — waiting for an active display.</string>
+    <string name="msg_adapted_wallpaper_for">Adapted wallpaper for %1$s (%2$s)</string>
+    <string name="msg_removed_remembered_display_from_history">Removed remembered display from history.</string>
+    <string name="msg_automatic_changes_paused">Automatic changes paused</string>
+    <string name="msg_schedule_active">Schedule active (%1$s)</string>
+    <string name="msg_manual_mode_active">Manual mode active</string>
+    <string name="msg_wallpaper_record_not_found_in">Wallpaper record not found in local library.</string>
+    <string name="msg_display_dimensions_unknown_waiting_for_2">Display dimensions unknown — waiting for an active display before applying \'%1$s\'.</string>
+    <string name="msg_applied_for">Applied \'%1$s\' (%2$s) for %3$s</string>
+    <string name="msg_couldn_t_set_just_now">Couldn\'t set \'%1$s\' just now. Your current wallpaper is unchanged.</string>
+    <string name="msg_this_system_doesn_t_allow">This system doesn\'t allow Sunloom to change the wallpaper.</string>
+    <string name="msg_status_while_applying">Status: %1$s while applying \'%2$s\'</string>
+    <string name="msg_no_additional_eligible_wallpapers_found">No additional eligible wallpapers found for current filter.</string>
+    <string name="msg_no_previous_wallpaper_recorded_in">No previous wallpaper recorded in history yet.</string>
+    <string name="msg_restored_googlebookos_system_default_wallpaper">Restored GoogleBookOS system default wallpaper.</string>
+    <string name="msg_system_wallpaper_restore_was_not">System wallpaper restore was not permitted by OS policy.</string>
+    <string name="msg_wallpaper_not_found">Wallpaper not found.</string>
+    <string name="msg_added_to_favorites">Added \'%1$s\' to Favorites</string>
+    <string name="msg_removed_from_favorites">Removed \'%1$s\' from Favorites</string>
+    <string name="msg_disliked_it_won_t_be">Disliked \'%1$s\'. It won\'t be shown again.</string>
+    <string name="msg_disliked_and_switched_to">Disliked \'%1$s\' and switched to \'%2$s\'</string>
+    <string name="msg_deleted_from_reserve">Deleted \'%1$s\' from reserve</string>
+    <string name="msg_display_dimensions_unknown_connect_an">Display dimensions unknown — connect an active display before syncing.</string>
+    <string name="msg_couldn_t_reach_the_online">Couldn\'t reach the online catalogs. Your saved reserve is still available; try again when you\'re connected.</string>
+    <string name="msg_reserve_is_up_to_date">Reserve is up to date for %1$s</string>
+    <string name="msg_could_not_import_selected_image">Could not import selected image (check format, bounds, or blocklist).</string>
+    <string name="msg_saved_as_your_permanent_original">Saved \'%1$s\' as your permanent Original Wallpaper Restore Point.</string>
+    <string name="msg_added_to_your_reserve">Added \'%1$s\' to your reserve.</string>
+
+    <!-- Status messages built by the ViewModel (see UiStrings) -->
+    <string name="msg_loading_library">Loading wallpaper library…</string>
+    <string name="msg_manual_mode_enabled">Manual mode enabled — click Next Wallpaper whenever you\'d like a change</string>
+    <string name="msg_setting_not_saved">Couldn\'t save that setting. Your previous choice was kept.</string>
+    <string name="msg_fetching_catalogs">Fetching high-resolution wallpapers from online catalogs…</string>
+    <string name="msg_schedule_enabled">Automatic wallpaper schedule enabled (%1$s)</string>
+    <string name="msg_sync_interrupted">Online sync interrupted: %1$s</string>
+    <string name="msg_check_connection">check connection</string>
+    <string name="msg_next_wallpaper_fallback">next wallpaper</string>
+    <plurals name="msg_batch_checked">
+        <item quantity="one">Checked %1$d image — approved ones are in your reserve.</item>
+        <item quantity="other">Checked %1$d images — approved ones are in your reserve.</item>
+    </plurals>
+    <plurals name="msg_adapted_multi_display">
+        <item quantity="one">Adapted multi-display wallpaper envelope (%1$d display)</item>
+        <item quantity="other">Adapted multi-display wallpaper envelope (%1$d displays)</item>
+    </plurals>
+    <plurals name="msg_connected_displays">
+        <item quantity="one">%1$d connected display</item>
+        <item quantity="other">%1$d connected displays</item>
+    </plurals>
+    <plurals name="msg_prepared_new">
+        <item quantity="one">Prepared %1$d new high-resolution wallpaper for %2$s</item>
+        <item quantity="other">Prepared %1$d new high-resolution wallpapers for %2$s</item>
+    </plurals>
+    <plurals name="msg_wallpaper_count">
+        <item quantity="one">%1$d wallpaper</item>
+        <item quantity="other">%1$d wallpapers</item>
     </plurals>
 </resources>

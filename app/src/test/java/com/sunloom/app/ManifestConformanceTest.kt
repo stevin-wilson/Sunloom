@@ -101,4 +101,14 @@ class ManifestConformanceTest {
         assertEquals("false", application.attr("usesCleartextTraffic"))
         assertFalse(application.attr("networkSecurityConfig").isBlank())
     }
+
+    @Test
+    fun `back gestures use the system back callback so predictive back works`() {
+        val application = manifest.getElementsByTagName("application").item(0) as Element
+        assertTrue(
+            "predictive back needs the opt-in on the application or the activity",
+            application.attr("enableOnBackInvokedCallback") == "true" ||
+                mainActivity().attr("enableOnBackInvokedCallback") == "true"
+        )
+    }
 }

@@ -27,10 +27,13 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Deterministic JVM + Robolectric suite: safety acceptance drills, desktop conduct,
-      # accessibility, Laws of UX, manifest conformance and Constitution traceability (Article XVI).
-      - name: Unit tests and lint
-        run: ./gradlew testDebugUnitTest lintDebug --stacktrace
+      # One Gradle run, so the daemon starts and the build is configured once. It covers the deterministic JVM +
+      # Robolectric suite (safety drills, desktop conduct, accessibility, Laws of UX, manifest conformance and
+      # Constitution traceability, Article XVI), Android Lint with warnings as errors, detekt, and the shrunk (R8) release
+      # build without signing: only assemble/bundle/package tasks need the upload key, so a bad keep rule fails here
+      # and not in a Play upload.
+      - name: Tests, lint, static analysis and release shrink
+        run: ./gradlew testDebugUnitTest lintDebug detekt :app:minifyReleaseWithR8 :app:lintRelease --stacktrace
 
       - name: Upload reports
         if: always()
@@ -40,4 +43,6 @@ jobs:
           path: |
             app/build/reports/tests/testDebugUnitTest
             app/build/reports/lint-results-debug.html
+            build/reports/detekt
+            app/build/reports/detekt
           if-no-files-found: ignore

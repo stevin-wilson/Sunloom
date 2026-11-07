@@ -1,7 +1,7 @@
 package com.sunloom.app.platform.export
 
 import android.content.ContentResolver
-import android.media.ExifInterface
+import androidx.exifinterface.media.ExifInterface
 import android.net.Uri
 import com.sunloom.app.domain.attribution.AttributionFormatter
 import com.sunloom.app.domain.model.LicenseType

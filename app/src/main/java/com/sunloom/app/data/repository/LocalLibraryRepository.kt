@@ -35,7 +35,6 @@ import com.sunloom.app.domain.model.SafetyClassification
 import com.sunloom.app.domain.model.SafetyVerdict
 import com.sunloom.app.domain.model.ScheduleMode
 import com.sunloom.app.domain.model.SourceDiagnostics
-import com.sunloom.app.domain.model.SourceHealthState
 import com.sunloom.app.domain.model.UserPreferences
 import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.model.WallpaperStatus
@@ -88,14 +87,8 @@ class LocalLibraryRepository(
          */
         internal val SOFT_SAFETY_REASONS = setOf("UNRECOGNIZED_SAFE_DOMAIN", "MISSING_SAFETY_TAGS")
         private const val KEY_SOFT_SWEEP_VERSION = "soft_rejections_denylist_version"
-        private const val FETCH_CURSOR_STEP = 6
-        private const val STUCK_CURSOR_FAILURES = 3
         private val LIBRARY_WRITE_LOCK = Any()
         private val HEAL_EXEMPT_SOURCES = setOf("seed_reserve", "user_local")
-        private const val FETCH_CURSOR_WRAP = 1_000_000
-
-        /** First fetch from a source starts somewhere in this range, so installs do not all crawl the same pages. */
-        private const val FETCH_CURSOR_RANDOM_START = 600
         private val LEGACY_V1_3_SOURCES = setOf(
             "seed_reserve",
             "wikimedia_featured",
@@ -172,7 +165,7 @@ class LocalLibraryRepository(
                     }
                 } catch (unavailable: LibraryStoreUnavailableException) {
                     throw unavailable
-                } catch (err: Throwable) {
+                } catch (err: Exception) {
                     throw LibraryStoreUnavailableException(
                         "Failed to open local SQLite library database.",
                         err
@@ -186,6 +179,7 @@ class LocalLibraryRepository(
 
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences("sunloom_preferences", Context.MODE_PRIVATE)
+    private val sourceHealth = SourceHealthStore(prefs, random)
     val wallpaperDir: File = File(appContext.filesDir, "wallpapers").apply { mkdirs() }
     val quarantineDir: File = File(appContext.noBackupFilesDir, "quarantine").apply { mkdirs() }
     private val userImportPipeline = UserImportPipeline(
@@ -454,14 +448,7 @@ class LocalLibraryRepository(
             timestampEpochMs = now
         )
         recordRejection(
-            RejectionRecord(
-                assetId = existing.id,
-                sourceId = existing.provenance.sourceId,
-                reasonCode = "USER_REJECTED",
-                explanation = reason,
-                timestampEpochMs = now,
-                isPermanent = true
-            )
+            Rejections.permanent(existing.id, existing.provenance.sourceId, "USER_REJECTED", reason, nowMs = now)
         )
         clearInvalidatedActiveWallpaper(existing.id)
     }
@@ -760,16 +747,22 @@ class LocalLibraryRepository(
                     clearInvalidatedActiveWallpaper(record.id)
                 }
             } else {
-                upsertWallpaper(
-                    record.copy(
-                        provenance = record.provenance.copy(
-                            sha256Checksum = approved.sha256Checksum,
-                            perceptualHash = dHash.ifBlank { record.provenance.perceptualHash },
-                            safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION,
-                            gateLayerOutcomes = GateTrace.fullPass(isUserLocal)
+                // Without a known display the brightness and crop evaluation cannot be redone. The safety layers
+                // passed, but the record keeps its old gate version so the next call that has a display evaluates
+                // it; stamping it now would leave labels from an older evaluator in place for good. What was
+                // worked out on the way (checksum, perceptual hash) is kept so the near-duplicate guard has it.
+                if (record.provenance.sha256Checksum != approved.sha256Checksum ||
+                    (dHash.isNotBlank() && record.provenance.perceptualHash != dHash)
+                ) {
+                    upsertWallpaper(
+                        record.copy(
+                            provenance = record.provenance.copy(
+                                sha256Checksum = approved.sha256Checksum,
+                                perceptualHash = dHash.ifBlank { record.provenance.perceptualHash }
+                            )
                         )
                     )
-                )
+                }
             }
         }
         return evictedCount
@@ -861,7 +854,7 @@ class LocalLibraryRepository(
     ): List<WallpaperRecord> {
         val valid = displays.filter { it.widthPx > 0 && it.heightPx > 0 }
         if (valid.isEmpty()) return getAllWallpapers()
-        val sharpest = valid.maxByOrNull { it.widthPx.toLong() * it.heightPx.toLong() }!!
+        val sharpest = valid.maxBy { it.widthPx.toLong() * it.heightPx.toLong() }
         if (valid.size == 1 || displayPolicy == DisplayPolicy.OPTIMIZE_PRIMARY_SHARPEST) {
             return ensureSeedReserveLoaded(sharpest)
         }
@@ -1053,7 +1046,7 @@ class LocalLibraryRepository(
     ): Boolean {
         val validDisplays = displays.filter { it.widthPx > 0 && it.heightPx > 0 }
         if (validDisplays.isEmpty()) return false
-        val primaryOrSharpest = validDisplays.maxByOrNull { it.widthPx.toLong() * it.heightPx.toLong() }!!
+        val primaryOrSharpest = validDisplays.maxBy { it.widthPx.toLong() * it.heightPx.toLong() }
 
         var changedAny = false
         for (record in getAllWallpapers()) {
@@ -1173,7 +1166,7 @@ class LocalLibraryRepository(
             !adapter.isBuiltInOffline &&
                 SourceRegistry.isSourceAdmitted(adapter.sourceId) &&
                 adapter.sourceId in preferences.enabledSources &&
-                !isSourceInBackoff(adapter.sourceId, nowEpochMs)
+                !sourceHealth.isInBackoff(adapter.sourceId, nowEpochMs)
         }
         val eligible = if (display != null) {
             val compatible = baseEligible.filter { adapter ->
@@ -1285,7 +1278,8 @@ class LocalLibraryRepository(
             )
             val scopedAdapter = adapter.withHttpClient(budgetedClient)
 
-            val cursor = fetchCursor(adapter.sourceId)
+            val cursor = sourceHealth.fetchCursor(adapter.sourceId)
+            var fetchFailure: Throwable? = null
             val candidates = try {
                 scopedAdapter.fetchCandidates(
                     enabledCategories = preferences.enabledCategories,
@@ -1296,16 +1290,27 @@ class LocalLibraryRepository(
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (_: SourceBudgetExceededException) {
-                advanceFetchCursor(adapter.sourceId, cursor)
+                sourceHealth.advanceCursor(adapter.sourceId, cursor)
                 continue
-            } catch (err: Throwable) {
-                if (isCancellationThrowable(err)) {
+            } catch (err: Exception) {
+                fetchFailure = err
+                emptyList()
+            } catch (err: VirtualMachineError) {
+                // One source dying, even with a stack overflow on hostile JSON, must not stop the others.
+                fetchFailure = err
+                emptyList()
+            }
+            fetchFailure?.let { err ->
+                if (SourceHealthStore.isCancellation(err)) {
                     throw CancellationException(err.message).apply { initCause(err) }
                 }
                 lastSyncFailedSources++
-                recordSourceFetchFailure(adapter.sourceId, err)
-                moveOnIfStuck(adapter.sourceId, cursor)
-                recordSyncSummary(adapter.sourceId, fetched = 0, alreadyHad = 0, added = 0, httpErrors = budgetedClient.httpErrorCount, failure = err)
+                sourceHealth.recordFailure(adapter.sourceId, err)
+                sourceHealth.moveOnIfStuck(adapter.sourceId, cursor)
+                sourceHealth.recordSyncSummary(
+                    adapter.sourceId, fetched = 0, alreadyHad = 0, added = 0,
+                    httpErrors = budgetedClient.httpErrorCount, failure = err
+                )
                 continue
             }
             // Adapters swallow HTTP errors and return an empty list. When no request of the source got an answer,
@@ -1313,13 +1318,15 @@ class LocalLibraryRepository(
             // object without an image, say) are normal and do not make a source unhealthy.
             if (candidates.isEmpty() && budgetedClient.successfulRequestCount == 0 && budgetedClient.httpErrorCount > 0) {
                 lastSyncFailedSources++
-                recordSourceFetchFailure(adapter.sourceId, budgetedClient.lastHttpError)
-                moveOnIfStuck(adapter.sourceId, cursor)
-                recordSyncSummary(adapter.sourceId, fetched = 0, alreadyHad = 0, added = 0, httpErrors = budgetedClient.httpErrorCount)
+                sourceHealth.recordFailure(adapter.sourceId, budgetedClient.lastHttpError)
+                sourceHealth.moveOnIfStuck(adapter.sourceId, cursor)
+                sourceHealth.recordSyncSummary(
+                    adapter.sourceId, fetched = 0, alreadyHad = 0, added = 0, httpErrors = budgetedClient.httpErrorCount
+                )
                 continue
             }
-            advanceFetchCursor(adapter.sourceId, cursor)
-            recordSourceFetchSuccess(adapter.sourceId)
+            sourceHealth.advanceCursor(adapter.sourceId, cursor)
+            sourceHealth.recordSuccess(adapter.sourceId)
             val addedBefore = newlyAdded
             var alreadyHad = 0
 
@@ -1341,14 +1348,10 @@ class LocalLibraryRepository(
                 )
                 if (metaVerdict is SafetyVerdict.Rejected && metaVerdict.reasonCode in SOFT_SAFETY_REASONS) {
                     recordRejection(
-                        RejectionRecord(
-                            assetId = candidate.id,
-                            sourceId = adapter.sourceId,
-                            reasonCode = metaVerdict.reasonCode,
-                            explanation = metaVerdict.explanation,
-                            timestampEpochMs = System.currentTimeMillis(),
-                            isPermanent = false,
-                            displaySignature = displaySetSignature
+                        Rejections.displayScoped(
+                            candidate.id, adapter.sourceId, metaVerdict.reasonCode,
+                            metaVerdict.explanation,
+                            displaySetSignature
                         )
                     )
                     displayScopedRejectedIds.add(candidate.id)
@@ -1365,13 +1368,9 @@ class LocalLibraryRepository(
                         timestampEpochMs = ts
                     )
                     recordRejection(
-                        RejectionRecord(
-                            assetId = candidate.id,
-                            sourceId = adapter.sourceId,
-                            reasonCode = metaVerdict.reasonCode,
-                            explanation = metaVerdict.explanation,
-                            timestampEpochMs = ts,
-                            isPermanent = true
+                        Rejections.permanent(
+                            candidate.id, adapter.sourceId, metaVerdict.reasonCode,
+                            metaVerdict.explanation, nowMs = ts
                         )
                     )
                     permanentlyBlockedIds.add(candidate.id)
@@ -1389,18 +1388,14 @@ class LocalLibraryRepository(
                 )
                 if (sizeRejection != null) {
                     recordRejection(
-                        RejectionRecord(
-                            assetId = candidate.id,
-                            sourceId = adapter.sourceId,
-                            reasonCode = sizeRejection,
-                            explanation = if (sizeRejection == "COMPOSITION_CROPS_TOO_MUCH") {
+                        Rejections.displayScoped(
+                            candidate.id, adapter.sourceId, sizeRejection,
+                            if (sizeRejection == "COMPOSITION_CROPS_TOO_MUCH") {
                                 "A ${display.resolutionLabel} crop would keep under half of the ${advertisedW}×${advertisedH} picture; not downloaded."
                             } else {
                                 "Source advertises ${advertisedW}×${advertisedH}, too small for ${display.resolutionLabel}; not downloaded."
                             },
-                            timestampEpochMs = System.currentTimeMillis(),
-                            isPermanent = false,
-                            displaySignature = displaySetSignature
+                            displaySetSignature
                         )
                     )
                     displayScopedRejectedIds.add(candidate.id)
@@ -1427,15 +1422,17 @@ class LocalLibraryRepository(
                         } catch (cancel: CancellationException) {
                             throw cancel
                         } catch (rateLimit: RateLimitException) {
-                            recordSourceFetchFailure(adapter.sourceId, rateLimit)
+                            sourceHealth.recordFailure(adapter.sourceId, rateLimit)
                             break@candidateLoop
                         } catch (_: SourceBudgetExceededException) {
                             break@candidateLoop
-                        } catch (err: Throwable) {
-                            if (isCancellationThrowable(err)) {
+                        } catch (err: Exception) {
+                            if (SourceHealthStore.isCancellation(err)) {
                                 throw CancellationException(err.message).apply { initCause(err) }
                             }
                             // Try next rendition URL in downloadChain
+                        } catch (_: OutOfMemoryError) {
+                            // A payload too large to hold in memory: treat like a failed rendition and try the next.
                         }
                     }
                     if (payloadBytes == null) continue
@@ -1461,13 +1458,9 @@ class LocalLibraryRepository(
                             timestampEpochMs = ts
                         )
                         recordRejection(
-                            RejectionRecord(
-                                assetId = candidate.id,
-                                sourceId = adapter.sourceId,
-                                reasonCode = payloadVerdict.reasonCode,
-                                explanation = payloadVerdict.explanation,
-                                timestampEpochMs = ts,
-                                isPermanent = true
+                            Rejections.permanent(
+                                candidate.id, adapter.sourceId, payloadVerdict.reasonCode,
+                                payloadVerdict.explanation, nowMs = ts
                             )
                         )
                         permanentlyBlockedIds.add(candidate.id)
@@ -1482,13 +1475,9 @@ class LocalLibraryRepository(
                     )
                     if (decoded == null) {
                         recordRejection(
-                            RejectionRecord(
-                                assetId = candidate.id,
-                                sourceId = adapter.sourceId,
-                                reasonCode = "CORRUPT_BITMAP",
-                                explanation = "BitmapFactory could not safely decode image payload.",
-                                timestampEpochMs = System.currentTimeMillis(),
-                                isPermanent = true
+                            Rejections.permanent(
+                                candidate.id, adapter.sourceId, "CORRUPT_BITMAP",
+                                "BitmapFactory could not safely decode image payload."
                             )
                         )
                         permanentlyBlockedIds.add(candidate.id)
@@ -1517,13 +1506,9 @@ class LocalLibraryRepository(
                             timestampEpochMs = ts
                         )
                         recordRejection(
-                            RejectionRecord(
-                                assetId = candidate.id,
-                                sourceId = adapter.sourceId,
-                                reasonCode = "BLOCKLISTED_PERCEPTUAL_HASH",
-                                explanation = "Perceptual dHash ($dHash) matches a permanently rejected wallpaper.",
-                                timestampEpochMs = ts,
-                                isPermanent = true
+                            Rejections.permanent(
+                                candidate.id, adapter.sourceId, "BLOCKLISTED_PERCEPTUAL_HASH",
+                                "Perceptual dHash ($dHash) matches a permanently rejected wallpaper.", nowMs = ts
                             )
                         )
                         permanentlyBlockedIds.add(candidate.id)
@@ -1533,14 +1518,10 @@ class LocalLibraryRepository(
 
                     if (diversityGuard.isNearDuplicate(dHash)) {
                         recordRejection(
-                            RejectionRecord(
-                                assetId = candidate.id,
-                                sourceId = adapter.sourceId,
-                                reasonCode = "NEAR_DUPLICATE_OF_LIBRARY",
-                                explanation = "Perceptual hash ($dHash) is almost identical to a wallpaper already in the library.",
-                                timestampEpochMs = System.currentTimeMillis(),
-                                isPermanent = false,
-                                displaySignature = displaySetSignature
+                            Rejections.displayScoped(
+                                candidate.id, adapter.sourceId, "NEAR_DUPLICATE_OF_LIBRARY",
+                                "Perceptual hash ($dHash) is almost identical to a wallpaper already in the library.",
+                                displaySetSignature
                             )
                         )
                         displayScopedRejectedIds.add(candidate.id)
@@ -1561,14 +1542,10 @@ class LocalLibraryRepository(
                         val reason = eval.rejectionReasonCode ?: "QUALITY_THRESHOLD_NOT_MET"
                         // Quality/resolution rejections are display-scoped (isPermanent = false)
                         recordRejection(
-                            RejectionRecord(
-                                assetId = candidate.id,
-                                sourceId = adapter.sourceId,
-                                reasonCode = reason,
-                                explanation = eval.explanation,
-                                timestampEpochMs = System.currentTimeMillis(),
-                                isPermanent = false,
-                                displaySignature = displaySetSignature
+                            Rejections.displayScoped(
+                                candidate.id, adapter.sourceId, reason,
+                                eval.explanation,
+                                displaySetSignature
                             )
                         )
                         displayScopedRejectedIds.add(candidate.id)
@@ -1586,14 +1563,10 @@ class LocalLibraryRepository(
                     )
                     if (envelopePlan == null) {
                         recordRejection(
-                            RejectionRecord(
-                                assetId = candidate.id,
-                                sourceId = adapter.sourceId,
-                                reasonCode = "INSUFFICIENT_ENVELOPE_RESOLUTION",
-                                explanation = "Source (${srcW}×${srcH}) cannot satisfy the connected multi-display envelope without upscaling.",
-                                timestampEpochMs = System.currentTimeMillis(),
-                                isPermanent = false,
-                                displaySignature = displaySetSignature
+                            Rejections.displayScoped(
+                                candidate.id, adapter.sourceId, "INSUFFICIENT_ENVELOPE_RESOLUTION",
+                                "Source (${srcW}×${srcH}) cannot satisfy the connected multi-display envelope without upscaling.",
+                                displaySetSignature
                             )
                         )
                         displayScopedRejectedIds.add(candidate.id)
@@ -1604,7 +1577,12 @@ class LocalLibraryRepository(
 
                     val ext = approved.detectedFormat.fileExtension
                     val outFile = File(wallpaperDir, "${candidate.id}.$ext")
-                    FileOutputStream(outFile).use { it.write(payloadBytes) }
+                    // The bytes are already on disk in quarantine and have passed every check: move them into place
+                    // instead of writing the (possibly tens of MB) payload a second time. A move across file systems
+                    // can fail, so fall back to a plain write.
+                    if (!quarantineFile.renameTo(outFile)) {
+                        FileOutputStream(outFile).use { it.write(payloadBytes) }
+                    }
 
                     val record = WallpaperRecord(
                         id = candidate.id,
@@ -1637,7 +1615,12 @@ class LocalLibraryRepository(
                             )
                         } ?: fresh
                     }
-                    synchronized(LIBRARY_WRITE_LOCK) { upsertWallpaper(record) }
+                    try {
+                        synchronized(LIBRARY_WRITE_LOCK) { upsertWallpaper(record) }
+                    } catch (e: Exception) {
+                        runCatching { outFile.delete() } // do not leave an image no row refers to
+                        throw e
+                    }
                     existingIds.add(candidate.id)
                     diversityGuard.noteAdded(adapter.sourceId, candidate.provenance.creatorName, dHash)
                     newlyAdded++
@@ -1645,7 +1628,7 @@ class LocalLibraryRepository(
                     runCatching { quarantineFile.delete() }
                 }
             }
-            recordSyncSummary(
+            sourceHealth.recordSyncSummary(
                 adapter.sourceId,
                 fetched = candidates.size,
                 alreadyHad = alreadyHad,
@@ -1753,64 +1736,6 @@ class LocalLibraryRepository(
 
     // --- Source Health & Rate-Limit Backoff Diagnostics (Phase 1.6) ---
 
-    private fun isCancellationThrowable(error: Throwable?): Boolean {
-        var cur = error
-        var depth = 0
-        while (cur != null && depth < 8) {
-            if (cur is CancellationException) return true
-            cur = cur.cause
-            depth++
-        }
-        return false
-    }
-
-    private fun isCancellationErrorMessage(message: String): Boolean {
-        if (message.isBlank()) return false
-        val lower = message.lowercase(java.util.Locale.ROOT)
-        return lower.contains("job was cancelled") ||
-            lower.contains("job was canceled") ||
-            lower.contains("coroutine was cancelled") ||
-            lower.contains("coroutine was canceled") ||
-            lower.contains("cancellationscope") ||
-            lower.contains("left the composition")
-    }
-
-    /**
-     * Self-heals any persisted false-degraded source entries that were recorded from
-     * coroutine/WorkManager cancellations (e.g. `"Job was cancelled"`) rather than actual
-     * remote API failures.
-     */
-    fun healCancelledSourceDiagnostics() {
-        var editor: android.content.SharedPreferences.Editor? = null
-        for (entry in SourceRegistry.admittedSources()) {
-            val sid = entry.sourceId
-            val lastErr = prefs.getString("source_last_error_$sid", "") ?: ""
-            if (isCancellationErrorMessage(lastErr)) {
-                val ed = editor ?: prefs.edit().also { editor = it }
-                ed.putInt("source_fail_count_$sid", 0)
-                ed.putLong("source_backoff_until_$sid", 0L)
-                ed.putString("source_last_error_$sid", "")
-            }
-        }
-        editor?.apply()
-    }
-
-    fun clearTransientSourceFailureOnReenable(sourceId: String) {
-        val lastErr = prefs.getString("source_last_error_$sourceId", "") ?: ""
-        if (!lastErr.contains("429") && !lastErr.contains("rate limit", ignoreCase = true)) {
-            prefs.edit {
-                putInt("source_fail_count_$sourceId", 0)
-                putLong("source_backoff_until_$sourceId", 0L)
-                putString("source_last_error_$sourceId", "")
-            }
-        }
-    }
-
-    private fun isSourceInBackoff(sourceId: String, nowEpochMs: Long): Boolean {
-        val until = prefs.getLong("source_backoff_until_$sourceId", 0L)
-        return until > nowEpochMs
-    }
-
     /**
      * Soft outcomes (see [SOFT_SAFETY_REASONS]) from an earlier denylist version may have been stored as
      * permanent bans. Once per denylist version they are lifted so the candidates are evaluated again;
@@ -1823,106 +1748,28 @@ class LocalLibraryRepository(
         prefs.edit { putString(KEY_SOFT_SWEEP_VERSION, current) }
     }
 
-    /**
-     * Each source walks its own catalog: the cursor starts at a random point on first use and only moves
-     * once the source has answered (or has used up its request budget, so a page that always exhausts the
-     * budget cannot pin the cursor); a dead network never skips content that was not seen (Article X §4).
-     */
-    private fun fetchCursor(sourceId: String): Int {
-        val key = "fetch_cursor_$sourceId"
-        val stored = prefs.getInt(key, -1)
-        if (stored >= 0) return stored
-        val start = random.nextInt(FETCH_CURSOR_RANDOM_START)
-        prefs.edit { putInt(key, start) }
-        return start
-    }
+    // --- Source health, backoff and fetch cursor: see SourceHealthStore ---
 
-    /** A page that fails again and again must not pin the cursor: after three failures in a row, skip it. */
-    private fun moveOnIfStuck(sourceId: String, cursor: Int) {
-        if (prefs.getInt("source_fail_count_$sourceId", 0) >= STUCK_CURSOR_FAILURES) advanceFetchCursor(sourceId, cursor)
-    }
+    fun healCancelledSourceDiagnostics() =
+        sourceHealth.healCancelledDiagnostics(SourceRegistry.admittedSources().map { it.sourceId })
 
-    private fun advanceFetchCursor(sourceId: String, from: Int) {
-        prefs.edit { putInt("fetch_cursor_$sourceId", (from + FETCH_CURSOR_STEP) % FETCH_CURSOR_WRAP) }
-    }
-
-    /** Persists a one-line account of the latest sync for a source so Diagnostics can show it. */
-    private fun recordSyncSummary(
-        sourceId: String,
-        fetched: Int,
-        alreadyHad: Int,
-        added: Int,
-        httpErrors: Int,
-        failure: Throwable? = null
-    ) {
-        val rejected = (fetched - alreadyHad - added).coerceAtLeast(0)
-        val text = buildString {
-            append("fetched $fetched, added $added, already had $alreadyHad, rejected or skipped $rejected, HTTP errors $httpErrors")
-            if (failure != null) append(" (${failure.message?.take(80) ?: failure.javaClass.simpleName})")
-        }
-        prefs.edit { putString("source_last_sync_$sourceId", text) }
-    }
-
-    fun recordSourceFetchSuccess(sourceId: String, nowEpochMs: Long = System.currentTimeMillis()) {
-        prefs.edit {
-            putInt("source_fail_count_$sourceId", 0)
-            putLong("source_backoff_until_$sourceId", 0L)
-            putLong("source_last_success_$sourceId", nowEpochMs)
-            putString("source_last_error_$sourceId", "")
-        }
-    }
-
-    fun recordSourceFetchFailure(
-        sourceId: String,
-        error: Throwable?,
-        nowEpochMs: Long = System.currentTimeMillis()
-    ) {
-        if (isCancellationThrowable(error) || isCancellationErrorMessage(error?.message.orEmpty())) {
-            return
-        }
-        val fails = prefs.getInt("source_fail_count_$sourceId", 0) + 1
-        val backoffMs = when {
-            error is RateLimitException -> maxOf(error.retryAfterSeconds * 1000L, 15L * 60L * 1000L)
-            fails >= 3 -> minOf(60L * 60L * 1000L, 5L * 60L * 1000L * (1L shl (fails - 3).coerceAtMost(4)))
-            else -> 0L
-        }
-        val backoffUntil = if (backoffMs > 0L) nowEpochMs + backoffMs else 0L
-        val errorMsg = when (error) {
-            is RateLimitException -> "HTTP 429 rate limit (Retry-After: ${error.retryAfterSeconds}s)"
-            null -> "Connection error"
-            else -> error.message?.take(120) ?: error.javaClass.simpleName
-        }
-        prefs.edit {
-            putInt("source_fail_count_$sourceId", fails)
-            putLong("source_backoff_until_$sourceId", backoffUntil)
-            putString("source_last_error_$sourceId", errorMsg)
-        }
-    }
+    fun clearTransientSourceFailureOnReenable(sourceId: String) = sourceHealth.clearTransientFailureOnReenable(sourceId)
 
     fun getSourceDiagnostics(nowEpochMs: Long = System.currentTimeMillis()): List<SourceDiagnostics> {
         healCancelledSourceDiagnostics()
         val enabled = loadPreferences().enabledSources
         return SourceRegistry.admittedSources().map { entry ->
             val sid = entry.sourceId
-            val fails = prefs.getInt("source_fail_count_$sid", 0)
-            val backoffUntil = prefs.getLong("source_backoff_until_$sid", 0L)
-            val lastErr = prefs.getString("source_last_error_$sid", "") ?: ""
-            val state = when {
-                !SourceRegistry.isSourceAdmitted(sid) -> SourceHealthState.REVOKED
-                fails >= SourceRegistry.AUTO_DISABLE_FAILURE_THRESHOLD -> SourceHealthState.AUTO_DISABLED
-                backoffUntil > nowEpochMs || fails >= 3 -> SourceHealthState.DEGRADED
-                else -> SourceHealthState.HEALTHY
-            }
             SourceDiagnostics(
                 sourceId = sid,
                 sourceName = entry.sourceName,
                 isAdmitted = entry.isAdmitted,
                 isEnabled = sid in enabled,
-                healthState = state,
-                consecutiveFailures = fails,
-                lastError = lastErr,
-                backoffUntilEpochMs = backoffUntil,
-                lastSyncSummary = prefs.getString("source_last_sync_$sid", "") ?: ""
+                healthState = sourceHealth.stateFor(sid, SourceRegistry.isSourceAdmitted(sid), nowEpochMs),
+                consecutiveFailures = sourceHealth.failureCount(sid),
+                lastError = sourceHealth.lastError(sid),
+                backoffUntilEpochMs = sourceHealth.backoffUntil(sid),
+                lastSyncSummary = sourceHealth.syncSummary(sid)
             )
         }
     }

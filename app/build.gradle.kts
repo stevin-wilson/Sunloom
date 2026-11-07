@@ -4,6 +4,7 @@ import org.gradle.testing.jacoco.tasks.JacocoReport
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.detekt)
     id("jacoco")
 }
 
@@ -66,6 +67,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        // There is no native code. This keeps the package to the two Googlebook OS architectures (Article XVIII §1),
+        // which also stops WorkManager/Compose from pulling in other ABIs; do not remove it as "unused".
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
@@ -140,6 +143,7 @@ android {
     }
 
     lint {
+        warningsAsErrors = true
         disable += setOf(
             "ObsoleteSdkInt",
             "AndroidGradlePluginVersion",
@@ -147,6 +151,16 @@ android {
             "NewerVersionAvailable"
         )
     }
+}
+
+detekt {
+    // Static analysis gate (Phase 0 of the code-quality plan). Pre-existing findings live in the baseline so
+    // that only new code is held to the rules; shrink the baseline as the large functions are split.
+    buildUponDefaultConfig = true
+    config.setFrom(rootProject.file("config/detekt/detekt.yml"))
+    baseline = file("detekt-baseline.xml")
+    source.setFrom("src/main/java")
+    parallel = true
 }
 
 composeCompiler {
@@ -174,6 +188,7 @@ dependencies {
     testImplementation(composeBom)
 
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

@@ -17,6 +17,7 @@ import android.os.PowerManager
 import androidx.core.content.edit
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
+import com.sunloom.app.appContainer
 import com.sunloom.app.data.repository.LocalLibraryRepository
 import com.sunloom.app.domain.model.CropRect
 import com.sunloom.app.domain.model.DisplayPolicy
@@ -422,7 +423,7 @@ class GoogleBookPlatformAdapter(
             applyExifOrientationIfNeeded(file, raw)
         } catch (_: OutOfMemoryError) {
             null
-        } catch (_: Throwable) {
+        } catch (_: Exception) {
             null
         }
     }
@@ -635,7 +636,7 @@ class GoogleBookPlatformAdapter(
 
         suspend fun executeScheduledWallpaperChange(
             appContext: Context,
-            repo: LocalLibraryRepository = LocalLibraryRepository(appContext),
+            repo: LocalLibraryRepository = appContext.appContainer().newRepository(),
             platform: GoogleBookPlatformAdapter = GoogleBookPlatformAdapter(appContext),
             nowZonedOverride: ZonedDateTime? = null
         ): WallpaperStatus? {
@@ -649,7 +650,7 @@ class GoogleBookPlatformAdapter(
 
         suspend fun executeScheduledCatalogRefresh(
             appContext: Context,
-            repo: LocalLibraryRepository = LocalLibraryRepository(appContext),
+            repo: LocalLibraryRepository = appContext.appContainer().newRepository(),
             platform: GoogleBookPlatformAdapter = GoogleBookPlatformAdapter(appContext),
             gateway: SystemWallpaperGateway = DefaultSystemWallpaperGateway(appContext)
         ): Int {

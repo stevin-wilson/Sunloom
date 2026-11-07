@@ -1,0 +1,55 @@
+# Sunloom detekt rules, layered on detekt's defaults. Kept deliberately small: it should catch the bug classes
+# the code review found (swallowed errors, long functions, !!) without drowning the team in style noise.
+complexity:
+  LongMethod:
+    active: true
+    threshold: 120
+  LongParameterList:
+    active: true
+    functionThreshold: 14
+    constructorThreshold: 16
+    ignoreDefaultParameters: true
+  CyclomaticComplexMethod:
+    active: true
+    threshold: 30
+  TooManyFunctions:
+    active: false
+  LargeClass:
+    active: true
+    threshold: 1000
+exceptions:
+  TooGenericExceptionCaught:
+    active: true
+    allowedExceptionNameRegex: '^(ignore|expected).*'
+    exceptionNames:
+      - Throwable
+      - Error
+  SwallowedException:
+    active: false
+potential-bugs:
+  UnsafeCallOnNullableType:
+    active: true
+naming:
+  FunctionNaming:
+    active: true
+    ignoreAnnotated: ['Composable']
+style:
+  MagicNumber:
+    active: false
+  MaxLineLength:
+    active: true
+    maxLineLength: 140
+  ReturnCount:
+    active: false
+  ThrowsCount:
+    active: false
+  UnusedPrivateMember:
+    active: true
+  WildcardImport:
+    active: true
+  NewLineAtEndOfFile:
+    active: false
+  UnnecessaryAbstractClass:
+    active: false
+  SerialVersionUIDInSerializableClass:
+    active: false

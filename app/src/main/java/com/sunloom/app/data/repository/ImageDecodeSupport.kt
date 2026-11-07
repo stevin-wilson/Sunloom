@@ -79,7 +79,7 @@ internal fun decodeSampledBitmapSafely(
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
     } catch (_: OutOfMemoryError) {
         null
-    } catch (_: Throwable) {
+    } catch (_: Exception) {
         null
     }
 }

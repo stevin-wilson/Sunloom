@@ -3,8 +3,8 @@ package com.sunloom.app.platform
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.sunloom.app.appContainer
 import com.sunloom.app.data.repository.LibraryStoreUnavailableException
-import com.sunloom.app.data.repository.LocalLibraryRepository
 import com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +28,7 @@ class SunloomScheduleReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val repo = LocalLibraryRepository(appContext)
+                val repo = appContext.appContainer().newRepository()
                 val prefs = repo.loadPreferences()
                 SunloomWallpaperScheduler(appContext).syncPeriodicSchedule(
                     autoEnabled = prefs.autoChangeEnabled,
@@ -39,8 +39,10 @@ class SunloomScheduleReceiver : BroadcastReceiver() {
                 )
             } catch (_: LibraryStoreUnavailableException) {
                 SunloomWallpaperScheduler(appContext).cancelAllScheduledWork()
-            } catch (_: Throwable) {
+            } catch (_: Exception) {
                 // Fail-closed: do not crash broadcast process on transient store error
+            } catch (_: VirtualMachineError) {
+                // Same for running out of memory: this process was only woken to re-arm a schedule.
             } finally {
                 pendingResult?.finish()
             }
