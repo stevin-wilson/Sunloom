@@ -41,7 +41,9 @@ val hasUploadSigningCredentials =
 
 gradle.taskGraph.whenReady {
     val isReleaseBuildRequested = allTasks.any { task ->
+        // packageReleaseResources only feeds lint and shrinking: it produces nothing that is signed.
         task.name.contains("Release", ignoreCase = true) &&
+            !task.name.endsWith("Resources") &&
             (task.name.startsWith("assemble") || task.name.startsWith("bundle") || task.name.startsWith("package"))
     }
     if (isReleaseBuildRequested && !hasUploadSigningCredentials) {
@@ -148,7 +150,10 @@ android {
             "ObsoleteSdkInt",
             "AndroidGradlePluginVersion",
             "GradleDependency",
-            "NewerVersionAvailable"
+            "NewerVersionAvailable",
+            // Result depends on the newest platform installed where lint runs, so CI would turn red whenever a new
+            // Android release ships. targetSdk is raised deliberately, after testing that release's behavior changes.
+            "OldTargetApi"
         )
     }
 }

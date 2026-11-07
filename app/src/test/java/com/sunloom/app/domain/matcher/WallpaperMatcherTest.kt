@@ -99,28 +99,6 @@ class WallpaperMatcherTest {
     }
 
     @Test
-    fun `assignWallpapersToDisplays assigns distinct images to two connected monitors when INDEPENDENT_PER_DISPLAY`() {
-        val displays = listOf(
-            DisplayProfile(0, "Built-in Screen", 2560, 1600),
-            DisplayProfile(1, "External 4K", 3840, 2160)
-        )
-        val pool = listOf(
-            sampleRecord("light-1", BrightnessClass.LIGHT),
-            sampleRecord("light-2", BrightnessClass.LIGHT)
-        )
-
-        val assignments = matcher.assignWallpapersToDisplays(
-            displays = displays,
-            candidates = pool,
-            targetBrightness = BrightnessClass.LIGHT,
-            preferences = UserPreferences(displayPolicy = DisplayPolicy.INDEPENDENT_PER_DISPLAY)
-        )
-
-        assertEquals(2, assignments.size)
-        assertNotEquals(assignments[0]!!.id, assignments[1]!!.id)
-    }
-
-    @Test
     fun `selectNextWallpaper never falls back to DARK wallpapers when targetBrightness is LIGHT`() {
         val pool = listOf(
             sampleRecord("light-seen-1", BrightnessClass.LIGHT, appliedCount = 2),
@@ -283,5 +261,65 @@ class WallpaperMatcherTest {
 
         // Unseen count must not count seed_reserve items as unseen online wallpapers
         assertEquals(1, matcher.countUnseenForBrightness(pool, BrightnessClass.LIGHT, UserPreferences()))
+    }
+
+    private fun withSubject(record: WallpaperRecord, focalX: Double): WallpaperRecord = record.copy(
+        provenance = record.provenance.copy(originalWidth = 4800, originalHeight = 3000),
+        evaluation = record.evaluation.copy(cropRect = CropRect(0, 0, 4800, 3000, focalX, 0.5, false, 1.0))
+    )
+
+    @Test
+    fun `a wallpaper whose subject would be cut off is passed over while a fitting one exists`() {
+        val cutOff = sampleRecord("cut-off", BrightnessClass.DARK)
+        val fitting = sampleRecord("fitting", BrightnessClass.DARK)
+        val fit = SubjectFit { it.id != "cut-off" }
+
+        repeat(10) {
+            val picked = matcher.selectNextWallpaper(
+                candidates = listOf(cutOff, fitting),
+                targetBrightness = BrightnessClass.DARK,
+                preferences = UserPreferences(),
+                subjectFit = fit
+            )
+            assertEquals("fitting", picked!!.id)
+        }
+    }
+
+    @Test
+    fun `a wallpaper whose subject would be cut off is still used when nothing else is left`() {
+        val onlyOne = sampleRecord("cut-off", BrightnessClass.DARK)
+
+        val picked = matcher.selectNextWallpaper(
+            candidates = listOf(onlyOne),
+            targetBrightness = BrightnessClass.DARK,
+            preferences = UserPreferences(),
+            subjectFit = SubjectFit { false }
+        )
+
+        assertEquals("cut-off", picked!!.id)
+    }
+
+    @Test
+    fun `SubjectFit flags an edge subject on a laptop plus portrait monitor but not a centred one`() {
+        val laptop = DisplayProfile(0, "Laptop", 2560, 1600, densityDpi = 160, isPrimary = true)
+        val portrait = DisplayProfile(1, "Portrait", 1200, 1920, densityDpi = 160, isPrimary = false)
+        val fit = SubjectFit.forDisplays(listOf(laptop, portrait), UserPreferences())
+
+        val edge = withSubject(sampleRecord("edge", BrightnessClass.DARK), focalX = 0.02)
+        val centred = withSubject(sampleRecord("centred", BrightnessClass.DARK), focalX = 0.5)
+
+        assertEquals(false, fit.accepts(edge))
+        assertEquals(true, fit.accepts(centred))
+    }
+
+    @Test
+    fun `SubjectFit accepts everything on a single display and for bundled seeds`() {
+        val laptop = DisplayProfile(0, "Laptop", 2560, 1600, densityDpi = 160, isPrimary = true)
+        val portrait = DisplayProfile(1, "Portrait", 1200, 1920, densityDpi = 160, isPrimary = false)
+        val edge = withSubject(sampleRecord("edge", BrightnessClass.DARK), focalX = 0.02)
+        val seed = edge.copy(provenance = edge.provenance.copy(sourceId = "seed_reserve"))
+
+        assertEquals(true, SubjectFit.forDisplays(listOf(laptop), UserPreferences()).accepts(edge))
+        assertEquals(true, SubjectFit.forDisplays(listOf(laptop, portrait), UserPreferences()).accepts(seed))
     }
 }

@@ -6,6 +6,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.sunloom.app.Requirement
 import com.sunloom.app.data.repository.LocalLibraryRepository
 import com.sunloom.app.domain.model.CropRect
 import com.sunloom.app.domain.model.DisplayProfile
@@ -20,6 +21,7 @@ import org.robolectric.annotation.Config
 
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
+@Requirement("XVIII.1")
 class GoogleBookPlatformAdapterTest {
 
     private lateinit var context: Context
@@ -76,6 +78,40 @@ class GoogleBookPlatformAdapterTest {
     }
 
     @Test
+    fun `excluded display note gives the real reason`() {
+        val adapter = GoogleBookPlatformAdapter(
+            context,
+            FakeWallpaperGateway(
+                displays = listOf(
+                    DisplayProfile(0, "GoogleBook Primary", 2560, 1600, densityDpi = 240, physicalPpi = 227.0),
+                    DisplayProfile(1, "8K TV", 7680, 4320, densityDpi = 160, physicalPpi = 80.0, isPrimary = false)
+                )
+            )
+        )
+
+        val note = adapter.probeCapabilities().excludedDisplaysNote
+
+        assertTrue(note, note.contains("8K TV"))
+        assertTrue(note, note.contains("16 MP"))
+        assertTrue(note, !note.contains("orientation"))
+    }
+
+    @Test
+    fun `geometry key is unchanged when the same monitor comes back under a new display id`() {
+        val before = GoogleBookPlatformAdapter(context, FakeWallpaperGateway())
+        val replugged = GoogleBookPlatformAdapter(
+            context,
+            FakeWallpaperGateway(
+                displays = listOf(
+                    DisplayProfile(0, "GoogleBook Primary", 2560, 1600),
+                    DisplayProfile(7, "External Ultrawide", 3440, 1440)
+                )
+            )
+        )
+        assertEquals(before.computeDisplayGeometryKey(), replugged.computeDisplayGeometryKey())
+    }
+
+    @Test
     fun `applyWallpaperAtomically crops without stretching and applies to configured destinations`() {
         val fakeGateway = FakeWallpaperGateway()
         val adapter = GoogleBookPlatformAdapter(context, fakeGateway)
@@ -88,6 +124,64 @@ class GoogleBookPlatformAdapterTest {
         assertEquals(WallpaperStatus.APPLIED_SUCCESSFULLY, status)
         val appliedAspect = fakeGateway.lastAppliedWidth.toDouble() / fakeGateway.lastAppliedHeight.toDouble()
         assertEquals(display.aspectRatio, appliedAspect, 0.02)
+    }
+
+    @Test
+    fun `a seed on several displays is applied at its stored envelope, not cropped to the largest display`() {
+        val laptop = DisplayProfile(0, "GoogleBook Primary", 2560, 1600, isPrimary = true)
+        val ultrawide = DisplayProfile(1, "External Ultrawide", 3440, 1440, isPrimary = false)
+        val displays = listOf(laptop, ultrawide)
+        val fakeGateway = FakeWallpaperGateway(displays = displays)
+        val adapter = GoogleBookPlatformAdapter(context, fakeGateway)
+
+        val seed = repository.ensureSeedReserveLoadedForDisplays(displays).first { it.provenance.sourceId == "seed_reserve" }
+        val stored = android.graphics.BitmapFactory.decodeFile(seed.localFilePath)
+        val storedAspect = stored.width.toDouble() / stored.height
+        stored.recycle()
+
+        val status = adapter.applyWallpaperAtomically(
+            record = seed,
+            policy = LockWorkspacePolicy.SAME_ON_BOTH,
+            targetDisplay = ultrawide,
+            connectedDisplays = displays
+        )
+
+        assertEquals(WallpaperStatus.APPLIED_SUCCESSFULLY, status)
+        // 3440×1600 keeps the laptop's full height; cropping to the ultrawide's 21:9 would soften the laptop.
+        val appliedAspect = fakeGateway.lastAppliedWidth.toDouble() / fakeGateway.lastAppliedHeight
+        assertEquals(storedAspect, appliedAspect, 0.02)
+        assertTrue("narrower than the ultrawide's 21:9: $appliedAspect", appliedAspect < ultrawide.aspectRatio - 0.1)
+        assertTrue("wider than the laptop's 16:10: $appliedAspect", appliedAspect > laptop.aspectRatio + 0.1)
+    }
+
+    @Test
+    fun `a user picture stored as blurred fill stays blurred even when a native crop would now pass`() {
+        val laptop = DisplayProfile(0, "GoogleBook Primary", 2560, 1600, isPrimary = true)
+        val ultrawide = DisplayProfile(1, "External Ultrawide", 3440, 1440, isPrimary = false)
+        val displays = listOf(laptop, ultrawide)
+        val fakeGateway = FakeWallpaperGateway(displays = displays)
+        val adapter = GoogleBookPlatformAdapter(context, fakeGateway)
+
+        val file = java.io.File(context.cacheDir, "user-photo.png")
+        val bmp = Bitmap.createBitmap(4000, 3000, Bitmap.Config.ARGB_8888)
+        file.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        bmp.recycle()
+        val template = repository.ensureSeedReserveLoaded(laptop).first()
+        val record = template.copy(
+            localFilePath = file.absolutePath,
+            provenance = template.provenance.copy(sourceId = "user_local", originalWidth = 4000, originalHeight = 3000),
+            evaluation = template.evaluation.copy(cropRect = CropRect(0, 0, 4000, 3000, 0.5, 0.5, true, 1.0))
+        )
+
+        val status = adapter.applyWallpaperAtomically(
+            record = record, policy = LockWorkspacePolicy.SAME_ON_BOTH, targetDisplay = ultrawide, connectedDisplays = displays
+        )
+
+        assertEquals(WallpaperStatus.APPLIED_SUCCESSFULLY, status)
+        // A blurred-fill canvas sits between the two displays' aspects; a native crop of a 4:3 photo would not.
+        val appliedAspect = fakeGateway.lastAppliedWidth.toDouble() / fakeGateway.lastAppliedHeight
+        assertTrue("canvas aspect $appliedAspect", appliedAspect > laptop.aspectRatio + 0.1)
+        assertTrue("canvas aspect $appliedAspect", appliedAspect < ultrawide.aspectRatio - 0.1)
     }
 
     @Test
@@ -325,7 +419,9 @@ class GoogleBookPlatformAdapterTest {
             dockedState.currentWallpaper?.id != "artic-dock-test"
         )
         val appliedAspect = dynamicWallpaperGateway.lastWidth.toDouble() / dynamicWallpaperGateway.lastHeight.toDouble()
-        assertEquals(3440.0 / 1440.0, appliedAspect, 0.02)
+        // A seed is applied as the shared envelope it was rendered at (3440×1600: as wide as the ultrawide and as
+        // tall as the laptop), so both displays keep their native pixels. It lies between their 16:10 and 21:9.
+        assertEquals(3440.0 / 1600.0, appliedAspect, 0.02)
     }
 
     @Test

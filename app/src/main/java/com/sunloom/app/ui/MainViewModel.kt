@@ -7,6 +7,7 @@ import com.sunloom.app.domain.model.DisplayPolicy
 import com.sunloom.app.domain.model.SafeCategory
 import com.sunloom.app.domain.model.ScheduleMode
 import com.sunloom.app.domain.model.UserPreferences
+import com.sunloom.app.domain.model.displaySetGeometryKey
 import com.sunloom.app.domain.solar.CityCoordinates
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -58,9 +59,14 @@ class MainViewModel(
     private val pendingPreferenceEdits = AtomicInteger(0)
     // Declared before `init`: with an eager dispatcher the init coroutine publishes state immediately.
 
+    /** The display-set geometry the reserve was last topped up for; swapped atomically so a burst fetches once. */
+    private val lastDisplayGeometryKey = java.util.concurrent.atomic.AtomicReference<String?>(null)
+
     /** When the last automatic fetch started; declared before `init`, which may trigger one. */
+    @Volatile
     private var lastAutoReplenishMs: Long = NEVER
     private val replenishMutex = Mutex()
+    @Volatile
     private var lastAutoReplenishInterval: Long = AUTO_REPLENISH_MIN_INTERVAL_MS
 
     init {
@@ -598,7 +604,20 @@ class MainViewModel(
      * reserve eligibility, re-cropping/rotating the active wallpaper, and refreshing UI state.
      */
     fun onDisplaysChanged() {
-        launchGatewayMutation { gateway.onDisplaysChanged() }
+        val before = displaySetGeometryKey(_uiState.value.capabilities.connectedDisplays)
+        val mutation = launchGatewayMutation { gateway.onDisplaysChanged() }
+        viewModelScope.launch(workDispatcher) {
+            mutation.join()
+            // A dock can pause much of the pool (images too small for the new screen), so top it up now instead
+            // of waiting for the next launch or the 3-hour worker. A real geometry change is a fresh reason to
+            // fetch, so it is not held back by the throttle; a rotation or replug that changes nothing is not.
+            // Swapping the remembered key atomically means a burst of events for one dock fetches once.
+            val now = displaySetGeometryKey(_uiState.value.capabilities.connectedDisplays)
+            if (lastDisplayGeometryKey.getAndSet(now) ?: before != now) {
+                lastAutoReplenishMs = NEVER
+                replenishIfLow()
+            }
+        }
     }
 
     fun forgetRememberedDisplay(key: String) {

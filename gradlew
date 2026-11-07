@@ -1,9 +1,12 @@
 #!/usr/bin/env sh
 
-export GRADLE_USER_HOME="${GRADLE_USER_HOME:-/home/droid/.cache/gradle}"
-export ANDROID_USER_HOME="${ANDROID_USER_HOME:-/home/droid/.cache/.android}"
-export ANDROID_HOME="${ANDROID_HOME:-/home/droid/.cache/Android/Sdk}"
-export QEMU_LD_PREFIX="${QEMU_LD_PREFIX:-/usr/x86_64-linux-gnu}"
+# Local dev-box defaults; they apply only where that cache directory exists, so CI and other machines are untouched.
+if [ -d /home/droid/.cache ]; then
+    export GRADLE_USER_HOME="${GRADLE_USER_HOME:-/home/droid/.cache/gradle}"
+    export ANDROID_USER_HOME="${ANDROID_USER_HOME:-/home/droid/.cache/.android}"
+    export ANDROID_HOME="${ANDROID_HOME:-/home/droid/.cache/Android/Sdk}"
+    export QEMU_LD_PREFIX="${QEMU_LD_PREFIX:-/usr/x86_64-linux-gnu}"
+fi
 
 
 ##############################################################################

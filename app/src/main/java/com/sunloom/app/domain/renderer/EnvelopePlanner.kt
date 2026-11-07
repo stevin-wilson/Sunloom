@@ -16,7 +16,11 @@ data class EnvelopePlan(
     val satisfiedDisplays: List<DisplayProfile>,
     val excludedDisplays: List<DisplayProfile>,
     val perDisplayCrops: Map<Int, CropRect>,
-    val disclosureNote: String
+    val disclosureNote: String,
+    /** Why each excluded display (by display id) was left out of the envelope target. */
+    val exclusionReasons: Map<Int, String> = emptyMap(),
+    /** Displays whose system center-crop of this envelope would cut the subject off. */
+    val subjectClippedDisplays: List<DisplayProfile> = emptyList()
 )
 
 /**
@@ -38,49 +42,59 @@ class EnvelopePlanner(
         policy: DisplayPolicy = DisplayPolicy.SAME_ON_ALL_DISPLAYS,
         allowBlurredFrameFill: Boolean = false
     ): EnvelopePlan? {
+        val plan = planCore(
+            sourceWidth, sourceHeight, focalX, focalY, connectedDisplays, policy, allowBlurredFrameFill
+        ) ?: return null
+        val validDisplays = connectedDisplays.filter { it.widthPx > 0 && it.heightPx > 0 }
+        // A single display or the sharpest-only policy has no shared envelope to describe: keep its own wording.
+        val sharedEnvelope = policy != DisplayPolicy.OPTIMIZE_PRIMARY_SHARPEST && validDisplays.size > 1
+        if (!sharedEnvelope) return plan
+        return annotate(plan, sourceWidth, sourceHeight, focalX, focalY, anchorOf(validDisplays))
+    }
+
+    /**
+     * Plans [record] for [displays] with the rules the reserve uses everywhere: its stored focal point
+     * (centre when unknown), and blurred frame fill for user-provided pictures or when the user allows it.
+     * Null when the record has no known size or cannot be satisfied.
+     */
+    fun planForRecord(
+        record: com.sunloom.app.domain.model.WallpaperRecord,
+        displays: List<DisplayProfile>,
+        preferences: com.sunloom.app.domain.model.UserPreferences
+    ): EnvelopePlan? {
+        val srcW = record.provenance.originalWidth
+        val srcH = record.provenance.originalHeight
+        if (srcW <= 0 || srcH <= 0) return null
+        return planEnvelope(
+            sourceWidth = srcW,
+            sourceHeight = srcH,
+            focalX = record.evaluation.cropRect?.focalX ?: 0.5,
+            focalY = record.evaluation.cropRect?.focalY ?: 0.5,
+            connectedDisplays = displays,
+            policy = preferences.displayPolicy,
+            allowBlurredFrameFill = record.provenance.sourceId == "user_local" || preferences.allowBlurredFrameFill
+        )
+    }
+
+    private fun anchorOf(displays: List<DisplayProfile>): DisplayProfile =
+        displays.firstOrNull { it.isPrimary } ?: displays.maxBy { it.widthPx.toLong() * it.heightPx.toLong() }
+
+    private fun planCore(
+        sourceWidth: Int,
+        sourceHeight: Int,
+        focalX: Double,
+        focalY: Double,
+        connectedDisplays: List<DisplayProfile>,
+        policy: DisplayPolicy,
+        allowBlurredFrameFill: Boolean
+    ): EnvelopePlan? {
         val validDisplays = connectedDisplays.filter { it.widthPx > 0 && it.heightPx > 0 }
         if (sourceWidth <= 0 || sourceHeight <= 0 || validDisplays.isEmpty()) {
             return null
         }
 
         if (policy == DisplayPolicy.OPTIMIZE_PRIMARY_SHARPEST || validDisplays.size == 1) {
-            val target = validDisplays.maxByOrNull { it.widthPx.toLong() * it.heightPx.toLong() }
-                ?: return null
-            val singleCrop = cropRenderer.computeCropFromFocalPoint(
-                sourceWidth = sourceWidth,
-                sourceHeight = sourceHeight,
-                focalX = focalX,
-                focalY = focalY,
-                display = target,
-                allowBlurredFrameFill = allowBlurredFrameFill
-            ) ?: return null
-
-            val (outW, outH) = if (singleCrop.usesBlurredFrameFill) {
-                CropRenderer.budgetedSize(target.widthPx, target.heightPx)
-            } else {
-                val (budgetW, budgetH) = CropRenderer.budgetedSize(target.widthPx, target.heightPx)
-                if (singleCrop.width > budgetW && singleCrop.height > budgetH) {
-                    budgetW to budgetH
-                } else {
-                    CropRenderer.budgetedSize(singleCrop.width, singleCrop.height)
-                }
-            }
-
-            val note = if (validDisplays.size > 1) {
-                "Optimized crop for sharpest display: ${target.name} (${target.resolutionLabel})."
-            } else {
-                "Native crop for ${target.name} (${target.resolutionLabel})."
-            }
-
-            return EnvelopePlan(
-                envelopeCrop = singleCrop,
-                outputWidthPx = outW,
-                outputHeightPx = outH,
-                satisfiedDisplays = listOf(target),
-                excludedDisplays = emptyList(),
-                perDisplayCrops = mapOf(target.displayId to singleCrop),
-                disclosureNote = note
-            )
+            return planSharpestOnly(sourceWidth, sourceHeight, focalX, focalY, validDisplays, allowBlurredFrameFill)
         }
 
         // 1. First attempt to satisfy ALL connected displays together natively
@@ -97,10 +111,9 @@ class EnvelopePlanner(
         // (conflicting portrait/landscape orientation, >2.2x aspect spread, or >16MP cap impossible).
         // Standard compatible multi-monitor sets (e.g. 16:10 laptop + 21:9 UWQHD or 16:9 4K) are NOT
         // outliers, so low-resolution images are properly rejected rather than shown blurry on externals.
-        val anchor = validDisplays.firstOrNull { it.isPrimary }
-            ?: validDisplays.maxBy { it.widthPx.toLong() * it.heightPx.toLong() }
+        val anchor = anchorOf(validDisplays)
         val excludableIds = validDisplays
-            .filter { d -> d.displayId != anchor.displayId && isIncompatibleOutlierDisplay(d, anchor) }
+            .filter { d -> d.displayId != anchor.displayId && outlierReason(d, anchor) != null }
             .map { it.displayId }
             .toSet()
 
@@ -179,18 +192,19 @@ class EnvelopePlanner(
         return null
     }
 
-    private fun isIncompatibleOutlierDisplay(display: DisplayProfile, anchor: DisplayProfile): Boolean {
+    /** Why [display] cannot share an envelope with [anchor], or null when it is compatible. */
+    private fun outlierReason(display: DisplayProfile, anchor: DisplayProfile): String? {
         val anchorPortrait = anchor.widthPx < anchor.heightPx
         val displayPortrait = display.widthPx < display.heightPx
         if (anchorPortrait != displayPortrait && anchor.widthPx != anchor.heightPx && display.widthPx != display.heightPx) {
-            return true
+            return "opposite orientation to ${anchor.name}"
         }
         val aspectSpread = max(
             display.aspectRatio / anchor.aspectRatio.coerceAtLeast(1e-4),
             anchor.aspectRatio / display.aspectRatio.coerceAtLeast(1e-4)
         )
         if (aspectSpread > MAX_COMPATIBLE_ASPECT_SPREAD) {
-            return true
+            return "aspect ratio differs from ${anchor.name} by more than ${MAX_COMPATIBLE_ASPECT_SPREAD}×"
         }
         // Check if even an infinite-resolution image budgeted to MAX_OUTPUT_PIXELS cannot satisfy display
         val (maxBudgetW, maxBudgetH) = CropRenderer.budgetedSize(display.widthPx * 2, display.heightPx * 2)
@@ -199,10 +213,69 @@ class EnvelopePlanner(
             maxBudgetH.toDouble() / display.heightPx.toDouble()
         )
         if (!CropRenderer.meetsNativeQualityTier(maxPossibleCoverage, max(maxBudgetW, maxBudgetH), display)) {
-            return true
+            return "cannot reach its sharpness floor within the 16 MP wallpaper cap"
         }
-        return false
+        return null
     }
+
+    /**
+     * Adds the exclusion reasons and the displays whose system center-crop would cut the subject off,
+     * and rewrites the disclosure note to say so.
+     */
+    private fun annotate(
+        plan: EnvelopePlan,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        focalX: Double,
+        focalY: Double,
+        anchor: DisplayProfile
+    ): EnvelopePlan {
+        val reasons = plan.excludedDisplays.associate { d ->
+            d.displayId to (outlierReason(d, anchor) ?: "could not be satisfied together with the other displays")
+        }
+        val clipped = if (plan.envelopeCrop.usesBlurredFrameFill) {
+            emptyList() // blurred fill shows the whole picture
+        } else {
+            val bounds = plan.envelopeCrop
+            val u = ((focalX.coerceIn(0.0, 1.0) * sourceWidth - bounds.left) / bounds.width.coerceAtLeast(1)).coerceIn(0.0, 1.0)
+            val v = ((focalY.coerceIn(0.0, 1.0) * sourceHeight - bounds.top) / bounds.height.coerceAtLeast(1)).coerceIn(0.0, 1.0)
+            (plan.satisfiedDisplays + plan.excludedDisplays).filter { d ->
+                val (sliceW, sliceH) = centreSlice(plan.outputWidthPx, plan.outputHeightPx, d.aspectRatio)
+                !sliceContainsFocal(u, v, plan.outputWidthPx, plan.outputHeightPx, sliceW, sliceH)
+            }
+        }
+        return plan.copy(
+            exclusionReasons = reasons,
+            subjectClippedDisplays = clipped,
+            disclosureNote = buildDisclosureNote(
+                plan.satisfiedDisplays,
+                plan.excludedDisplays,
+                usesBlurredFill = plan.envelopeCrop.usesBlurredFrameFill,
+                reasons = reasons,
+                clipped = clipped
+            )
+        )
+    }
+
+    /**
+     * Whether the subject at ([u], [v]) (fractions of the envelope) lies inside the centered
+     * [sliceW]×[sliceH] slice of an [outW]×[outH] envelope, with a small tolerance.
+     */
+    private fun sliceContainsFocal(u: Double, v: Double, outW: Int, outH: Int, sliceW: Int, sliceH: Int): Boolean {
+        val u0 = (outW - sliceW) / 2 / outW.toDouble() - FOCAL_TOLERANCE
+        val u1 = ((outW - sliceW) / 2 + sliceW) / outW.toDouble() + FOCAL_TOLERANCE
+        val v0 = (outH - sliceH) / 2 / outH.toDouble() - FOCAL_TOLERANCE
+        val v1 = ((outH - sliceH) / 2 + sliceH) / outH.toDouble() + FOCAL_TOLERANCE
+        return u in u0..u1 && v in v0..v1
+    }
+
+    /** Size of the centered slice a display of [displayAspect] shows of an [outW]×[outH] envelope. */
+    private fun centreSlice(outW: Int, outH: Int, displayAspect: Double): Pair<Int, Int> =
+        if (outW.toDouble() / outH.toDouble() >= displayAspect) {
+            (outH * displayAspect).roundToInt().coerceIn(1, outW) to outH
+        } else {
+            outW to (outW / displayAspect).roundToInt().coerceIn(1, outH)
+        }
 
     private fun generateAnchorSubsets(
         allDisplays: List<DisplayProfile>,
@@ -227,6 +300,54 @@ class EnvelopePlanner(
         return results.sortedWith(
             compareByDescending<List<DisplayProfile>> { it.size }
                 .thenByDescending { list -> list.sumOf { it.widthPx.toLong() * it.heightPx.toLong() } }
+        )
+    }
+
+    /** Single display, or the "sharpest display only" policy: crop for the highest-pixel-count display. */
+    private fun planSharpestOnly(
+        sourceWidth: Int,
+        sourceHeight: Int,
+        focalX: Double,
+        focalY: Double,
+        validDisplays: List<DisplayProfile>,
+        allowBlurredFrameFill: Boolean
+    ): EnvelopePlan? {
+        val target = validDisplays.maxByOrNull { it.widthPx.toLong() * it.heightPx.toLong() }
+            ?: return null
+        val singleCrop = cropRenderer.computeCropFromFocalPoint(
+            sourceWidth = sourceWidth,
+            sourceHeight = sourceHeight,
+            focalX = focalX,
+            focalY = focalY,
+            display = target,
+            allowBlurredFrameFill = allowBlurredFrameFill
+        ) ?: return null
+
+        val (outW, outH) = if (singleCrop.usesBlurredFrameFill) {
+            CropRenderer.budgetedSize(target.widthPx, target.heightPx)
+        } else {
+            val (budgetW, budgetH) = CropRenderer.budgetedSize(target.widthPx, target.heightPx)
+            if (singleCrop.width > budgetW && singleCrop.height > budgetH) {
+                budgetW to budgetH
+            } else {
+                CropRenderer.budgetedSize(singleCrop.width, singleCrop.height)
+            }
+        }
+
+        val note = if (validDisplays.size > 1) {
+            "Optimized crop for sharpest display: ${target.name} (${target.resolutionLabel})."
+        } else {
+            "Native crop for ${target.name} (${target.resolutionLabel})."
+        }
+
+        return EnvelopePlan(
+            envelopeCrop = singleCrop,
+            outputWidthPx = outW,
+            outputHeightPx = outH,
+            satisfiedDisplays = listOf(target),
+            excludedDisplays = emptyList(),
+            perDisplayCrops = mapOf(target.displayId to singleCrop),
+            disclosureNote = note
         )
     }
 
@@ -266,7 +387,6 @@ class EnvelopePlanner(
                 targetAspect = envAspect
             )
             val (outW, outH) = CropRenderer.budgetedSize(envBounds.width, envBounds.height)
-            val actualEnvAspect = outW.toDouble() / outH.toDouble()
 
             val fxPx = focalX.coerceIn(0.0, 1.0) * sourceWidth.toDouble()
             val fyPx = focalY.coerceIn(0.0, 1.0) * sourceHeight.toDouble()
@@ -280,15 +400,7 @@ class EnvelopePlanner(
 
             for (d in subset) {
                 val rD = d.aspectRatio
-                val sliceW: Int
-                val sliceH: Int
-                if (actualEnvAspect >= rD) {
-                    sliceH = outH
-                    sliceW = (outH * rD).roundToInt().coerceIn(1, outW)
-                } else {
-                    sliceW = outW
-                    sliceH = (outW / rD).roundToInt().coerceIn(1, outH)
-                }
+                val (sliceW, sliceH) = centreSlice(outW, outH, rD)
                 val sliceLeft = (outW - sliceW) / 2
                 val sliceTop = (outH - sliceH) / 2
 
@@ -302,11 +414,7 @@ class EnvelopePlanner(
                     break
                 }
 
-                val u0 = sliceLeft.toDouble() / outW.toDouble() - 0.02
-                val u1 = (sliceLeft + sliceW).toDouble() / outW.toDouble() + 0.02
-                val v0 = sliceTop.toDouble() / outH.toDouble() - 0.02
-                val v1 = (sliceTop + sliceH).toDouble() / outH.toDouble() + 0.02
-                if (uFocal !in u0..u1 || vFocal !in v0..v1) {
+                if (!sliceContainsFocal(uFocal, vFocal, outW, outH, sliceW, sliceH)) {
                     allContainFocal = false
                 }
 
@@ -354,20 +462,31 @@ class EnvelopePlanner(
     private fun buildDisclosureNote(
         satisfied: List<DisplayProfile>,
         excluded: List<DisplayProfile>,
-        usesBlurredFill: Boolean
+        usesBlurredFill: Boolean,
+        reasons: Map<Int, String> = emptyMap(),
+        clipped: List<DisplayProfile> = emptyList()
     ): String {
         val modeDesc = if (usesBlurredFill) "blurred frame fill" else "shared native envelope"
         return buildString {
             append("Prepared $modeDesc for ${satisfied.joinToString { "${it.name} (${it.resolutionLabel})" }}.")
             if (excluded.isNotEmpty()) {
-                append(" Excluded incompatible display(s) from envelope target: ")
-                append(excluded.joinToString { "${it.name} (${it.resolutionLabel})" })
-                append(" — system center-crop applies on excluded panels.")
+                append(" Excluded from envelope target: ")
+                append(
+                    excluded.joinToString("; ") { d ->
+                        val reason = reasons[d.displayId]?.let { " — $it" }.orEmpty()
+                        "${d.name} (${d.resolutionLabel})$reason"
+                    }
+                )
+                append(". System center-crop applies on excluded panels.")
+            }
+            if (clipped.isNotEmpty()) {
+                append(" The subject may be cut off on ${clipped.joinToString { it.name }}.")
             }
         }
     }
 
     companion object {
         private const val MAX_COMPATIBLE_ASPECT_SPREAD = 2.2
+        private const val FOCAL_TOLERANCE = 0.02
     }
 }

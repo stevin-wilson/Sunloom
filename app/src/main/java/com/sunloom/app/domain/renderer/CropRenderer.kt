@@ -9,6 +9,7 @@ import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /**
  * Article IV.2, IV.4 & IV.5: Crop before stretch & Subject-aware deterministic cropping.
@@ -429,6 +430,59 @@ class CropRenderer {
 
         /** Upper bound on pixels in any bitmap handed to WallpaperManager (~64 MB as ARGB_8888). */
         const val MAX_OUTPUT_PIXELS = 16_000_000
+
+        /** Canvas and foreground rectangle for a blurred-fill wallpaper; see [blurredFillLayout]. */
+        data class BlurredFillLayout(
+            val canvasWidth: Int,
+            val canvasHeight: Int,
+            val fgLeft: Int,
+            val fgTop: Int,
+            val fgWidth: Int,
+            val fgHeight: Int
+        )
+
+        /**
+         * Lays out a blurred-fill wallpaper (Article IV §4) so the whole picture stays visible on every display.
+         * One shared canvas serves all [displays]; the system shows each display a centred slice of it, so the
+         * picture is fitted inside the part of the canvas that every slice contains. On a single display that is
+         * the whole canvas. The picture is never stretched, and it is smaller on a mixed set: the price of
+         * showing all of it on every screen.
+         */
+        fun blurredFillLayout(sourceWidth: Int, sourceHeight: Int, displays: List<DisplayProfile>): BlurredFillLayout {
+            // A display with no size yet (mid-transition) gets a minimal canvas rather than an error.
+            val valid = displays.filter { it.widthPx > 0 && it.heightPx > 0 }
+                .ifEmpty { listOf(DisplayProfile(0, "Unsized", 64, 64)) }
+            val rMin = valid.minOf { it.aspectRatio }
+            val rMax = valid.maxOf { it.aspectRatio }
+            val canvasAspect = sqrt(rMin * rMax)
+            val rawWidth = valid.maxOf { it.widthPx }.coerceAtLeast(64)
+            val rawHeight = if (valid.size == 1) {
+                valid.first().heightPx.coerceAtLeast(64)
+            } else {
+                (rawWidth / canvasAspect).roundToInt().coerceAtLeast(64)
+            }
+            val (canvasW, canvasH) = budgetedSize(rawWidth, rawHeight)
+
+            var boxW = canvasW
+            var boxH = canvasH
+            for (d in valid) {
+                val sliceW: Int
+                val sliceH: Int
+                if (canvasW.toDouble() / canvasH >= d.aspectRatio) {
+                    sliceW = (canvasH * d.aspectRatio).roundToInt().coerceIn(1, canvasW)
+                    sliceH = canvasH
+                } else {
+                    sliceW = canvasW
+                    sliceH = (canvasW / d.aspectRatio).roundToInt().coerceIn(1, canvasH)
+                }
+                boxW = min(boxW, sliceW)
+                boxH = min(boxH, sliceH)
+            }
+            val scale = min(boxW.toDouble() / sourceWidth.coerceAtLeast(1), boxH.toDouble() / sourceHeight.coerceAtLeast(1))
+            val fgW = (sourceWidth * scale).roundToInt().coerceIn(1, boxW)
+            val fgH = (sourceHeight * scale).roundToInt().coerceIn(1, boxH)
+            return BlurredFillLayout(canvasW, canvasH, (canvasW - fgW) / 2, (canvasH - fgH) / 2, fgW, fgH)
+        }
 
         /**
          * Uniformly scales [width] x [height] down (never up, never changing aspect ratio) so the
