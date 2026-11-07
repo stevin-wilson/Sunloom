@@ -48,9 +48,14 @@ class WorkerResultMappingTest {
     }
 
     @Test
-    fun change_storeUnavailableCancelsScheduleAndFails() {
+    fun change_storeUnavailableRetriesFirstThenSuspendsAutomation() {
+        // A store that will not open can be a full disk for a minute: retry before giving up (Article VII §6).
+        val early = booleanArrayOf(false)
+        assertEquals(Result.retry(), change(0, early) { throw LibraryStoreUnavailableException("down") })
+        assertFalse("a first failure must not cancel the schedule", early[0])
+
         val cancelled = booleanArrayOf(false)
-        val result = change(0, cancelled) { throw LibraryStoreUnavailableException("down") }
+        val result = change(3, cancelled) { throw LibraryStoreUnavailableException("down") }
         assertEquals(Result.failure(), result)
         assertTrue(cancelled[0])
     }
@@ -76,9 +81,13 @@ class WorkerResultMappingTest {
     }
 
     @Test
-    fun refresh_storeUnavailableCancelsScheduleAndFails() {
+    fun refresh_storeUnavailableRetriesFirstThenSuspendsAutomation() {
+        val early = booleanArrayOf(false)
+        assertEquals(Result.retry(), refresh(0, early) { throw LibraryStoreUnavailableException("down") })
+        assertFalse(early[0])
+
         val cancelled = booleanArrayOf(false)
-        val result = refresh(0, cancelled) { throw LibraryStoreUnavailableException("down") }
+        val result = refresh(3, cancelled) { throw LibraryStoreUnavailableException("down") }
         assertEquals(Result.failure(), result)
         assertTrue(cancelled[0])
     }

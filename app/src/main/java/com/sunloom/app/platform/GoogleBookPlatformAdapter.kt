@@ -626,6 +626,10 @@ class GoogleBookPlatformAdapter(
         scheduler.cancelAllScheduledWork()
     }
 
+    fun ensureScheduled(preferences: UserPreferences) {
+        scheduler.ensureScheduled(preferences)
+    }
+
     fun syncPeriodicSchedule(
         autoEnabled: Boolean,
         isPaused: Boolean,

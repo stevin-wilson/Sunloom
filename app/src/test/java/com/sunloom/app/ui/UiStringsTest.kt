@@ -25,6 +25,7 @@ class UiStringsTest {
         assertEquals(english.loadingLibrary, android.loadingLibrary)
         assertEquals(english.manualModeEnabled, android.manualModeEnabled)
         assertEquals(english.settingNotSaved, android.settingNotSaved)
+        assertEquals(english.storageProblem, android.storageProblem)
         assertEquals(english.fetchingCatalogs, android.fetchingCatalogs)
         assertEquals(english.scheduleEnabled("Sunrise & Sunset"), android.scheduleEnabled("Sunrise & Sunset"))
         assertEquals(english.syncInterrupted(null), android.syncInterrupted(null))

@@ -195,4 +195,19 @@ class BoundedCacheManagerTest {
 
         assertEquals(listOf("oldest"), report.evictedIds)
     }
+
+    @Test
+    fun `a user-provided photo is never evicted, because it cannot be fetched again`() {
+        val mine = record("mine", sizeMb = 10, retrievedAt = 1L).let {
+            it.copy(provenance = it.provenance.copy(sourceId = "user_local"))
+        }
+        val fetched = (1..6).map { record("f$it", sizeMb = 10, retrievedAt = 100L + it) }
+        val report = cacheManager.selectEvictions(
+            records = listOf(mine) + fetched,
+            activeWallpaperIds = emptySet(),
+            maxCacheBytes = 20L * 1024L * 1024L
+        )
+        assertFalse("user_local must be protected", "mine" in report.evictedIds)
+        assertTrue("mine" in report.protectedIds)
+    }
 }

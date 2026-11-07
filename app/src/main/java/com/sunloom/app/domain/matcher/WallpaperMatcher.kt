@@ -118,7 +118,14 @@ class WallpaperMatcher(
             fun pick(pool: List<WallpaperRecord>) = selectFromPool(
                 pool, targetBrightness, currentWallpaperId, currentSourceId, excluded, deterministic, taste, subjectFit
             )
-            val next = pick(nonSeedLeft) ?: pick(seedLeft) ?: return out
+            val online = pick(nonSeedLeft)
+            // Online and user pictures come first, but not at the price of the wrong brightness: when the best one
+            // does not suit the target and a seed does, the seed wins (Article I §2, XI §1).
+            val seed = if (online == null || !BrightnessFit.accepts(online.evaluation, targetBrightness)) pick(seedLeft) else null
+            val next = when {
+                online != null && (seed == null || !BrightnessFit.accepts(seed.evaluation, targetBrightness)) -> online
+                else -> seed ?: online ?: return out
+            }
             out.add(next)
             excluded.add(next.id)
             picked.add(next.id)

@@ -57,7 +57,10 @@ class MainViewModelTest {
         var lastExcludeIds: Set<String>? = null
         val importApplyFlags = mutableListOf<Boolean>()
 
+        var failNext: Throwable? = null
+
         override suspend fun applyNextWallpaper(excludeIds: Set<String>): SunloomUiState {
+            failNext?.let { throw it }
             lastExcludeIds = excludeIds
             return applyWallpaper("seed-2")
         }
@@ -154,6 +157,15 @@ class MainViewModelTest {
             gateway = fakeGateway,
             workDispatcher = kotlinx.coroutines.test.UnconfinedTestDispatcher()
         )
+    }
+
+    @Test
+    fun `a storage error during an action becomes a status message instead of crashing`() {
+        // viewModelScope has no exception handler, so any uncaught IOException / SQLiteException ends the process.
+        fakeGateway.failNext = java.io.IOException("No space left on device")
+        viewModel.changeToNextWallpaper()
+        assertEquals(UiStrings.English.storageProblem, viewModel.uiState.value.statusBannerMessage)
+        assertFalse(viewModel.uiState.value.isApplyingWallpaper)
     }
 
     @Test

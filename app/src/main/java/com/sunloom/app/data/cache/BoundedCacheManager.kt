@@ -37,7 +37,8 @@ class BoundedCacheManager(
         // 4. Up to minProtectedPerBrightness (default 3) Light and 3 Dark approved reserve wallpapers (Article IX §2)
         val protectedIds = LinkedHashSet<String>()
         protectedIds.addAll(activeWallpaperIds)
-        cachedRecords.filter { it.isFavorite || it.isBaselineRestore }.forEach {
+        // A user-provided photo cannot be fetched again, so evicting it would lose it for good.
+        cachedRecords.filter { it.isFavorite || it.isBaselineRestore || it.provenance.sourceId == "user_local" }.forEach {
             protectedIds.add(it.id)
         }
 

@@ -77,6 +77,7 @@ class AndroidSunloomGateway(
             repo.revalidateGateVersionIfNeeded(display = null)
         }
         repo.syncSourceEnabledStates(prefs.enabledSources)
+        platformAdapter.ensureScheduled(prefs)
         if (display != null) {
             reconcileActiveWallpaperForDisplay(repo, display, connectedDisplays, prefs, activeBefore)
             promoteNonSeedOverSeedIfNeeded(repo, prefs, display, connectedDisplays)
