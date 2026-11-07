@@ -33,7 +33,12 @@ jobs:
       # build without signing: only assemble/bundle/package tasks need the upload key, so a bad keep rule fails here
       # and not in a Play upload.
       - name: Tests, lint, static analysis and release shrink
-        run: ./gradlew testDebugUnitTest lintDebug detekt :app:minifyReleaseWithR8 :app:lintRelease --stacktrace
+        # gradle.properties keeps the heaps small for the low-memory dev box; the hosted runner has room, and the Kotlin
+        # compiler daemon (512 MB there) runs out of memory on this codebase, so CI raises the limits on the command line.
+        run: >
+          ./gradlew testDebugUnitTest lintDebug detekt :app:minifyReleaseWithR8 :app:lintRelease --stacktrace
+          -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+          -Pkotlin.daemon.jvmargs="-Xmx3g"
 
       - name: Upload reports
         if: always()
