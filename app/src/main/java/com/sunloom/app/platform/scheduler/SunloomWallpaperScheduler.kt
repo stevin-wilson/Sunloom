@@ -15,6 +15,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.sunloom.app.data.repository.LibraryStoreUnavailableException
 import com.sunloom.app.data.repository.LocalLibraryRepository
+import com.sunloom.app.domain.matcher.TasteProfile
 import com.sunloom.app.domain.matcher.WallpaperMatcher
 import com.sunloom.app.domain.model.ScheduleMode
 import com.sunloom.app.domain.model.UserPreferences
@@ -82,8 +83,16 @@ class SunloomWallpaperScheduler(
         }
         val isManualMode = effectivePrefs?.scheduleMode == ScheduleMode.MANUAL_ONLY
 
-        if (!autoEnabled || isPaused || isManualMode) {
+        // Changing the wallpaper follows the schedule; fetching new images does not (Article X §1, v0.14).
+        val plan = RefreshSchedulePolicy.plan(autoEnabled, isPaused, isManualMode)
+        if (!plan.scheduleRefresh) {
             cancelAllScheduledWork()
+            return
+        }
+        if (!plan.scheduleChanges) {
+            workManager.cancelUniqueWork(WORK_NAME)
+            workManager.cancelUniqueWork(WORK_NAME_CHANGE)
+            scheduleRefreshWork(workManager, schedulePrefs, wifiOnly, deferBatterySaver, rescheduleRefreshWork)
             return
         }
 
@@ -111,13 +120,23 @@ class SunloomWallpaperScheduler(
             changeRequest
         )
 
+        scheduleRefreshWork(workManager, schedulePrefs, wifiOnly, deferBatterySaver, rescheduleRefreshWork)
+    }
+
+    /** RefreshWorker: periodic online reserve replenishment, independent of wallpaper-change scheduling. */
+    private fun scheduleRefreshWork(
+        workManager: WorkManager,
+        schedulePrefs: android.content.SharedPreferences,
+        wifiOnly: Boolean,
+        deferBatterySaver: Boolean,
+        rescheduleRefreshWork: Boolean
+    ) {
         if (!rescheduleRefreshWork) {
             return
         }
-
-        // 2. RefreshWorker: 12-hour PeriodicWorkRequest for online reserve replenishment
-        val constraintsSig = "$wifiOnly:$deferBatterySaver"
+        val constraintsSig = "$wifiOnly:$deferBatterySaver:${RefreshSchedulePolicy.REFRESH_INTERVAL_HOURS}h"
         val prevSig = schedulePrefs.getString(PREF_REFRESH_CONSTRAINTS_SIG, null)
+        // A changed constraint set or cadence (the signature includes the interval) replaces the enqueued request.
         val periodicPolicy = if (prevSig != null && prevSig != constraintsSig) {
             ExistingPeriodicWorkPolicy.UPDATE
         } else {
@@ -125,7 +144,7 @@ class SunloomWallpaperScheduler(
         }
         schedulePrefs.edit { putString(PREF_REFRESH_CONSTRAINTS_SIG, constraintsSig) }
 
-        val refreshRequest = PeriodicWorkRequestBuilder<RefreshWorker>(12, TimeUnit.HOURS)
+        val refreshRequest = PeriodicWorkRequestBuilder<RefreshWorker>(RefreshSchedulePolicy.REFRESH_INTERVAL_HOURS, TimeUnit.HOURS)
             .setConstraints(buildRefreshConstraints(wifiOnly, deferBatterySaver))
             .build()
 
@@ -174,6 +193,7 @@ class SunloomWallpaperScheduler(
                 ?: return WallpaperStatus.FAILED_TEMPORARILY
 
             val activeBefore = repo.getCurrentWallpaperId()
+            repo.healMissingFiles()
             repo.ensureSeedReserveLoadedForDisplays(connectedDisplays, prefs.displayPolicy)
             repo.revalidateGateVersionIfNeeded(display)
             repo.reconcileReserveForDisplaySet(connectedDisplays, prefs)
@@ -187,7 +207,8 @@ class SunloomWallpaperScheduler(
                 preferences = prefs,
                 currentWallpaperId = currentId,
                 recentlyUsedIds = setOfNotNull(currentId, repo.getPreviousWallpaperId()),
-                maxResults = 3
+                maxResults = 3,
+                taste = TasteProfile.from(allWallpapers)
             )
 
             val currentGeometryKey = platform.computeDisplayGeometryKey(connectedDisplays, prefs.displayPolicy)
@@ -277,21 +298,31 @@ class SunloomWallpaperScheduler(
             gateway: SystemWallpaperGateway = DefaultSystemWallpaperGateway(appContext)
         ): Int {
             val prefs = repo.loadPreferences()
-            if (!prefs.autoChangeEnabled || prefs.isPaused) return 0
+            // Fetching is independent of automatic wallpaper changes: manual-mode users want fresh images too.
+            if (prefs.isPaused) return 0
             val connectedDisplays = platform.getConnectedDisplays()
             val display = platform.getPrimaryOrSharpestDisplayOrNull(connectedDisplays) ?: return 0
+            repo.healMissingFiles()
             repo.ensureSeedReserveLoadedForDisplays(connectedDisplays, prefs.displayPolicy)
 
             val canDownload = (!prefs.wifiOnlyDownloads || gateway.isWifiConnected()) &&
                 (!prefs.deferOnBatterySaver || !gateway.isBatterySaverActive())
             if (!canDownload) return 0
 
+            // One round polls at most three sources within their request budgets, so keep going while images
+            // arrive and the buffer is still short (a few rounds at most).
+            var total = 0
             return try {
-                repo.refreshOnlineCatalog(display, connectedDisplays = connectedDisplays)
+                repeat(RefreshSchedulePolicy.MAX_BACKGROUND_ROUNDS) {
+                    val added = repo.refreshOnlineCatalog(display, connectedDisplays = connectedDisplays)
+                    total += added
+                    if (added <= 0 || !repo.needsTopUp(prefs)) return total
+                }
+                total
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (_: Throwable) {
-                0
+                total
             }
         }
     }

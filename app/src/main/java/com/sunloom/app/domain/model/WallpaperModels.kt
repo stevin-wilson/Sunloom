@@ -97,7 +97,9 @@ data class SourceDiagnostics(
     val healthState: SourceHealthState = SourceHealthState.HEALTHY,
     val consecutiveFailures: Int = 0,
     val lastError: String = "",
-    val backoffUntilEpochMs: Long = 0L
+    val backoffUntilEpochMs: Long = 0L,
+    /** One line describing the most recent sync, e.g. "fetched 8, added 3, rejected 4, HTTP errors 0". */
+    val lastSyncSummary: String = ""
 )
 
 data class ProvenanceRecord(
@@ -259,7 +261,15 @@ data class ImageEvaluationResult(
     val contrastStdDev: Double,
     val brightnessClass: BrightnessClass,
     val cropRect: CropRect?,
-    val explanation: String
+    val explanation: String,
+    /** Median CIE L* (0..100) of the cropped picture; -1 when unknown (older records). */
+    val lightnessP50: Double = -1.0,
+    /** Contrast ratio of white desktop labels over the 90th-percentile brightness of the icon/bar zones. */
+    val desktopLabelContrast: Double = -1.0,
+    /** Mean (R - B) / 255 of the crop: -1 cool .. +1 warm. */
+    val warmth: Double = 0.0,
+    /** Dominant hue in 30-degree steps (0..11), or -1 for achromatic/unknown. */
+    val hueBucket: Int = -1
 )
 
 data class WallpaperRecord(
@@ -328,7 +338,15 @@ data class UserPreferences(
     val allowBlurredFrameFill: Boolean = false,
     val wifiOnlyDownloads: Boolean = false,
     val deferOnBatterySaver: Boolean = true,
-    val maxCacheBytes: Long = 250L * 1024L * 1024L, // 250 MB default
+    val maxCacheBytes: Long = DEFAULT_MAX_CACHE_BYTES,
     val baselineRestorePath: String? = null,
     val dryRunPreviewOnly: Boolean = false
-)
+) {
+    companion object {
+        /** Default reserve (cache) ceiling: 1 GiB. Matches the "1 GB cap" choice in Diagnostics. */
+        const val DEFAULT_MAX_CACHE_BYTES: Long = 1024L * 1024L * 1024L
+
+        /** Ceiling before v0.14; stored values equal to it are raised once (see the repository). */
+        const val LEGACY_MAX_CACHE_BYTES: Long = 250L * 1024L * 1024L
+    }
+}

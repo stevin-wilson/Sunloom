@@ -42,7 +42,7 @@ class NasaLibrarySourceAdapter(
             SafeCategory.AERIAL_EARTH !in enabledCategories) {
             return emptyList()
         }
-        val page = ((offset / limit.coerceAtLeast(1)) % 5) + 1
+        val page = ((offset / limit.coerceAtLeast(1)) % NASA_PAGE_SPAN) + 1
         val results = ArrayList<CandidateAsset>()
         val spacingMs = SourceRegistry.get(sourceId)?.minRequestSpacingMs ?: 150L
 
@@ -58,7 +58,8 @@ class NasaLibrarySourceAdapter(
             }
         }.ifEmpty { listOf("earth%20horizon%20nebula" to SafeCategory.SPACE_ASTRONOMY) }
 
-        val perQueryLimit = ((limit + queries.size - 1) / queries.size).coerceAtLeast(4)
+        // Ask for a wide page: many records (ISS photographs) have no keywords and the gate rejects those.
+        val perQueryLimit = NASA_PAGE_SIZE
         for ((idx, pair) in queries.withIndex()) {
             if (idx > 0 && spacingMs > 0L) {
                 delay(spacingMs)
@@ -68,7 +69,7 @@ class NasaLibrarySourceAdapter(
             val jsonText = httpClient.fetchTextOrNull(apiUrl) {
                 return results.take(limit)
             } ?: continue
-            val parsed = parseResponse(jsonText, category)
+            val parsed = parseResponse(jsonText, category).filter { it.rawCategoriesAndTags.isNotEmpty() }
             for (candidate in parsed) {
                 if (results.size >= limit) break
                 results.add(candidate)
@@ -231,6 +232,10 @@ class NasaLibrarySourceAdapter(
     }
 
     companion object {
+        /** NASA search pages walked before wrapping; deep enough that reinstalls and syncs differ. */
+        private const val NASA_PAGE_SPAN = 20
+        private const val NASA_PAGE_SIZE = 20
+
         private val ESA_WORD_REGEX = Regex("\\besa\\b")
         private val CREDIT_CLAUSE_REGEX = Regex("""(?:courtesy of|image credit:|photo credit:|credit:)\s*([^.;,\n|]+)""")
         private val ALLOWED_US_GOV_CREDITS = listOf(

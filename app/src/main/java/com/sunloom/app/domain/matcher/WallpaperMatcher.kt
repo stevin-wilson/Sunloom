@@ -6,6 +6,7 @@ import com.sunloom.app.domain.model.DisplayPolicy
 import com.sunloom.app.domain.model.DisplayProfile
 import com.sunloom.app.domain.model.UserPreferences
 import com.sunloom.app.domain.model.WallpaperRecord
+import com.sunloom.app.domain.safety.SafetyGate
 import java.io.File
 
 /**
@@ -19,7 +20,8 @@ class WallpaperMatcher(
         record.localFilePath.isNotBlank() &&
             record.fileSizeBytes > 0L &&
             File(record.localFilePath).let { it.exists() && it.length() > 0L }
-    }
+    },
+    private val random: kotlin.random.Random = kotlin.random.Random.Default
 ) {
 
     fun filterEligiblePool(
@@ -62,7 +64,9 @@ class WallpaperMatcher(
         targetBrightness: BrightnessClass,
         preferences: UserPreferences,
         currentWallpaperId: String? = null,
-        recentlyUsedIds: Set<String> = emptySet()
+        recentlyUsedIds: Set<String> = emptySet(),
+        deterministic: Boolean = false,
+        taste: TasteProfile = TasteProfile.NEUTRAL
     ): WallpaperRecord? {
         return rankCandidatesForSelection(
             candidates = candidates,
@@ -70,14 +74,19 @@ class WallpaperMatcher(
             preferences = preferences,
             currentWallpaperId = currentWallpaperId,
             recentlyUsedIds = recentlyUsedIds,
-            maxResults = 1
+            maxResults = 1,
+            deterministic = deterministic,
+            taste = taste
         ).firstOrNull()
     }
 
     /**
      * Returns up to [maxResults] ranked eligible wallpapers so scheduled background switches
      * (Article IX §3) can advance cleanly to the next reserve wallpaper if applying the top
-     * candidate fails at the platform layer.
+     * candidate fails at the platform layer. File existence is verified once per record.
+     *
+     * With [deterministic] the best-weighted candidate is returned instead of a random pick, so a UI
+     * preview of "what would be next" does not change on every rebuild.
      */
     fun rankCandidatesForSelection(
         candidates: List<WallpaperRecord>,
@@ -85,127 +94,157 @@ class WallpaperMatcher(
         preferences: UserPreferences,
         currentWallpaperId: String? = null,
         recentlyUsedIds: Set<String> = emptySet(),
-        maxResults: Int = 3
+        maxResults: Int = 3,
+        deterministic: Boolean = false,
+        taste: TasteProfile = TasteProfile.NEUTRAL
     ): List<WallpaperRecord> {
         if (maxResults <= 0) return emptyList()
+        val eligiblePool = filterEligiblePool(candidates, preferences)
+        if (eligiblePool.isEmpty()) return emptyList()
+
+        val currentSourceId = currentWallpaperId?.let { activeId ->
+            candidates.firstOrNull { it.id == activeId }?.provenance?.sourceId
+        }
+        // Online and user sources always outrank the bundled seeds (Article XI §2); seeds only serve
+        // as the offline fallback once no non-seed wallpaper is eligible.
+        val (seedPool, nonSeedPool) = eligiblePool.partition { it.provenance.sourceId == SEED_SOURCE_ID }
+
         val out = ArrayList<WallpaperRecord>(maxResults)
-        var remaining = candidates
         val excluded = recentlyUsedIds.toMutableSet()
+        val picked = HashSet<String>()
         repeat(maxResults) {
-            val next = selectSingleNextWallpaper(
-                candidates = remaining,
-                targetBrightness = targetBrightness,
-                preferences = preferences,
-                currentWallpaperId = currentWallpaperId,
-                recentlyUsedIds = excluded
-            ) ?: return out
+            // Every result must be a different wallpaper: they are fallbacks for a failed apply.
+            val nonSeedLeft = nonSeedPool.filter { it.id !in picked }
+            val seedLeft = seedPool.filter { it.id !in picked }
+            val next = selectFromPool(nonSeedLeft, targetBrightness, currentWallpaperId, currentSourceId, excluded, deterministic, taste)
+                ?: selectFromPool(seedLeft, targetBrightness, currentWallpaperId, currentSourceId, excluded, deterministic, taste)
+                ?: return out
             out.add(next)
             excluded.add(next.id)
-            remaining = remaining.filterNot { it.id == next.id }
+            picked.add(next.id)
         }
         return out
     }
 
-    private fun selectSingleNextWallpaper(
-        candidates: List<WallpaperRecord>,
-        targetBrightness: BrightnessClass,
-        preferences: UserPreferences,
-        currentWallpaperId: String? = null,
-        recentlyUsedIds: Set<String> = emptySet()
-    ): WallpaperRecord? {
-        val eligiblePool = filterEligiblePool(candidates, preferences)
-        if (eligiblePool.isEmpty()) return null
-
-        val nonSeedPool = eligiblePool.filter { it.provenance.sourceId != "seed_reserve" }
-        val seedPool = eligiblePool.filter { it.provenance.sourceId == "seed_reserve" }
-
-        if (nonSeedPool.isNotEmpty()) {
-            selectFromPool(
-                pool = nonSeedPool,
-                allCandidates = candidates,
-                targetBrightness = targetBrightness,
-                currentWallpaperId = currentWallpaperId,
-                recentlyUsedIds = recentlyUsedIds
-            )?.let { return it }
-        }
-
-        return selectFromPool(
-            pool = seedPool,
-            allCandidates = candidates,
-            targetBrightness = targetBrightness,
-            currentWallpaperId = currentWallpaperId,
-            recentlyUsedIds = recentlyUsedIds
-        )
-    }
-
+    /**
+     * Ladder (Article XI §1–2): an unused exact-brightness image, then an unused NEUTRAL one, and only
+     * then a recently used exact/NEUTRAL image. Putting NEUTRAL before "repeat a recent match" is what
+     * stops a small pool from ping-ponging between the same two or three wallpapers.
+     */
     private fun selectFromPool(
         pool: List<WallpaperRecord>,
-        allCandidates: List<WallpaperRecord>,
         targetBrightness: BrightnessClass,
         currentWallpaperId: String?,
-        recentlyUsedIds: Set<String>
+        currentSourceId: String?,
+        recentlyUsedIds: Set<String>,
+        deterministic: Boolean,
+        taste: TasteProfile
     ): WallpaperRecord? {
         if (pool.isEmpty()) return null
+        val recentShown = pool.filter { it.lastAppliedEpochMs > 0L }
+            .sortedByDescending { it.lastAppliedEpochMs }
+            .take(SIMILARITY_LOOKBACK)
 
-        val currentSourceId = currentWallpaperId?.let { activeId ->
-            allCandidates.firstOrNull { it.id == activeId }?.provenance?.sourceId
-        }
+        val recent = recentlyUsedIds + recentWindow(pool)
+        val notCurrent = pool.filter { it.id != currentWallpaperId }
+        fun exact(list: List<WallpaperRecord>) = list.filter { it.evaluation.brightnessClass == targetBrightness }
+        fun neutral(list: List<WallpaperRecord>) = list.filter { it.evaluation.brightnessClass == BrightnessClass.NEUTRAL }
+        val notRecent = notCurrent.filter { it.id !in recent }
 
-        val rotationComparator = compareBy<WallpaperRecord> { it.appliedCount }
-            .thenBy { if (currentSourceId != null && it.provenance.sourceId == currentSourceId) 1 else 0 }
-            .thenBy { it.lastAppliedEpochMs }
-            .thenByDescending { it.isFavorite }
-
-        // 1. Prefer exact brightness match + not current + not recently used
-        val strictMatches = pool.filter {
-            it.evaluation.brightnessClass == targetBrightness &&
-                it.id != currentWallpaperId &&
-                it.id !in recentlyUsedIds
-        }
-        if (strictMatches.isNotEmpty()) {
-            return strictMatches.sortedWith(rotationComparator).first()
-        }
-
-        // 2. Fallback: exact brightness match (excluding current if possible)
-        val brightnessMatches = pool.filter {
-            it.evaluation.brightnessClass == targetBrightness && it.id != currentWallpaperId
-        }
-        if (brightnessMatches.isNotEmpty()) {
-            return brightnessMatches.sortedWith(rotationComparator).first()
+        val rungs = sequenceOf(
+            { exact(notRecent) },
+            { neutral(notRecent) },
+            { exact(notCurrent) },
+            { neutral(notCurrent) }
+        )
+        for (rung in rungs) {
+            val candidates = rung()
+            if (candidates.isNotEmpty()) return choose(candidates, currentSourceId, deterministic, recentShown, taste)
         }
 
-        // 3. Fallback: Neutral brightness class (prefer not recently used, then any non-current)
-        val neutralStrictMatches = pool.filter {
-            it.evaluation.brightnessClass == BrightnessClass.NEUTRAL &&
-                it.id != currentWallpaperId &&
-                it.id !in recentlyUsedIds
-        }
-        if (neutralStrictMatches.isNotEmpty()) {
-            return neutralStrictMatches.sortedWith(rotationComparator).first()
-        }
-        val neutralMatches = pool.filter {
-            it.evaluation.brightnessClass == BrightnessClass.NEUTRAL && it.id != currentWallpaperId
-        }
-        if (neutralMatches.isNotEmpty()) {
-            return neutralMatches.sortedWith(rotationComparator).first()
-        }
-
-        // 4. Keep current if it is in this pool and matches targetBrightness or NEUTRAL before crossing opposite brightness
-        val sameBrightnessCurrent = pool.firstOrNull {
+        // Keep the current wallpaper before crossing to the opposite brightness.
+        pool.firstOrNull {
             it.id == currentWallpaperId &&
                 (it.evaluation.brightnessClass == targetBrightness || it.evaluation.brightnessClass == BrightnessClass.NEUTRAL)
-        }
-        if (sameBrightnessCurrent != null) {
-            return sameBrightnessCurrent
-        }
+        }?.let { return it }
 
-        // 5. Last resort if this pool only contains wallpapers of the other brightness
-        val nonCurrent = pool.filter { it.id != currentWallpaperId }
-        if (nonCurrent.isNotEmpty()) {
-            return nonCurrent.sortedWith(rotationComparator).first()
-        }
-
+        // Last resort: this pool only holds wallpapers of the other brightness.
+        if (notCurrent.isNotEmpty()) return choose(notCurrent, currentSourceId, deterministic, recentShown, taste)
         return pool.firstOrNull()
+    }
+
+    /**
+     * How much [candidate] resembles what was just on screen (0 = nothing in common, capped below 1 so a
+     * look-alike stays possible): same category as the last one shown, same category as the ones before,
+     * or a near-identical picture by perceptual hash.
+     */
+    private fun similarity(candidate: WallpaperRecord, recentShown: List<WallpaperRecord>): Double {
+        if (recentShown.isEmpty()) return 0.0
+        var score = when {
+            candidate.category == recentShown[0].category -> SAME_CATEGORY_AS_LAST
+            recentShown.drop(1).any { it.category == candidate.category } -> SAME_CATEGORY_EARLIER
+            else -> 0.0
+        }
+        val lastHue = recentShown[0].evaluation.hueBucket
+        if (lastHue >= 0 && candidate.evaluation.hueBucket == lastHue) score += SAME_HUE_AS_LAST
+        val hash = candidate.provenance.perceptualHash
+        if (SafetyGate.isInformativeDHash(hash) &&
+            recentShown.any { SafetyGate.isNearDuplicateDHash(hash, it.provenance.perceptualHash, LOOKALIKE_HAMMING_BITS) }
+        ) {
+            score += LOOKALIKE_PENALTY
+        }
+        return score.coerceAtMost(MAX_SIMILARITY)
+    }
+
+    /** The most recently applied images, so Next cannot cycle through a handful of recent ones. */
+    private fun recentWindow(pool: List<WallpaperRecord>): Set<String> {
+        val size = minOf(MAX_RECENT_WINDOW, pool.size / 2)
+        if (size <= 0) return emptySet()
+        return pool.asSequence()
+            .filter { it.lastAppliedEpochMs > 0L }
+            .sortedByDescending { it.lastAppliedEpochMs }
+            .take(size)
+            .mapTo(HashSet()) { it.id }
+    }
+
+    /**
+     * Picks one of [candidates]: never-shown images first, otherwise the least recently applied half
+     * (lifetime `appliedCount` would trap newcomers behind a long-running favourite), then a different
+     * source than the active wallpaper when one exists, then a weighted random pick that gently favours
+     * Kept images (Article XI §2).
+     */
+    private fun choose(
+        candidates: List<WallpaperRecord>,
+        currentSourceId: String?,
+        deterministic: Boolean,
+        recentShown: List<WallpaperRecord>,
+        taste: TasteProfile
+    ): WallpaperRecord {
+        val unseen = candidates.filter { it.appliedCount == 0 }
+        var tier = if (unseen.isNotEmpty()) {
+            unseen
+        } else {
+            val oldestFirst = candidates.sortedWith(compareBy({ it.lastAppliedEpochMs }, { it.appliedCount }))
+            oldestFirst.take((oldestFirst.size + 1) / 2)
+        }
+        if (currentSourceId != null) {
+            val otherSources = tier.filter { it.provenance.sourceId != currentSourceId }
+            if (otherSources.isNotEmpty()) tier = otherSources
+        }
+        if (tier.size == 1) return tier[0]
+
+        val weights = tier.map {
+            (if (it.isFavorite) FAVORITE_WEIGHT else 1.0) * taste.multiplier(it) * (1.0 - similarity(it, recentShown))
+        }
+        if (deterministic) {
+            return tier[weights.indices.maxByOrNull { weights[it] } ?: 0]
+        }
+        var ticket = random.nextDouble() * weights.sum()
+        for (index in tier.indices) {
+            ticket -= weights[index]
+            if (ticket < 0.0) return tier[index]
+        }
+        return tier.last()
     }
 
     fun assignWallpapersToDisplays(
@@ -246,5 +285,18 @@ class WallpaperMatcher(
             usedIds.add(next.id)
         }
         return result
+    }
+
+    private companion object {
+        const val SEED_SOURCE_ID = "seed_reserve"
+        const val MAX_RECENT_WINDOW = 8
+        const val FAVORITE_WEIGHT = 2.0
+        const val SIMILARITY_LOOKBACK = 3
+        const val SAME_CATEGORY_AS_LAST = 0.6
+        const val SAME_CATEGORY_EARLIER = 0.2
+        const val SAME_HUE_AS_LAST = 0.15
+        const val LOOKALIKE_PENALTY = 0.5
+        const val LOOKALIKE_HAMMING_BITS = 12
+        const val MAX_SIMILARITY = 0.85
     }
 }

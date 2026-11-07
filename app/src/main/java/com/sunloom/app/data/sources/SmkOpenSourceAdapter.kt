@@ -60,7 +60,7 @@ class SmkOpenSourceAdapter(
 
         val (query, targetCategory) = querySpecs[(offset / 4).coerceAtLeast(0) % querySpecs.size]
         val encodedKeys = URLEncoder.encode(query, "UTF-8")
-        val safeOffset = (offset % 32).coerceAtLeast(0)
+        val safeOffset = (offset % OFFSET_SPAN).coerceAtLeast(0)
         val rows = (limit * 2).coerceIn(4, 16)
 
         val apiUrl = "https://api.smk.dk/api/v1/art/search/" +
@@ -295,6 +295,9 @@ class SmkOpenSourceAdapter(
         SourceAdapterUtils.extractHost(url)
 
     companion object {
+        /** Result window walked before wrapping. */
+        private const val OFFSET_SPAN = 240
+
         private val SAFE_KEY_REGEX = Regex("[^a-zA-Z0-9._-]")
         private val ALLOWED_OBJECT_TERMS = listOf(
             "painting",

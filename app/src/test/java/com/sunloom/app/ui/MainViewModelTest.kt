@@ -101,13 +101,16 @@ class MainViewModelTest {
         }
 
         companion object {
+            const val SAMPLE_FILE_BYTES = 1024L
+
             fun sampleWall(id: String, title: String, brightness: BrightnessClass): WallpaperRecord {
                 return WallpaperRecord(
                     id = id,
                     title = title,
                     category = SafeCategory.LANDSCAPES_NATURE,
-                    localFilePath = "",
+                    localFilePath = "/tmp/$id.png",
                     croppedFilePath = "",
+                    fileSizeBytes = SAMPLE_FILE_BYTES,
                     provenance = ProvenanceRecord(
                         sourceId = "seed_reserve",
                         sourceName = "Sunloom Seed Reserve",
@@ -236,7 +239,7 @@ class MainViewModelTest {
 
         assertTrue(viewModel.uiState.value.lightReserveCount >= 1)
         assertTrue(viewModel.uiState.value.darkReserveCount >= 1)
-        assertEquals(0L, viewModel.uiState.value.totalCacheBytesUsed)
+        assertEquals(2 * FakeSunloomGateway.SAMPLE_FILE_BYTES, viewModel.uiState.value.totalCacheBytesUsed)
     }
 
     @Test

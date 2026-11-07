@@ -68,18 +68,30 @@ class InMemoryLibraryStore(
     override fun recordRejection(rejection: RejectionRecord) {
         synchronized(lock) {
             rejections[rejection.assetId] = rejection
-            if (rejections.size > SqliteLibraryStore.MAX_REJECTION_LOG_ENTRIES) {
-                val keepIds = rejections.values
+            // Only the retryable (non-permanent) rows are capped; permanent rejections are never pruned.
+            val transient = rejections.values.filter { !it.isPermanent }
+            if (transient.size > SqliteLibraryStore.MAX_REJECTION_LOG_ENTRIES) {
+                val keepIds = transient
                     .sortedByDescending { it.timestampEpochMs }
                     .take(SqliteLibraryStore.MAX_REJECTION_LOG_ENTRIES)
                     .map { it.assetId }
                     .toSet()
-                val iterator = rejections.keys.iterator()
-                while (iterator.hasNext()) {
-                    if (iterator.next() !in keepIds) iterator.remove()
-                }
+                rejections.values.removeAll { !it.isPermanent && it.assetId !in keepIds }
             }
             persistToDiskIfConfigured()
+        }
+    }
+
+    override fun removeSoftSafetyRecords(reasonCodes: Set<String>) {
+        synchronized(lock) {
+            rejections.values.removeAll { it.reasonCode in reasonCodes }
+            blocklist.values.removeAll { it.reason in reasonCodes }
+        }
+    }
+
+    override fun clearTransientRejections() {
+        synchronized(lock) {
+            rejections.values.removeAll { !it.isPermanent }
         }
     }
 

@@ -23,7 +23,9 @@ class BoundedCacheManagerTest {
         brightness: BrightnessClass = BrightnessClass.LIGHT,
         isFavorite: Boolean = false,
         isBaselineRestore: Boolean = false,
-        retrievedAt: Long = 1000L
+        retrievedAt: Long = 1000L,
+        appliedCount: Int = 0,
+        lastApplied: Long = 0L
     ): WallpaperRecord {
         return WallpaperRecord(
             id = id,
@@ -34,6 +36,8 @@ class BoundedCacheManagerTest {
             fileSizeBytes = sizeMb.toLong() * 1024L * 1024L,
             isFavorite = isFavorite,
             isBaselineRestore = isBaselineRestore,
+            appliedCount = appliedCount,
+            lastAppliedEpochMs = lastApplied,
             provenance = ProvenanceRecord(
                 sourceId = "wikimedia_featured",
                 sourceName = "Wikimedia Commons",
@@ -146,5 +150,49 @@ class BoundedCacheManagerTest {
 
         assertEquals(emptyList<String>(), report.evictedIds)
         assertEquals(6, report.protectedIds.size)
+    }
+
+    private fun protectedLightTrio() = (1..3).map { record("keep-$it", sizeMb = 1, retrievedAt = 900_000L + it) }
+
+    @Test
+    fun `evicts already shown wallpapers before never shown ones`() {
+        val unseen = record("unseen", sizeMb = 10, retrievedAt = 10L)
+        val seen = record("seen", sizeMb = 10, retrievedAt = 20L, appliedCount = 2, lastApplied = 500L)
+
+        val report = cacheManager.selectEvictions(
+            records = protectedLightTrio() + unseen + seen,
+            activeWallpaperIds = emptySet(),
+            maxCacheBytes = 15L * 1024L * 1024L
+        )
+
+        assertEquals(listOf("seen"), report.evictedIds)
+    }
+
+    @Test
+    fun `among shown wallpapers the least recently applied goes first`() {
+        val older = record("older", sizeMb = 10, appliedCount = 1, lastApplied = 100L)
+        val newer = record("newer", sizeMb = 10, appliedCount = 5, lastApplied = 900L)
+
+        val report = cacheManager.selectEvictions(
+            records = protectedLightTrio() + newer + older,
+            activeWallpaperIds = emptySet(),
+            maxCacheBytes = 15L * 1024L * 1024L
+        )
+
+        assertEquals(listOf("older"), report.evictedIds)
+    }
+
+    @Test
+    fun `never shown wallpapers are evicted oldest retrieved first once nothing shown remains`() {
+        val oldest = record("oldest", sizeMb = 10, retrievedAt = 10L)
+        val newest = record("newest", sizeMb = 10, retrievedAt = 50L)
+
+        val report = cacheManager.selectEvictions(
+            records = protectedLightTrio() + newest + oldest,
+            activeWallpaperIds = emptySet(),
+            maxCacheBytes = 15L * 1024L * 1024L
+        )
+
+        assertEquals(listOf("oldest"), report.evictedIds)
     }
 }

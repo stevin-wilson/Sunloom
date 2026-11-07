@@ -25,7 +25,8 @@ class CropRenderer {
         gridWidth: Int,
         gridHeight: Int,
         display: DisplayProfile,
-        allowBlurredFrameFill: Boolean = false
+        allowBlurredFrameFill: Boolean = false,
+        preferFullFrame: Boolean = false
     ): CropRect? {
         if (sourceWidth <= 0 || sourceHeight <= 0 || display.widthPx <= 0 || display.heightPx <= 0) {
             return null
@@ -56,7 +57,9 @@ class CropRenderer {
         // Article IV §2 (Constitution v0.6): Tiered physical-PPI floor
         val passesNativeFloor = meetsNativeQualityTier(minCoverage, cropLongEdge, display)
 
-        if (!passesNativeFloor) {
+        // A crop that discards most of the picture is a poor composition; show the whole frame instead
+        // (blurred fill, only when the user allows it) rather than a sliver of it.
+        if (!passesNativeFloor || (preferFullFrame && allowBlurredFrameFill)) {
             if (!allowBlurredFrameFill || !passesBlurredFillFloor(sourceWidth, sourceHeight, minCoverage, display)) {
                 return null
             }
@@ -234,6 +237,21 @@ class CropRenderer {
         }
         val importance = DoubleArray(gridWidth * gridHeight)
 
+        // Global mean colour, for "colour rarity": a cell unlike the rest of the picture draws the eye.
+        var meanR = 0.0
+        var meanG = 0.0
+        var meanB = 0.0
+        for (i in 0 until gridWidth * gridHeight) {
+            val px = rgbGrid[i]
+            meanR += (px shr 16) and 0xFF
+            meanG += (px shr 8) and 0xFF
+            meanB += px and 0xFF
+        }
+        val cells = (gridWidth * gridHeight).coerceAtLeast(1).toDouble()
+        meanR /= cells * 255.0
+        meanG /= cells * 255.0
+        meanB /= cells * 255.0
+
         for (y in 0 until gridHeight) {
             for (x in 0 until gridWidth) {
                 val left = lum[y * gridWidth + (x - 1).coerceAtLeast(0)]
@@ -263,7 +281,26 @@ class CropRenderer {
                     }
                 }
 
-                importance[y * gridWidth + x] = edgeEnergy * 1.6 + entropy * 0.4
+                // Centre-surround contrast: how much this cell stands out from its 5x5 neighbourhood.
+                var surround = 0.0
+                var surroundCount = 0
+                for (dy in -2..2) {
+                    for (dx in -2..2) {
+                        if (dx == 0 && dy == 0) continue
+                        surround += lum[(y + dy).coerceIn(0, gridHeight - 1) * gridWidth + (x + dx).coerceIn(0, gridWidth - 1)]
+                        surroundCount++
+                    }
+                }
+                val centreSurround = abs(lum[y * gridWidth + x] - surround / surroundCount)
+
+                val px = rgbGrid[y * gridWidth + x]
+                val dr = ((px shr 16) and 0xFF) / 255.0 - meanR
+                val dg = ((px shr 8) and 0xFF) / 255.0 - meanG
+                val db = (px and 0xFF) / 255.0 - meanB
+                val colourRarity = kotlin.math.sqrt(dr * dr + dg * dg + db * db) / kotlin.math.sqrt(3.0)
+
+                importance[y * gridWidth + x] =
+                    edgeEnergy * 1.6 + entropy * 0.4 + centreSurround * 1.2 + colourRarity * 0.5
             }
         }
         return importance
@@ -308,6 +345,7 @@ class CropRenderer {
 
         var capturedSubject = 0.0
         var clockZoneClutter = 0.0
+        var shelfClutter = 0.0
 
         for (gy in 0 until gridHeight) {
             val v = (gy + 0.5) / gridHeight.toDouble()
@@ -326,17 +364,45 @@ class CropRenderer {
                 if (uRel in 0.25..0.75 && vRel in 0.10..0.35) {
                     clockZoneClutter += imp * 0.25
                 }
+                // Subject hidden behind the desktop icon column or the bottom shelf is wasted
+                if (uRel <= 0.15 || vRel >= 0.88) {
+                    shelfClutter += imp * 0.3
+                }
             }
         }
 
         val centerU = (x0 + x1) * 0.5
         val centerV = (y0 + y1) * 0.5
-        val focalDistancePenalty = (abs(centerU - focalX) + abs(centerV - focalY)) * 2.0
+        // A weak centring prior, so a subject is not pushed to an edge ...
+        val focalDistancePenalty = (abs(centerU - focalX) + abs(centerV - focalY)) * 0.5
 
-        return capturedSubject - clockZoneClutter - focalDistancePenalty
+        // ... and a stronger pull of the subject towards a rule-of-thirds power point of the window.
+        val relFocalU = ((focalX - x0) / (x1 - x0).coerceAtLeast(1e-6)).coerceIn(0.0, 1.0)
+        val relFocalV = ((focalY - y0) / (y1 - y0).coerceAtLeast(1e-6)).coerceIn(0.0, 1.0)
+        val thirdsDistance = POWER_POINTS_U.minOf { pu ->
+            POWER_POINTS_V.minOf { pv -> abs(relFocalU - pu) + abs(relFocalV - pv) }
+        }
+
+        return capturedSubject - clockZoneClutter - shelfClutter - focalDistancePenalty - thirdsDistance * THIRDS_WEIGHT
     }
 
     companion object {
+        /** Weight of the rule-of-thirds term relative to the captured-subject score. */
+        private const val THIRDS_WEIGHT = 1.5
+        private val POWER_POINTS_U = doubleArrayOf(1.0 / 3.0, 2.0 / 3.0)
+        private val POWER_POINTS_V = doubleArrayOf(1.0 / 3.0, 2.0 / 3.0)
+
+        /** Share of the picture a crop must keep; below it the whole frame is shown (blurred fill) or the image skipped. */
+        const val MIN_VISIBLE_AREA = 0.5
+
+        /** Fraction of the source picture's area that a display-shaped crop keeps. */
+        fun visibleAreaFraction(sourceWidth: Int, sourceHeight: Int, display: DisplayProfile): Double {
+            if (sourceWidth <= 0 || sourceHeight <= 0 || display.heightPx <= 0) return 0.0
+            val sourceAspect = sourceWidth.toDouble() / sourceHeight.toDouble()
+            val targetAspect = display.aspectRatio
+            return if (sourceAspect >= targetAspect) targetAspect / sourceAspect else sourceAspect / targetAspect
+        }
+
         /** Upper bound on pixels in any bitmap handed to WallpaperManager (~64 MB as ARGB_8888). */
         const val MAX_OUTPUT_PIXELS = 16_000_000
 

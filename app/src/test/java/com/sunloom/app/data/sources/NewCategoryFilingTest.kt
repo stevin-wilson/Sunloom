@@ -26,7 +26,7 @@ class NewCategoryFilingTest {
     fun `Met files botanical results under BOTANICAL_FLORA when only that category is enabled`() = runTest {
         val client = FakeHttpClient(
             mapOf(
-                "v1/search" to """{"total": 1, "objectIDs": [11]}""",
+                "v1.1/search" to """{"total": 1, "objectIDs": [11]}""",
                 "objects/11" to """
                     {"objectID": 11, "isPublicDomain": true, "title": "Irises",
                      "artistDisplayName": "Vincent van Gogh",
@@ -47,7 +47,7 @@ class NewCategoryFilingTest {
     fun `Met files landscape results under LANDSCAPES_NATURE when scenic art is not enabled`() = runTest {
         val client = FakeHttpClient(
             mapOf(
-                "v1/search" to """{"total": 1, "objectIDs": [12]}""",
+                "v1.1/search" to """{"total": 1, "objectIDs": [12]}""",
                 "objects/12" to """
                     {"objectID": 12, "isPublicDomain": true, "title": "Valley",
                      "primaryImage": "https://images.metmuseum.org/valley.jpg",

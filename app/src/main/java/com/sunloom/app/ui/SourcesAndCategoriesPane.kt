@@ -105,6 +105,13 @@ internal fun SourcesAndCategoriesPane(
                                 }
                             }
                             Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (diag != null && diag.lastSyncSummary.isNotBlank()) {
+                                Text(
+                                    text = "Last sync: ${diag.lastSyncSummary}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                             if (diag != null && diag.lastError.isNotBlank()) {
                                 Text(
                                     text = diag.lastError,

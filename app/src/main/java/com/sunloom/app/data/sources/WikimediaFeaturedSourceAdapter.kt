@@ -64,7 +64,7 @@ class WikimediaFeaturedSourceAdapter(
             val encodedQuery = URLEncoder.encode(rawQuery, "UTF-8")
             val apiUrl = "https://commons.wikimedia.org/w/api.php?action=query" +
                 "&generator=search&gsrnamespace=6&gsrsearch=$encodedQuery" +
-                "&gsrlimit=$perCategoryLimit&gsroffset=${offset.coerceAtLeast(0)}" +
+                "&gsrlimit=$perCategoryLimit&gsroffset=${offset.coerceAtLeast(0) % SEARCH_OFFSET_SPAN}" +
                 "&prop=imageinfo&iiprop=url|size|extmetadata&iiurlwidth=$requestedThumbWidth&format=json"
 
             val jsonText = httpClient.fetchTextOrNull(apiUrl) {
@@ -288,6 +288,9 @@ class WikimediaFeaturedSourceAdapter(
     }
 
     companion object {
+        /** Search offsets walked before wrapping (the API allows far deeper paging). */
+        private const val SEARCH_OFFSET_SPAN = 300
+
         private val ALLOWED_CC_VERSIONS = listOf("4.0", "3.0", "2.5", "2.0")
         private val NON_ALNUM_SPACE_REGEX = Regex("[^a-z0-9 ]+")
         private val WHITESPACE_REGEX = Regex("\\s+")

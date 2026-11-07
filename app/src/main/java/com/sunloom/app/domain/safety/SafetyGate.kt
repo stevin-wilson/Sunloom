@@ -4,6 +4,7 @@ import com.sunloom.app.data.sources.SourceRegistry
 import com.sunloom.app.domain.model.CandidateAsset
 import com.sunloom.app.domain.model.ImageFormat
 import com.sunloom.app.domain.model.LicenseType
+import com.sunloom.app.domain.model.SafeCategory
 import com.sunloom.app.domain.model.SafetyClassification
 import com.sunloom.app.domain.model.SafetyVerdict
 import java.security.MessageDigest
@@ -216,14 +217,26 @@ class SafetyGate {
                     failedLayer = "L2"
                 )
             }
-            if (!SafetyDenylist.matchesSafeDomain(candidate.title, candidate.rawCategoriesAndTags)) {
+            val declaredByMuseumQuery = srcId in MUSEUM_SOURCES_WITH_CLASSIFICATION_FILTER &&
+                candidate.category in MUSEUM_SAFE_CATEGORIES
+            if (!declaredByMuseumQuery &&
+                !SafetyDenylist.matchesSafeDomain(candidate.title, candidate.rawCategoriesAndTags)
+            ) {
                 return SafetyVerdict.Rejected(
                     reasonCode = "UNRECOGNIZED_SAFE_DOMAIN",
                     explanation = "Candidate does not match any verified safe visual domain (landscape, nature, space, architecture, abstract, scenic).",
                     failedLayer = "L2"
                 )
             }
-            auditNotes.add("Verified safe visual domain membership (${candidate.category.displayName})")
+            auditNotes.add(
+                if (declaredByMuseumQuery &&
+                    !SafetyDenylist.matchesSafeDomain(candidate.title, candidate.rawCategoriesAndTags)
+                ) {
+                    "Safe visual domain taken from the filtered museum query (${candidate.category.displayName}); L2a passed"
+                } else {
+                    "Verified safe visual domain membership (${candidate.category.displayName})"
+                }
+            )
         }
 
         return SafetyVerdict.Approved(
@@ -325,8 +338,22 @@ class SafetyGate {
     }
 
     companion object {
+        /**
+         * Museum adapters already restrict results by department/classification and search a category-specific
+         * query, so their tags (object types, techniques) rarely contain a landscape word. For them the declared
+         * category stands in for the L2b keyword; L2a/L2c and the tag requirement still apply.
+         */
+        private val MUSEUM_SOURCES_WITH_CLASSIFICATION_FILTER =
+            setOf("met_museum_cc0", "cma_cc0", "smk_open", "artic_cc0")
+        private val MUSEUM_SAFE_CATEGORIES = setOf(
+            SafeCategory.SCENIC_FINE_ART,
+            SafeCategory.LANDSCAPES_NATURE,
+            SafeCategory.ARCHITECTURE_CITYSCAPES,
+            SafeCategory.BOTANICAL_FLORA
+        )
+
         const val GATE_VERSION = "v0.6.0"
-        const val EVALUATOR_VERSION = "eval-v4"
+        const val EVALUATOR_VERSION = "eval-v5"
         const val BLOCKLIST_SCHEMA_VERSION = "bl-v2"
         val COMPOSITE_GATE_VERSION: String =
             "$GATE_VERSION:${SafetyDenylist.DENYLIST_VERSION}:$EVALUATOR_VERSION:$BLOCKLIST_SCHEMA_VERSION"
@@ -527,6 +554,16 @@ class SafetyGate {
             val g = (argb shr 8) and 0xFF
             val b = argb and 0xFF
             return (r * 299 + g * 587 + b * 114) / 1000
+        }
+
+        /**
+         * A dHash of a flat, very dark or very bright picture is almost all zeros or ones, so unrelated minimal
+         * wallpapers would "match". Only hashes carrying real structure should drive duplicate/similarity logic.
+         */
+        fun isInformativeDHash(hash: String): Boolean {
+            if (hash.length != 16) return false
+            val bits = hash.toULongOrNull(16)?.countOneBits() ?: return false
+            return bits in 10..54
         }
 
         /**

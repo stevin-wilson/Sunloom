@@ -88,11 +88,13 @@ class BoundedCacheManager(
             )
         }
 
-        // Sort evictable records oldest-first by lastAppliedEpochMs, then retrievedAtEpochMs
+        // Evict what the user has already seen first (least recently applied), and only then images that
+        // were never shown: those are the fresh ones the rotation still owes the user (Article IX §3).
         val evictable = cachedRecords
             .filter { it.id !in protectedIds }
             .sortedWith(
-                compareBy<WallpaperRecord> { it.lastAppliedEpochMs }
+                compareBy<WallpaperRecord> { if (it.appliedCount > 0 || it.lastAppliedEpochMs > 0L) 0 else 1 }
+                    .thenBy { it.lastAppliedEpochMs }
                     .thenBy { it.provenance.retrievedAtEpochMs }
             )
 

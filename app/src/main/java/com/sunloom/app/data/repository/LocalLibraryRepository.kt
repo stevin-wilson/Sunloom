@@ -42,6 +42,7 @@ import com.sunloom.app.domain.model.WallpaperStatus
 import com.sunloom.app.domain.renderer.CropRenderer
 import com.sunloom.app.domain.renderer.EnvelopePlanner
 import com.sunloom.app.domain.safety.GateTrace
+import com.sunloom.app.domain.safety.SafetyDenylist
 import com.sunloom.app.domain.safety.SafetyGate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
@@ -74,11 +75,26 @@ class LocalLibraryRepository(
         SmkOpenSourceAdapter(httpClient)
     ),
     val store: LibraryStore = createDefaultStore(context),
-    private val maxSeedRenderPixels: Int = defaultMaxSeedRenderPixels
+    private val maxSeedRenderPixels: Int = defaultMaxSeedRenderPixels,
+    private val random: kotlin.random.Random = kotlin.random.Random.Default
 ) {
     companion object {
         const val QUARANTINE_MAX_AGE_MS = 24L * 60L * 60L * 1000L
         const val DEFAULT_MAX_SOURCES_PER_SYNC = 3
+        private const val KEY_CACHE_DEFAULT_MIGRATED = "cache_default_migrated_v1"
+        /**
+         * Outcomes of heuristic keyword checks, not verdicts about the content. They are recorded as
+         * display-scoped, retryable rejections and swept whenever the denylist version changes (Article VII).
+         */
+        internal val SOFT_SAFETY_REASONS = setOf("UNRECOGNIZED_SAFE_DOMAIN", "MISSING_SAFETY_TAGS")
+        private const val KEY_SOFT_SWEEP_VERSION = "soft_rejections_denylist_version"
+        private const val FETCH_CURSOR_STEP = 6
+        private const val STUCK_CURSOR_FAILURES = 3
+        private val HEAL_EXEMPT_SOURCES = setOf("seed_reserve", "user_local")
+        private const val FETCH_CURSOR_WRAP = 1_000_000
+
+        /** First fetch from a source starts somewhere in this range, so installs do not all crawl the same pages. */
+        private const val FETCH_CURSOR_RANDOM_START = 600
         private val LEGACY_V1_3_SOURCES = setOf(
             "seed_reserve",
             "wikimedia_featured",
@@ -236,6 +252,7 @@ class LocalLibraryRepository(
     }
 
     fun loadPreferences(): UserPreferences {
+        migrateLegacyCacheDefaultIfNeeded()
         val catsRaw = prefs.getStringSet("enabled_categories", null)
         val categories = if (catsRaw.isNullOrEmpty()) {
             UserPreferences().enabledCategories
@@ -286,13 +303,32 @@ class LocalLibraryRepository(
             allowBlurredFrameFill = prefs.getBoolean("allow_blurred_fill", false),
             wifiOnlyDownloads = prefs.getBoolean("wifi_only", false),
             deferOnBatterySaver = prefs.getBoolean("defer_battery_saver", true),
-            maxCacheBytes = prefs.getLong("max_cache_bytes", 250L * 1024L * 1024L),
+            maxCacheBytes = prefs.getLong("max_cache_bytes", UserPreferences.DEFAULT_MAX_CACHE_BYTES),
             baselineRestorePath = prefs.getString("baseline_restore_path", null),
             dryRunPreviewOnly = false
         )
     }
 
+    /**
+     * One-time (Article IX §3, v0.14): installs that still hold the old 250 MB default move to the new
+     * 1 GB default. Any other stored value is a deliberate choice and is kept; once the flag is set a
+     * later explicit choice of 250 MB is respected.
+     */
+    private fun migrateLegacyCacheDefaultIfNeeded() {
+        if (prefs.getBoolean(KEY_CACHE_DEFAULT_MIGRATED, false)) return
+        prefs.edit {
+            if (prefs.getLong("max_cache_bytes", -1L) == UserPreferences.LEGACY_MAX_CACHE_BYTES) {
+                putLong("max_cache_bytes", UserPreferences.DEFAULT_MAX_CACHE_BYTES)
+            }
+            putBoolean(KEY_CACHE_DEFAULT_MIGRATED, true)
+        }
+    }
+
     fun savePreferences(updated: UserPreferences) {
+        // Resolution rejections made under the old blur-fill setting no longer apply (Article XI §3).
+        if (prefs.getBoolean("allow_blurred_fill", false) != updated.allowBlurredFrameFill) {
+            store.clearTransientRejections()
+        }
         val enabledAdmittedSources = updated.enabledSources.filter { SourceRegistry.isSourceAdmitted(it) }.toSet()
         prefs.edit {
             putBoolean("setup_completed", updated.isSetupCompleted)
@@ -1187,12 +1223,22 @@ class LocalLibraryRepository(
         sweepStaleQuarantineFiles()
 
         val preferences = loadPreferences()
+        sweepSoftSafetyRecordsIfDenylistChanged()
         reconcileReserveForDisplaySet(activeDisplaySet, preferences)
         var newlyAdded = 0
         val allActiveWallpapers = getAllWallpapers().filter { !it.isRejected }
-        val existingIds = allActiveWallpapers.map { it.id }.toMutableSet()
+        // Rows without an image file (evicted, or restored from backup) are not "already fetched":
+        // they are downloaded again and keep their favourite flag and play history.
+        val ghostRows = allActiveWallpapers
+            .filter { !it.isBaselineRestore && !hasUsableFile(it) }
+            .associateBy { it.id }
+        val existingIds = allActiveWallpapers.filter { it.id !in ghostRows }.map { it.id }.toMutableSet()
+        val diversityGuard = LibraryDiversityGuard(
+            allActiveWallpapers.filter { it.id !in ghostRows && !it.isBaselineRestore }
+        )
         val unseenDarkCount = allActiveWallpapers.count {
-            !it.isBaselineRestore &&
+            it.id !in ghostRows &&
+                !it.isBaselineRestore &&
                 it.provenance.sourceId != "seed_reserve" &&
                 it.evaluation.isEligible &&
                 it.evaluation.brightnessClass == BrightnessClass.DARK &&
@@ -1206,8 +1252,6 @@ class LocalLibraryRepository(
         val blockedSha256s = getPermanentBlockedSha256s().toMutableSet()
         val blockedPhashes = getPermanentBlockedPerceptualHashes().toMutableSet()
 
-        val currentOffset = prefs.getInt("online_fetch_offset", 0)
-        prefs.edit { putInt("online_fetch_offset", (currentOffset + 6) % 48) }
 
         val now = System.currentTimeMillis()
         val selectedAdapters = selectAdaptersForSync(
@@ -1239,16 +1283,18 @@ class LocalLibraryRepository(
             )
             val scopedAdapter = adapter.withHttpClient(budgetedClient)
 
+            val cursor = fetchCursor(adapter.sourceId)
             val candidates = try {
                 scopedAdapter.fetchCandidates(
                     enabledCategories = preferences.enabledCategories,
                     limit = 8,
-                    offset = currentOffset,
+                    offset = cursor,
                     targetWidthPx = effectiveTargetWidthPx
                 )
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (_: SourceBudgetExceededException) {
+                advanceFetchCursor(adapter.sourceId, cursor)
                 continue
             } catch (err: Throwable) {
                 if (isCancellationThrowable(err)) {
@@ -1256,9 +1302,24 @@ class LocalLibraryRepository(
                 }
                 lastSyncFailedSources++
                 recordSourceFetchFailure(adapter.sourceId, err)
+                moveOnIfStuck(adapter.sourceId, cursor)
+                recordSyncSummary(adapter.sourceId, fetched = 0, alreadyHad = 0, added = 0, httpErrors = budgetedClient.httpErrorCount, failure = err)
                 continue
             }
+            // Adapters swallow HTTP errors and return an empty list. When no request of the source got an answer,
+            // that is a failed source, not an "up to date" one. Individual 404s among answered requests (a Met
+            // object without an image, say) are normal and do not make a source unhealthy.
+            if (candidates.isEmpty() && budgetedClient.successfulRequestCount == 0 && budgetedClient.httpErrorCount > 0) {
+                lastSyncFailedSources++
+                recordSourceFetchFailure(adapter.sourceId, budgetedClient.lastHttpError)
+                moveOnIfStuck(adapter.sourceId, cursor)
+                recordSyncSummary(adapter.sourceId, fetched = 0, alreadyHad = 0, added = 0, httpErrors = budgetedClient.httpErrorCount)
+                continue
+            }
+            advanceFetchCursor(adapter.sourceId, cursor)
             recordSourceFetchSuccess(adapter.sourceId)
+            val addedBefore = newlyAdded
+            var alreadyHad = 0
 
             candidateLoop@ for (candidate in candidates) {
                 coroutineContext.ensureActive()
@@ -1266,6 +1327,7 @@ class LocalLibraryRepository(
                     candidate.id in permanentlyBlockedIds ||
                     candidate.id in displayScopedRejectedIds
                 ) {
+                    if (candidate.id in existingIds) alreadyHad++
                     continue
                 }
 
@@ -1275,6 +1337,21 @@ class LocalLibraryRepository(
                     blockedPerceptualHashes = blockedPhashes,
                     blockedSha256Checksums = blockedSha256s
                 )
+                if (metaVerdict is SafetyVerdict.Rejected && metaVerdict.reasonCode in SOFT_SAFETY_REASONS) {
+                    recordRejection(
+                        RejectionRecord(
+                            assetId = candidate.id,
+                            sourceId = adapter.sourceId,
+                            reasonCode = metaVerdict.reasonCode,
+                            explanation = metaVerdict.explanation,
+                            timestampEpochMs = System.currentTimeMillis(),
+                            isPermanent = false,
+                            displaySignature = displaySetSignature
+                        )
+                    )
+                    displayScopedRejectedIds.add(candidate.id)
+                    continue
+                }
                 if (metaVerdict is SafetyVerdict.Rejected) {
                     val ts = System.currentTimeMillis()
                     addPermanentBlocklistEntry(
@@ -1296,6 +1373,49 @@ class LocalLibraryRepository(
                         )
                     )
                     permanentlyBlockedIds.add(candidate.id)
+                    continue
+                }
+
+                // Cheap checks first: they cost no download budget (Article X §3–4).
+                if (diversityGuard.creatorCapReached(adapter.sourceId, candidate.provenance.creatorName)) {
+                    continue
+                }
+                val advertisedW = candidate.provenance.originalWidth
+                val advertisedH = candidate.provenance.originalHeight
+                if (advertisedW > 0 && advertisedH > 0 && !preferences.allowBlurredFrameFill &&
+                    CropRenderer.visibleAreaFraction(advertisedW, advertisedH, display) < CropRenderer.MIN_VISIBLE_AREA
+                ) {
+                    recordRejection(
+                        RejectionRecord(
+                            assetId = candidate.id,
+                            sourceId = adapter.sourceId,
+                            reasonCode = "COMPOSITION_CROPS_TOO_MUCH",
+                            explanation = "A ${display.resolutionLabel} crop would keep under half of the ${advertisedW}×${advertisedH} picture; not downloaded.",
+                            timestampEpochMs = System.currentTimeMillis(),
+                            isPermanent = false,
+                            displaySignature = displaySetSignature
+                        )
+                    )
+                    displayScopedRejectedIds.add(candidate.id)
+                    continue
+                }
+                if (advertisedW > 0 && advertisedH > 0 &&
+                    !CropRenderer.canSourceSatisfyDisplay(
+                        maxOf(advertisedW, advertisedH), display, preferences.allowBlurredFrameFill
+                    )
+                ) {
+                    recordRejection(
+                        RejectionRecord(
+                            assetId = candidate.id,
+                            sourceId = adapter.sourceId,
+                            reasonCode = "INSUFFICIENT_ADVERTISED_RESOLUTION",
+                            explanation = "Source advertises ${advertisedW}×${advertisedH}, too small for ${display.resolutionLabel}; not downloaded.",
+                            timestampEpochMs = System.currentTimeMillis(),
+                            isPermanent = false,
+                            displaySignature = displaySetSignature
+                        )
+                    )
+                    displayScopedRejectedIds.add(candidate.id)
                     continue
                 }
 
@@ -1422,6 +1542,22 @@ class LocalLibraryRepository(
                         continue
                     }
 
+                    if (diversityGuard.isNearDuplicate(dHash)) {
+                        recordRejection(
+                            RejectionRecord(
+                                assetId = candidate.id,
+                                sourceId = adapter.sourceId,
+                                reasonCode = "NEAR_DUPLICATE_OF_LIBRARY",
+                                explanation = "Perceptual hash ($dHash) is almost identical to a wallpaper already in the library.",
+                                timestampEpochMs = System.currentTimeMillis(),
+                                isPermanent = false,
+                                displaySignature = displaySetSignature
+                            )
+                        )
+                        displayScopedRejectedIds.add(candidate.id)
+                        continue
+                    }
+
                     val eval = imageEvaluator.evaluateRgbGrid(
                         imageWidth = srcW,
                         imageHeight = srcH,
@@ -1503,14 +1639,30 @@ class LocalLibraryRepository(
                         evaluation = finalEval,
                         status = WallpaperStatus.PREPARED,
                         decisionExplanation = "Safety Gate: ${approved.auditNotes.joinToString("; ")}. Evaluator: ${finalEval.explanation}"
-                    )
+                    ).let { fresh ->
+                        ghostRows[candidate.id]?.let { previous ->
+                            fresh.copy(
+                                isFavorite = previous.isFavorite,
+                                appliedCount = previous.appliedCount,
+                                lastAppliedEpochMs = previous.lastAppliedEpochMs
+                            )
+                        } ?: fresh
+                    }
                     upsertWallpaper(record)
                     existingIds.add(candidate.id)
+                    diversityGuard.noteAdded(adapter.sourceId, candidate.provenance.creatorName, dHash)
                     newlyAdded++
                 } finally {
                     runCatching { quarantineFile.delete() }
                 }
             }
+            recordSyncSummary(
+                adapter.sourceId,
+                fetched = candidates.size,
+                alreadyHad = alreadyHad,
+                added = newlyAdded - addedBefore,
+                httpErrors = budgetedClient.httpErrorCount
+            )
         }
 
         enforceCacheLimit()
@@ -1526,6 +1678,41 @@ class LocalLibraryRepository(
 
     fun importUserUri(uri: Uri, display: DisplayProfile, asBaselineRestore: Boolean = false): WallpaperRecord? =
         userImportPipeline.importUserUri(uri, display, asBaselineRestore)
+
+    /** True while Light or Dark holds fewer unseen fetched images than the target and the cache has room. */
+    fun needsTopUp(preferences: UserPreferences = loadPreferences()): Boolean {
+        val all = getAllWallpapers()
+        val usable = all.filter { it.provenance.sourceId in preferences.enabledSources }
+        val bytes = all.filter { !it.isRejected }.sumOf { it.fileSizeBytes }
+        return com.sunloom.app.domain.matcher.ReserveBuffer.needsTopUp(
+            usable, preferences.enabledCategories, bytes, preferences.maxCacheBytes
+        )
+    }
+
+    /** True when the record still has a readable, non-empty image file on disk. */
+    internal fun hasUsableFile(record: WallpaperRecord): Boolean =
+        record.localFilePath.isNotBlank() &&
+            record.fileSizeBytes > 0L &&
+            File(record.localFilePath).let { it.isFile && it.length() > 0L }
+
+    /**
+     * Auto Backup restores the library database but not the image files (Article IX §3), and the cache
+     * manager evicts files too. Rows left without a file are marked evicted so counts are honest and the
+     * next sync downloads them again. Seeds are re-rendered by [ensureSeedReserveLoaded]; the baseline
+     * restore copy is left untouched. Returns how many rows changed.
+     */
+    fun healMissingFiles(): Int {
+        var healed = 0
+        for (record in getAllWallpapers()) {
+            // Seeds are re-rendered, the baseline copy is kept, and a missing personal photo cannot be fetched again.
+            if (record.isRejected || record.isBaselineRestore || record.provenance.sourceId in HEAL_EXEMPT_SOURCES) continue
+            if (record.localFilePath.isBlank() && record.fileSizeBytes == 0L) continue
+            if (hasUsableFile(record)) continue
+            upsertWallpaper(record.copy(localFilePath = "", croppedFilePath = "", fileSizeBytes = 0L))
+            healed++
+        }
+        return healed
+    }
 
     fun enforceCacheLimit() {
         val prefs = loadPreferences()
@@ -1625,6 +1812,58 @@ class LocalLibraryRepository(
         return until > nowEpochMs
     }
 
+    /**
+     * Soft outcomes (see [SOFT_SAFETY_REASONS]) from an earlier denylist version may have been stored as
+     * permanent bans. Once per denylist version they are lifted so the candidates are evaluated again;
+     * bans for prohibited content, licences and user rejections are never touched.
+     */
+    private fun sweepSoftSafetyRecordsIfDenylistChanged() {
+        val current = SafetyDenylist.DENYLIST_VERSION
+        if (prefs.getString(KEY_SOFT_SWEEP_VERSION, null) == current) return
+        store.removeSoftSafetyRecords(SOFT_SAFETY_REASONS)
+        prefs.edit { putString(KEY_SOFT_SWEEP_VERSION, current) }
+    }
+
+    /**
+     * Each source walks its own catalog: the cursor starts at a random point on first use and only moves
+     * once the source has answered (or has used up its request budget, so a page that always exhausts the
+     * budget cannot pin the cursor); a dead network never skips content that was not seen (Article X §4).
+     */
+    private fun fetchCursor(sourceId: String): Int {
+        val key = "fetch_cursor_$sourceId"
+        val stored = prefs.getInt(key, -1)
+        if (stored >= 0) return stored
+        val start = random.nextInt(FETCH_CURSOR_RANDOM_START)
+        prefs.edit { putInt(key, start) }
+        return start
+    }
+
+    /** A page that fails again and again must not pin the cursor: after three failures in a row, skip it. */
+    private fun moveOnIfStuck(sourceId: String, cursor: Int) {
+        if (prefs.getInt("source_fail_count_$sourceId", 0) >= STUCK_CURSOR_FAILURES) advanceFetchCursor(sourceId, cursor)
+    }
+
+    private fun advanceFetchCursor(sourceId: String, from: Int) {
+        prefs.edit { putInt("fetch_cursor_$sourceId", (from + FETCH_CURSOR_STEP) % FETCH_CURSOR_WRAP) }
+    }
+
+    /** Persists a one-line account of the latest sync for a source so Diagnostics can show it. */
+    private fun recordSyncSummary(
+        sourceId: String,
+        fetched: Int,
+        alreadyHad: Int,
+        added: Int,
+        httpErrors: Int,
+        failure: Throwable? = null
+    ) {
+        val rejected = (fetched - alreadyHad - added).coerceAtLeast(0)
+        val text = buildString {
+            append("fetched $fetched, added $added, already had $alreadyHad, rejected or skipped $rejected, HTTP errors $httpErrors")
+            if (failure != null) append(" (${failure.message?.take(80) ?: failure.javaClass.simpleName})")
+        }
+        prefs.edit { putString("source_last_sync_$sourceId", text) }
+    }
+
     fun recordSourceFetchSuccess(sourceId: String, nowEpochMs: Long = System.currentTimeMillis()) {
         prefs.edit {
             putInt("source_fail_count_$sourceId", 0)
@@ -1683,7 +1922,8 @@ class LocalLibraryRepository(
                 healthState = state,
                 consecutiveFailures = fails,
                 lastError = lastErr,
-                backoffUntilEpochMs = backoffUntil
+                backoffUntilEpochMs = backoffUntil,
+                lastSyncSummary = prefs.getString("source_last_sync_$sid", "") ?: ""
             )
         }
     }

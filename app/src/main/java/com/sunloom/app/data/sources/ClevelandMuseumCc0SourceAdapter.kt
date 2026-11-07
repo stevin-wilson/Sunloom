@@ -66,7 +66,7 @@ class ClevelandMuseumCc0SourceAdapter(
         }.ifEmpty { listOf("landscape mountain river" to SafeCategory.SCENIC_FINE_ART) }
 
         val (query, targetCategory) = querySpecs[(offset / 4).coerceAtLeast(0) % querySpecs.size]
-        val skip = (offset % 24).coerceAtLeast(0)
+        val skip = (offset % SKIP_SPAN).coerceAtLeast(0)
         val requestLimit = (limit * 2).coerceIn(4, 16)
         val encodedQuery = URLEncoder.encode(query, "UTF-8")
 
@@ -240,6 +240,9 @@ class ClevelandMuseumCc0SourceAdapter(
         SourceAdapterUtils.extractHost(url)
 
     companion object {
+        /** Result window walked before wrapping (the catalog holds thousands of CC0 works). */
+        private const val SKIP_SPAN = 240
+
         private val ALLOWED_TYPES = listOf(
             "painting",
             "drawing",

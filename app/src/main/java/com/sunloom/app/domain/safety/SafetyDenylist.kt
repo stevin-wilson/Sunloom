@@ -23,7 +23,7 @@ import java.util.Locale
  */
 object SafetyDenylist {
 
-    const val DENYLIST_VERSION = "2026.11.06-v4"
+    const val DENYLIST_VERSION = "2026.11.07-v5"
 
     private val DIACRITICS_REGEX = Regex("\\p{M}+")
     private val NON_LETTER_DIGIT_REGEX = Regex("[^a-z0-9]+")
@@ -99,6 +99,19 @@ object SafetyDenylist {
         "stellar explosion",
         "solar explosion",
         "volcanic explosion"
+    )
+
+    /**
+     * Fixed phrases whose words (`naked`, `bikini`, `blood`) are harmless there: astronomy, a Pacific atoll,
+     * a lunar eclipse. They are removed before the Tier 1 scan only; any other occurrence of the same words
+     * in the field is still matched, and every other term is unaffected (Article VII, v0.14).
+     */
+    private val UNCONDITIONAL_BENIGN_PHRASES = listOf(
+        "naked eye",
+        "bikini atoll",
+        "blood moon",
+        "blood orange",
+        "blood red sky"
     )
 
     /**
@@ -283,15 +296,15 @@ object SafetyDenylist {
         attributionText: String
     ): String? {
         val allFieldsTokens = buildList {
-            addAll(tokenizeAndStem(title))
+            addAll(tokenizeAndStem(scrub(title, UNCONDITIONAL_BENIGN_PHRASES)))
             add("|")
-            addAll(tokenizeAndStem(description))
+            addAll(tokenizeAndStem(scrub(description, UNCONDITIONAL_BENIGN_PHRASES)))
             add("|")
             for (tag in rawCategoriesAndTags) {
-                addAll(tokenizeAndStem(tag))
+                addAll(tokenizeAndStem(scrub(tag, UNCONDITIONAL_BENIGN_PHRASES)))
                 add("|")
             }
-            addAll(tokenizeAndStem(attributionText))
+            addAll(tokenizeAndStem(scrub(attributionText, UNCONDITIONAL_BENIGN_PHRASES)))
         }
 
         findMatchInTokenStream(allFieldsTokens, UNCONDITIONAL_TERMS)?.let { return it }
@@ -321,9 +334,11 @@ object SafetyDenylist {
         }
     }
 
-    private fun scrubBenignLandmarks(input: String): String {
+    private fun scrubBenignLandmarks(input: String): String = scrub(input, BENIGN_LANDMARK_PHRASES)
+
+    private fun scrub(input: String, phrases: List<String>): String {
         var norm = " ${normalizeRaw(input)} "
-        for (phrase in BENIGN_LANDMARK_PHRASES) {
+        for (phrase in phrases) {
             norm = norm.replace(" $phrase ", " ")
         }
         return norm.trim()

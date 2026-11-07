@@ -240,7 +240,7 @@ class SourceAdaptersTest {
 
         val client = FakeHttpClient(
             mapOf(
-                "collectionapi.metmuseum.org/public/collection/v1/search" to searchJson,
+                "collectionapi.metmuseum.org/public/collection/v1.1/search" to searchJson,
                 "objects/436535" to publicDomainObjJson,
                 "objects/999999" to restrictedObjJson
             )
@@ -842,7 +842,7 @@ class SourceAdaptersTest {
         val metBudgeted = BudgetedSourceHttpClient(
             delegate = FakeHttpClient(
                 mapOf(
-                    "collection/v1/search" to """{"total":10,"objectIDs":[1,2,3,4,5,6,7,8,9,10]}""",
+                    "collection/v1.1/search" to """{"total":10,"objectIDs":[1,2,3,4,5,6,7,8,9,10]}""",
                     "collection/v1/objects/" to """{"objectID":1,"isPublicDomain":false}"""
                 )
             ),

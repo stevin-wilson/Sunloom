@@ -7,6 +7,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sunloom.app.data.repository.LibraryStoreUnavailableException
 import com.sunloom.app.data.repository.LocalLibraryRepository
+import com.sunloom.app.domain.matcher.ReserveBuffer
+import com.sunloom.app.domain.matcher.TasteProfile
 import com.sunloom.app.domain.matcher.WallpaperMatcher
 import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.DisplayPolicy
@@ -30,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -100,14 +103,29 @@ data class SunloomUiState(
         get() = if (allCachedBytesUsed >= 0L) allCachedBytesUsed else libraryWallpapers.sumOf { it.fileSizeBytes }
 
     val lightReserveCount: Int
-        get() = libraryWallpapers.count { !it.isRejected && !it.isBaselineRestore && it.evaluation.brightnessClass == BrightnessClass.LIGHT }
+        get() = libraryWallpapers.count {
+            it.hasImage && !it.isRejected && !it.isBaselineRestore && it.evaluation.brightnessClass == BrightnessClass.LIGHT
+        }
 
     val darkReserveCount: Int
-        get() = libraryWallpapers.count { !it.isRejected && !it.isBaselineRestore && it.evaluation.brightnessClass == BrightnessClass.DARK }
+        get() = libraryWallpapers.count {
+            it.hasImage && !it.isRejected && !it.isBaselineRestore && it.evaluation.brightnessClass == BrightnessClass.DARK
+        }
+
+    /** Fetched images ready to use (a file, eligible, not rejected), seen or not. */
+    val fetchedStockCount: Int
+        get() = ReserveBuffer.stockCount(libraryWallpapers, preferences.enabledCategories)
+
+    /** True while Light or Dark has fewer unseen fetched images than the target and the cache has room. */
+    val reserveNeedsTopUp: Boolean
+        get() = ReserveBuffer.needsTopUp(
+            libraryWallpapers, preferences.enabledCategories, totalCacheBytesUsed, preferences.maxCacheBytes
+        )
 
     val unseenCurrentBrightnessCount: Int
         get() = libraryWallpapers.count {
-            !it.isRejected &&
+            it.hasImage &&
+                !it.isRejected &&
                 !it.isBaselineRestore &&
                 it.provenance.sourceId != "seed_reserve" &&
                 (it.evaluation.brightnessClass == targetBrightnessNow ||
@@ -115,6 +133,16 @@ data class SunloomUiState(
                 it.appliedCount == 0
         }
 }
+
+/** Automatic top-ups (launch, setup, Next) are spaced at least this far apart after one that added images. */
+internal const val AUTO_REPLENISH_MIN_INTERVAL_MS = 10L * 60L * 1000L
+
+/** ... and this far apart after one that found nothing new, so a dead or exhausted source is not hammered. */
+internal const val AUTO_REPLENISH_IDLE_INTERVAL_MS = 60L * 60L * 1000L
+private const val NEVER = Long.MIN_VALUE
+
+/** Rows restored from backup or evicted from the cache keep their metadata but have no image. */
+private val WallpaperRecord.hasImage: Boolean get() = fileSizeBytes > 0L
 
 /**
  * Pure suspend interface abstracting repository and platform operations so [MainViewModel]
@@ -144,7 +172,9 @@ interface SunloomGateway {
 
 class MainViewModel(
     private val gateway: SunloomGateway,
-    private val workDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val workDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val clockMs: () -> Long = System::currentTimeMillis,
+    private val roundPauseMs: Long = 2_000L
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -156,6 +186,16 @@ class MainViewModel(
     val uiState: StateFlow<SunloomUiState> = _uiState.asStateFlow()
     private val stateMutex = Mutex()
     private val syncMutex = Mutex()
+
+    companion object {
+        /** Fetch rounds per top-up; each round polls up to three sources within their request budgets. */
+        const val MAX_TOP_UP_ROUNDS = 4
+    }
+
+    /** When the last automatic fetch started; declared before `init`, which may trigger one. */
+    private var lastAutoReplenishMs: Long = NEVER
+    private val replenishMutex = Mutex()
+    private var lastAutoReplenishInterval: Long = AUTO_REPLENISH_MIN_INTERVAL_MS
 
     init {
         viewModelScope.launch(workDispatcher) {
@@ -173,8 +213,59 @@ class MainViewModel(
                     isInitialLoading = false
                 )
             }
+            replenishIfLow()
         }
     }
+
+    /**
+     * Article X §3: keep a buffer of unseen images. Fetches in the background when it runs low. Setups that
+     * restrict downloads to Wi-Fi are left to the scheduled worker, which can check the connection.
+     */
+    private suspend fun replenishIfLow(requireSetup: Boolean = true) {
+        val state = _uiState.value
+        if (requireSetup && !state.preferences.isSetupCompleted) return
+        if (state.preferences.wifiOnlyDownloads || state.isSyncingOnline) return
+        if (!state.reserveNeedsTopUp) return
+        // Filters (resolution, near-duplicates, creator cap) can leave the count low after a fetch; do not
+        // start another one on every launch or Next press.
+        val now = clockMs()
+        if (lastAutoReplenishMs != NEVER && now - lastAutoReplenishMs < lastAutoReplenishInterval) return
+        if (!replenishMutex.tryLock()) return // another trigger is already topping up
+        try {
+            val added = topUpReserve(MAX_TOP_UP_ROUNDS, forceFirstRound = false)
+            // A sync that never ran (another one held the lock) must not start the throttle.
+            if (added != null) {
+                lastAutoReplenishMs = now
+                lastAutoReplenishInterval =
+                    if (added > 0) AUTO_REPLENISH_MIN_INTERVAL_MS else AUTO_REPLENISH_IDLE_INTERVAL_MS
+            }
+        } finally {
+            replenishMutex.unlock()
+        }
+    }
+
+    /**
+     * Fetches in rounds until each mode holds [ReserveBuffer.TARGET_UNSEEN_PER_MODE] unseen images, a round adds
+     * nothing, or [maxRounds] is reached. One round polls at most three sources within their request budgets
+     * (Article X §4), so filling the buffer takes several. Returns how many images were added, or null when the
+     * first round could not run because another sync was in progress.
+     */
+    private suspend fun topUpReserve(maxRounds: Int, forceFirstRound: Boolean): Int? {
+        var total = 0
+        for (round in 1..maxRounds) {
+            val skipCheck = round == 1 && forceFirstRound
+            if (!skipCheck && !_uiState.value.reserveNeedsTopUp) break
+            val before = _uiState.value.fetchedStockCount
+            if (!syncOnlineCatalogNow()) return if (round == 1) null else total
+            val gained = _uiState.value.fetchedStockCount - before
+            if (gained <= 0) break
+            total += gained
+            if (!_uiState.value.reserveNeedsTopUp) break
+            if (round < maxRounds && roundPauseMs > 0L) delay(roundPauseMs)
+        }
+        return total
+    }
+
 
     private fun launchGatewayMutation(
         preserveNavigation: Boolean = true,
@@ -243,7 +334,7 @@ class MainViewModel(
 
     fun completeFirstRunSetup(updatedPreferences: UserPreferences) {
         val completed = updatedPreferences.copy(isSetupCompleted = true)
-        launchGatewayMutation(preserveNavigation = false) {
+        val saved = launchGatewayMutation(preserveNavigation = false) {
             val newState = gateway.savePreferences(completed)
             newState.copy(
                 activeTab = DesktopNavTab.TODAY_CANVAS,
@@ -254,6 +345,10 @@ class MainViewModel(
                     "Manual mode enabled — click Next Wallpaper whenever you'd like a change"
                 }
             )
+        }
+        viewModelScope.launch(workDispatcher) {
+            saved.join()
+            replenishIfLow()
         }
     }
 
@@ -372,7 +467,8 @@ class MainViewModel(
     fun triggerOnlineSync() {
         if (_uiState.value.isSyncingOnline) return
         viewModelScope.launch(workDispatcher) {
-            syncOnlineCatalogNow()
+            // The user asked for fresh images: always fetch once, then keep going while the buffer is short.
+            topUpReserve(MAX_TOP_UP_ROUNDS, forceFirstRound = true)
         }
     }
 
@@ -402,9 +498,9 @@ class MainViewModel(
                 _uiState.value = _uiState.value.copy(isApplyingWallpaper = false)
             }
         }
-        if (_uiState.value.unseenCurrentBrightnessCount <= 1 && !_uiState.value.isSyncingOnline) {
+        if (_uiState.value.reserveNeedsTopUp && !_uiState.value.isSyncingOnline) {
             // Replenish in the background so local Next presses are never blocked by the network.
-            viewModelScope.launch(workDispatcher) { syncOnlineCatalogNow() }
+            viewModelScope.launch(workDispatcher) { replenishIfLow(requireSetup = false) }
         }
     }
 
@@ -535,8 +631,8 @@ class MainViewModel(
      * even if the coroutine is cancelled or an exception is thrown, while preserving structured
      * concurrency on [CancellationException].
      */
-    suspend fun syncOnlineCatalogNow() {
-        if (!syncMutex.tryLock()) return
+    suspend fun syncOnlineCatalogNow(): Boolean {
+        if (!syncMutex.tryLock()) return false
         val prevTab = _uiState.value.activeTab
         val prevOverlay = _uiState.value.showLegibilityZonesOverlay
         val prevBanner = _uiState.value.statusBannerMessage
@@ -577,6 +673,7 @@ class MainViewModel(
             }
             syncMutex.unlock()
         }
+        return true
     }
 
     fun importLocalUri(uriString: String, asBaselineRestore: Boolean) {
@@ -692,6 +789,7 @@ class AndroidSunloomGateway(
         val prefs = repo.loadPreferences()
         val activeBefore = repo.getCurrentWallpaperId()
         repo.purgeRevokedSources()
+        repo.healMissingFiles()
         if (display != null) {
             repo.ensureSeedReserveLoadedForDisplays(connectedDisplays, prefs.displayPolicy)
             repo.revalidateGateVersionIfNeeded(display)
@@ -796,7 +894,8 @@ class AndroidSunloomGateway(
                 preferences = prefs,
                 currentWallpaperId = excludeId,
                 recentlyUsedIds = setOfNotNull(excludeId, repo.getPreviousWallpaperId()),
-                maxResults = 3
+                maxResults = 3,
+                taste = TasteProfile.from(repo.getAllWallpapers())
             )
             for (replacement in replacements) {
                 val status = platformAdapter.applyWallpaperAtomically(
@@ -1017,7 +1116,8 @@ class AndroidSunloomGateway(
             targetBrightness = solarSnapshot.targetBrightness,
             preferences = prefs,
             currentWallpaperId = currentId,
-            recentlyUsedIds = setOfNotNull(currentId, prevId)
+            recentlyUsedIds = setOfNotNull(currentId, prevId),
+            taste = TasteProfile.from(all)
         ) ?: return buildSnapshot(repo, "No additional eligible wallpapers found for current filter.", preloadedPrefs = prefs)
 
         return applyRecordAndBuildSnapshot(repo, next, prefs)
@@ -1204,10 +1304,12 @@ class AndroidSunloomGateway(
         ) {
             appliedRecord
         } else {
+            // A preview of "what would be next" must not change on every snapshot rebuild.
             matcher.selectNextWallpaper(
                 candidates = activePool,
                 targetBrightness = targetBrightness,
-                preferences = prefs
+                preferences = prefs,
+                deterministic = true
             ) ?: appliedRecord ?: activePool.firstOrNull()
         }
 

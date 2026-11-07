@@ -89,7 +89,7 @@ internal fun DiagnosticsPane(
                             FilterChip(
                                 selected = uiState.preferences.maxCacheBytes == bytes,
                                 onClick = { onUpdateMaxCacheBytes(bytes) },
-                                label = { Text("$mb MB cap") }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                                label = { Text(if (mb >= 1024L) "${mb / 1024L} GB cap" else "$mb MB cap") }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
                             )
                         }
                     }

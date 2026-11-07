@@ -43,6 +43,12 @@ interface LibraryStore {
     fun recordRejection(rejection: RejectionRecord)
     fun getAllRejections(): List<RejectionRecord>
 
+    /** Forgets display-scoped (non-permanent) rejections so those candidates are evaluated again. */
+    fun clearTransientRejections()
+
+    /** Removes blocklist entries and rejection rows recorded with any of [reasonCodes] (soft outcomes only). */
+    fun removeSoftSafetyRecords(reasonCodes: Set<String>)
+
     fun addBlocklistEntry(entry: BlocklistEntry)
     fun getAllBlocklistEntries(): List<BlocklistEntry>
 
@@ -107,6 +113,10 @@ object WallpaperRowMapper {
             "contrast_std" to record.evaluation.contrastStdDev,
             "brightness_class" to record.evaluation.brightnessClass.name,
             "eval_explanation" to record.evaluation.explanation,
+            "lightness_p50" to record.evaluation.lightnessP50,
+            "label_contrast" to record.evaluation.desktopLabelContrast,
+            "warmth" to record.evaluation.warmth,
+            "hue_bucket" to record.evaluation.hueBucket,
             "crop_x" to (crop?.left ?: 0),
             "crop_y" to (crop?.top ?: 0),
             "crop_w" to (crop?.width ?: record.provenance.renditionWidth),
@@ -234,7 +244,11 @@ object WallpaperRowMapper {
                     usesBlurredFrameFill = usesBlurredFill,
                     pixelCoverageRatio = nativeCoverage
                 ),
-                explanation = row["eval_explanation"] as? String ?: ""
+                explanation = row["eval_explanation"] as? String ?: "",
+                lightnessP50 = (row["lightness_p50"] as? Number)?.toDouble() ?: -1.0,
+                desktopLabelContrast = (row["label_contrast"] as? Number)?.toDouble() ?: -1.0,
+                warmth = (row["warmth"] as? Number)?.toDouble() ?: 0.0,
+                hueBucket = (row["hue_bucket"] as? Number)?.toInt() ?: -1
             )
         )
     }
@@ -281,8 +295,8 @@ object WallpaperRowMapper {
 class SqliteLibraryStore(context: Context) : LibraryStore {
     companion object {
         const val DATABASE_NAME = "sunloom_library.db"
-        const val DATABASE_VERSION = 2
-        const val MAX_REJECTION_LOG_ENTRIES = 200
+        const val DATABASE_VERSION = 3
+        const val MAX_REJECTION_LOG_ENTRIES = 1000
 
         @Volatile
         private var sharedInstance: Pair<String, SqliteLibraryStore>? = null
@@ -364,7 +378,11 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
                     focal_x REAL NOT NULL DEFAULT 0.5,
                     focal_y REAL NOT NULL DEFAULT 0.5,
                     uses_blurred_fill INTEGER NOT NULL DEFAULT 0,
-                    native_coverage REAL NOT NULL DEFAULT 1.0
+                    native_coverage REAL NOT NULL DEFAULT 1.0,
+                    lightness_p50 REAL NOT NULL DEFAULT -1.0,
+                    label_contrast REAL NOT NULL DEFAULT -1.0,
+                    warmth REAL NOT NULL DEFAULT 0.0,
+                    hue_bucket INTEGER NOT NULL DEFAULT -1
                 )
                 """.trimIndent()
             )
@@ -398,6 +416,18 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+            if (oldVersion < 3) {
+                // Per-image features for variety (lightness, label contrast, warmth, hue); unknown on old rows.
+                val featureColumns = listOf(
+                    "lightness_p50 REAL NOT NULL DEFAULT -1.0",
+                    "label_contrast REAL NOT NULL DEFAULT -1.0",
+                    "warmth REAL NOT NULL DEFAULT 0.0",
+                    "hue_bucket INTEGER NOT NULL DEFAULT -1"
+                )
+                for (columnSpec in featureColumns) {
+                    runCatching { db.execSQL("ALTER TABLE wallpapers ADD COLUMN $columnSpec") }
+                }
+            }
             if (oldVersion < 2) {
                 val wallpaperColumnsToAdd = listOf(
                     "description TEXT NOT NULL DEFAULT ''",
@@ -503,11 +533,26 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
             insertWithOnConflict("rejections", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
             execSQL(
                 """
-                DELETE FROM rejections WHERE asset_id NOT IN (
-                    SELECT asset_id FROM rejections ORDER BY timestamp_ms DESC LIMIT $MAX_REJECTION_LOG_ENTRIES
+                DELETE FROM rejections WHERE is_permanent = 0 AND asset_id NOT IN (
+                    SELECT asset_id FROM rejections WHERE is_permanent = 0
+                    ORDER BY timestamp_ms DESC LIMIT $MAX_REJECTION_LOG_ENTRIES
                 )
                 """.trimIndent()
             )
+        }
+    }
+
+    override fun clearTransientRejections() {
+        dbHelper.writableDatabase.execSQL("DELETE FROM rejections WHERE is_permanent = 0")
+    }
+
+    override fun removeSoftSafetyRecords(reasonCodes: Set<String>) {
+        if (reasonCodes.isEmpty()) return
+        val marks = reasonCodes.joinToString(",") { "?" }
+        val args = reasonCodes.toTypedArray()
+        dbHelper.writableDatabase.transaction {
+            execSQL("DELETE FROM blocklist WHERE reason_code IN ($marks)", args)
+            execSQL("DELETE FROM rejections WHERE reason_code IN ($marks)", args)
         }
     }
 

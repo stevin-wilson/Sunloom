@@ -90,6 +90,14 @@ class BudgetedSourceHttpClient(
     var requestCount: Int = 0
         private set
 
+    /** Transport/HTTP failures from the delegate (not budget or rate-limit signals), for sync reporting. */
+    var httpErrorCount: Int = 0
+        private set
+    var lastHttpError: Throwable? = null
+        private set
+    var successfulRequestCount: Int = 0
+        private set
+
     private var lastRequestEpochMs: Long = 0L
 
     private suspend fun <T> acquireAndRun(url: String, block: suspend () -> T): T {
@@ -108,12 +116,24 @@ class BudgetedSourceHttpClient(
         return block()
     }
 
+    private suspend fun <T> tracked(block: suspend () -> T): T = try {
+        block().also { successfulRequestCount++ }
+    } catch (cancel: kotlinx.coroutines.CancellationException) {
+        throw cancel
+    } catch (rateLimit: RateLimitException) {
+        throw rateLimit
+    } catch (err: Exception) {
+        httpErrorCount++
+        lastHttpError = err
+        throw err
+    }
+
     override suspend fun getText(url: String): String = acquireAndRun(url) {
-        delegate.getText(url)
+        tracked { delegate.getText(url) }
     }
 
     override suspend fun getBytes(url: String, maxBytes: Int): ByteArray = acquireAndRun(url) {
-        delegate.getBytes(url, maxBytes)
+        tracked { delegate.getBytes(url, maxBytes) }
     }
 }
 
