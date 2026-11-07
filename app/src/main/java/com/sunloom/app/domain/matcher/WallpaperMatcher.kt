@@ -263,45 +263,6 @@ class WallpaperMatcher(
         return tier.last()
     }
 
-    fun assignWallpapersToDisplays(
-        displays: List<DisplayProfile>,
-        candidates: List<WallpaperRecord>,
-        targetBrightness: BrightnessClass,
-        preferences: UserPreferences,
-        currentWallpaperId: String? = null
-    ): Map<Int, WallpaperRecord> {
-        if (displays.isEmpty()) return emptyMap()
-
-        val first = selectNextWallpaper(
-            candidates = candidates,
-            targetBrightness = targetBrightness,
-            preferences = preferences,
-            currentWallpaperId = currentWallpaperId
-        ) ?: return emptyMap()
-
-        if (preferences.displayPolicy != DisplayPolicy.INDEPENDENT_PER_DISPLAY || displays.size == 1) {
-            return displays.associate { it.displayId to first }
-        }
-
-        val usedIds = mutableSetOf(first.id)
-        if (currentWallpaperId != null) usedIds.add(currentWallpaperId)
-
-        val result = LinkedHashMap<Int, WallpaperRecord>()
-        result[displays.first().displayId] = first
-
-        for (display in displays.drop(1)) {
-            val next = selectNextWallpaper(
-                candidates = candidates,
-                targetBrightness = targetBrightness,
-                preferences = preferences,
-                currentWallpaperId = currentWallpaperId,
-                recentlyUsedIds = usedIds
-            ) ?: first
-            result[display.displayId] = next
-            usedIds.add(next.id)
-        }
-        return result
-    }
 
     private companion object {
         const val SEED_SOURCE_ID = "seed_reserve"

@@ -6,6 +6,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.sunloom.app.Requirement
 import com.sunloom.app.data.repository.LocalLibraryRepository
 import com.sunloom.app.domain.model.CropRect
 import com.sunloom.app.domain.model.DisplayProfile
@@ -20,6 +21,7 @@ import org.robolectric.annotation.Config
 
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
+@Requirement("XVIII.1")
 class GoogleBookPlatformAdapterTest {
 
     private lateinit var context: Context

@@ -99,28 +99,6 @@ class WallpaperMatcherTest {
     }
 
     @Test
-    fun `assignWallpapersToDisplays assigns distinct images to two connected monitors when INDEPENDENT_PER_DISPLAY`() {
-        val displays = listOf(
-            DisplayProfile(0, "Built-in Screen", 2560, 1600),
-            DisplayProfile(1, "External 4K", 3840, 2160)
-        )
-        val pool = listOf(
-            sampleRecord("light-1", BrightnessClass.LIGHT),
-            sampleRecord("light-2", BrightnessClass.LIGHT)
-        )
-
-        val assignments = matcher.assignWallpapersToDisplays(
-            displays = displays,
-            candidates = pool,
-            targetBrightness = BrightnessClass.LIGHT,
-            preferences = UserPreferences(displayPolicy = DisplayPolicy.INDEPENDENT_PER_DISPLAY)
-        )
-
-        assertEquals(2, assignments.size)
-        assertNotEquals(assignments[0]!!.id, assignments[1]!!.id)
-    }
-
-    @Test
     fun `selectNextWallpaper never falls back to DARK wallpapers when targetBrightness is LIGHT`() {
         val pool = listOf(
             sampleRecord("light-seen-1", BrightnessClass.LIGHT, appliedCount = 2),

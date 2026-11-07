@@ -1,5 +1,6 @@
 package com.sunloom.app.domain.renderer
 
+import com.sunloom.app.Requirement
 import com.sunloom.app.domain.model.DisplayPolicy
 import com.sunloom.app.domain.model.DisplayProfile
 import org.junit.Assert.assertEquals
@@ -9,6 +10,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@Requirement("IV.1")
 class EnvelopePlannerTest {
 
     private val planner = EnvelopePlanner()
