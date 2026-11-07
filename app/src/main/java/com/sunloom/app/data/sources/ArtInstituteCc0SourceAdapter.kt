@@ -64,7 +64,7 @@ class ArtInstituteCc0SourceAdapter(
         category: SafeCategory = SafeCategory.SCENIC_FINE_ART
     ): List<CandidateAsset> {
         val out = ArrayList<CandidateAsset>()
-        val root = SimpleJson.parseObject(jsonText) ?: return emptyList()
+        val root = parseSourceObject("Art Institute", jsonText)
         val dataArr = root.arr("data") ?: return emptyList()
 
         for (i in 0 until dataArr.size) {

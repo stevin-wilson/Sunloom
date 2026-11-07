@@ -90,7 +90,7 @@ class NasaLibrarySourceAdapter(
         defaultCategory: SafeCategory = SafeCategory.SPACE_ASTRONOMY
     ): List<CandidateAsset> {
         val out = ArrayList<CandidateAsset>()
-        val root = SimpleJson.parseObject(jsonText) ?: return emptyList()
+        val root = parseSourceObject("NASA", jsonText)
         val items = root.obj("collection")?.arr("items") ?: return emptyList()
 
         for (i in 0 until items.size) {
@@ -210,6 +210,7 @@ class NasaLibrarySourceAdapter(
         secondaryCreator: String
     ): Boolean {
         val combined = "$description | $photographer | $secondaryCreator".lowercase(Locale.ROOT)
+            .replace("u.s.", "us") // keep "U.S. Geological Survey" in one piece for the credit clause below
         if (combined.contains("©") ||
             combined.contains("copyright") ||
             combined.contains("all rights reserved") ||
@@ -231,14 +232,23 @@ class NasaLibrarySourceAdapter(
         // Check "courtesy of <entity>" or "image credit: <entity>" naming a third party other than NASA/JPL/STScI/USGS/NOAA
         for (match in CREDIT_CLAUSE_REGEX.findAll(combined)) {
             val credited = match.groupValues.getOrNull(1)?.trim().orEmpty()
-            if (credited.isNotEmpty() && !ALLOWED_US_GOV_CREDITS.any { credited.contains(it) }) {
+            if (credited.isNotEmpty() && !namesGovernmentSource(credited)) {
                 return true
             }
         }
         return false
     }
 
+    /** Whole words only: "arc" must not match inside "Marcus", nor "jsc" inside a surname. */
+    private fun namesGovernmentSource(credited: String): Boolean {
+        if (ALLOWED_US_GOV_PHRASES.any { credited.contains(it) }) return true
+        return credited.split(NON_WORD_REGEX).any { it in ALLOWED_US_GOV_CREDITS }
+    }
+
     companion object {
+        private val NON_WORD_REGEX = Regex("[^a-z0-9]+")
+        private val ALLOWED_US_GOV_PHRASES = listOf("geological survey", "public domain")
+
         /** NASA search pages walked before wrapping; deep enough that reinstalls and syncs differ. */
         private const val NASA_PAGE_SPAN = 20
 
@@ -256,7 +266,7 @@ class NasaLibrarySourceAdapter(
 
         private val ESA_WORD_REGEX = Regex("\\besa\\b")
         private val CREDIT_CLAUSE_REGEX = Regex("""(?:courtesy of|image credit:|photo credit:|credit:)\s*([^.;,\n|]+)""")
-        private val ALLOWED_US_GOV_CREDITS = listOf(
+        private val ALLOWED_US_GOV_CREDITS = setOf(
             "nasa",
             "jpl",
             "caltech",
@@ -267,9 +277,7 @@ class NasaLibrarySourceAdapter(
             "arc",
             "ksc",
             "usgs",
-            "noaa",
-            "u.s. geological survey",
-            "public domain"
+            "noaa"
         )
     }
 }

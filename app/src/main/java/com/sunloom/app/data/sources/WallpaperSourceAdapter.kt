@@ -12,6 +12,13 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 
+/** The source answered, but not with the JSON this adapter expects (an HTML error page, a changed API). */
+class SourceResponseException(message: String) : IllegalStateException(message)
+
+/** Parses a source's JSON body, or fails the request when it is not the JSON object this adapter expects. */
+internal fun parseSourceObject(sourceName: String, jsonText: String): SimpleJson.JsonObj =
+    SimpleJson.parseObject(jsonText) ?: throw SourceResponseException("$sourceName returned a non-JSON response")
+
 class RateLimitException(
     val retryAfterSeconds: Long,
     message: String
