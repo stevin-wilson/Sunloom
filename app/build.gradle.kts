@@ -150,7 +150,10 @@ android {
             "ObsoleteSdkInt",
             "AndroidGradlePluginVersion",
             "GradleDependency",
-            "NewerVersionAvailable"
+            "NewerVersionAvailable",
+            // Result depends on the newest platform installed where lint runs, so CI would turn red whenever a new
+            // Android release ships. targetSdk is raised deliberately, after testing that release's behavior changes.
+            "OldTargetApi"
         )
     }
 }
