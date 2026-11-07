@@ -7,6 +7,7 @@ import com.sunloom.app.R
 import com.sunloom.app.appContainer
 import com.sunloom.app.data.repository.LibraryStoreUnavailableException
 import com.sunloom.app.data.repository.LocalLibraryRepository
+import com.sunloom.app.domain.matcher.SubjectFit
 import com.sunloom.app.domain.matcher.TasteProfile
 import com.sunloom.app.domain.matcher.WallpaperMatcher
 import com.sunloom.app.domain.model.DisplayPolicy
@@ -173,7 +174,8 @@ class AndroidSunloomGateway(
                 currentWallpaperId = excludeId,
                 recentlyUsedIds = setOfNotNull(excludeId, repo.getPreviousWallpaperId()),
                 maxResults = 3,
-                taste = TasteProfile.from(repo.getAllWallpapers())
+                taste = TasteProfile.from(repo.getAllWallpapers()),
+                subjectFit = SubjectFit.forDisplays(connectedDisplays, prefs)
             )
             for (replacement in replacements) {
                 val status = platformAdapter.applyWallpaperAtomically(
@@ -255,7 +257,8 @@ class AndroidSunloomGateway(
                     candidates = nonSeedPool,
                     targetBrightness = targetBrightness,
                     preferences = prefs,
-                    currentWallpaperId = currentId
+                    currentWallpaperId = currentId,
+                    subjectFit = SubjectFit.forDisplays(connectedDisplays, prefs)
                 )
                 if (nextNonSeed != null) {
                     val status = platformAdapter.applyWallpaperAtomically(
@@ -395,7 +398,8 @@ class AndroidSunloomGateway(
             preferences = prefs,
             currentWallpaperId = currentId,
             recentlyUsedIds = setOfNotNull(currentId, prevId),
-            taste = TasteProfile.from(all)
+            taste = TasteProfile.from(all),
+            subjectFit = SubjectFit.forDisplays(platformAdapter.getConnectedDisplays(), prefs)
         ) ?: return buildSnapshot(repo, context.getString(R.string.msg_no_additional_eligible_wallpapers_found), preloadedPrefs = prefs)
 
         return applyRecordAndBuildSnapshot(repo, next, prefs)
@@ -591,7 +595,8 @@ class AndroidSunloomGateway(
                 targetBrightness = targetBrightness,
                 preferences = prefs,
                 deterministic = true,
-                taste = TasteProfile.from(all)
+                taste = TasteProfile.from(all),
+                subjectFit = SubjectFit.forDisplays(caps.connectedDisplays, prefs)
             ) ?: appliedRecord ?: activePool.firstOrNull()
         }
 

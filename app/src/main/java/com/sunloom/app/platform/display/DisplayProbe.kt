@@ -3,6 +3,7 @@ package com.sunloom.app.platform.display
 import android.content.Context
 import android.hardware.display.DisplayManager
 import android.os.Build
+import android.provider.Settings
 import android.util.DisplayMetrics
 import android.view.Display
 import android.view.Surface
@@ -31,9 +32,12 @@ class DisplayProbe(
 
     fun probeConnectedDisplays(recordHistory: Boolean = true): List<DisplayProfile> {
         val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
-        val allDisplays = displayManager?.displays.orEmpty()
-            .filter { d -> (d.flags and Display.FLAG_PRIVATE) == 0 && d.state != Display.STATE_OFF }
-
+        val displays = displayManager?.displays.orEmpty()
+        val connectedIds = selectConnected(displays.map { Listed(it.displayId, it.flags, it.state) })
+            .map { it.displayId }
+            .toSet()
+        val allDisplays = displays.filter { it.displayId in connectedIds }
+        val autoRotate = isAutoRotateOn()
         val measured = allDisplays.mapIndexedNotNull { idx, d ->
             val metrics = DisplayMetrics()
             @Suppress("DEPRECATION")
@@ -46,7 +50,10 @@ class DisplayProbe(
                 modeHeight = mode?.physicalHeight ?: 0,
                 rotation = rotation,
                 fallbackMetricsWidth = metrics.widthPixels,
-                fallbackMetricsHeight = metrics.heightPixels
+                fallbackMetricsHeight = metrics.heightPixels,
+                // Only the built-in panel turns with the sensor; a monitor's rotation is a deliberate
+                // setup change and stays live (Article IV §6).
+                useNaturalOrientation = autoRotate && d.displayId == Display.DEFAULT_DISPLAY
             )
             val w = resolvedSize?.first ?: 0
             val h = resolvedSize?.second ?: 0
@@ -56,11 +63,9 @@ class DisplayProbe(
             if (w <= 0 || h <= 0 || dpi == null) {
                 null
             } else {
-                // Scale xdpi/ydpi proportionally if Display.Mode physical pixels exceed scaled logical metrics
-                val scaleX = if (metrics.widthPixels > 0) w.toFloat() / metrics.widthPixels.toFloat() else 1f
-                val scaleY = if (metrics.heightPixels > 0) h.toFloat() / metrics.heightPixels.toFloat() else 1f
-                val effectiveXdpi = if (scaleX in 0.95f..4.05f) metrics.xdpi * scaleX else metrics.xdpi
-                val effectiveYdpi = if (scaleY in 0.95f..4.05f) metrics.ydpi * scaleY else metrics.ydpi
+                val (effectiveXdpi, effectiveYdpi) = scaledDpi(
+                    w, h, metrics.widthPixels, metrics.heightPixels, metrics.xdpi, metrics.ydpi
+                )
                 val physicalPpi = resolvePhysicalPpi(w, h, effectiveXdpi, effectiveYdpi)
 
                 DisplayProfile(
@@ -110,10 +115,58 @@ class DisplayProbe(
         return emptyList()
     }
 
+    /** What `DisplayManager` reports about one display; [state] is a `Display.STATE_*` value. */
+    data class Listed(val displayId: Int, val flags: Int, val state: Int)
+
+    private fun isAutoRotateOn(): Boolean = runCatching {
+        Settings.System.getInt(context.contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0) == 1
+    }.getOrDefault(false)
+
     companion object {
         private const val MIN_PLAUSIBLE_PPI = 60.0f
         private const val MAX_PLAUSIBLE_PPI = 600.0f
         private const val MAX_ANISOTROPY_RATIO = 1.35f
+
+        /**
+         * Scales the live `xdpi`/`ydpi` to the measured panel size when `Display.Mode` pixels exceed the
+         * scaled logical metrics. A display measured in its natural orientation may currently be turned,
+         * which swaps the metrics' axes, so they are aligned with the measured size first.
+         */
+        fun scaledDpi(
+            widthPx: Int,
+            heightPx: Int,
+            metricsWidth: Int,
+            metricsHeight: Int,
+            xdpi: Float,
+            ydpi: Float
+        ): Pair<Float, Float> {
+            val turned = widthPx != heightPx && metricsWidth != metricsHeight &&
+                (widthPx > heightPx) != (metricsWidth > metricsHeight)
+            val alignedWidth = if (turned) metricsHeight else metricsWidth
+            val alignedHeight = if (turned) metricsWidth else metricsHeight
+            val alignedXdpi = if (turned) ydpi else xdpi
+            val alignedYdpi = if (turned) xdpi else ydpi
+            val scaleX = if (alignedWidth > 0) widthPx.toFloat() / alignedWidth.toFloat() else 1f
+            val scaleY = if (alignedHeight > 0) heightPx.toFloat() / alignedHeight.toFloat() else 1f
+            val effectiveX = if (scaleX in 0.95f..4.05f) alignedXdpi * scaleX else alignedXdpi
+            val effectiveY = if (scaleY in 0.95f..4.05f) alignedYdpi * scaleY else alignedYdpi
+            return effectiveX to effectiveY
+        }
+
+        private val ASLEEP_STATES = setOf(Display.STATE_OFF)
+
+        /**
+         * Picks the displays that make up the connected set (Article IV §6). Private displays never
+         * count. If every display is asleep (screen timeout, monitor standby) they all stay, so the
+         * set does not look like an undock and the wallpaper is not re-planned on sleep and wake.
+         * If any display is awake, sleeping ones (a closed lid, a monitor in standby) are left out,
+         * because nobody sees them and planning for them would shrink the pool.
+         */
+        fun selectConnected(displays: List<Listed>): List<Listed> {
+            val visible = displays.filter { (it.flags and Display.FLAG_PRIVATE) == 0 }
+            val awake = visible.filter { it.state !in ASLEEP_STATES }
+            return awake.ifEmpty { visible }
+        }
 
         /**
          * Resolves calibrated physical panel PPI from EDID-derived `xdpi` / `ydpi` (Article IV §2).
@@ -145,16 +198,19 @@ class DisplayProbe(
 
         /**
          * Resolves physical panel pixel dimensions from `Display.Mode` oriented to match the
-         * live display rotation / metrics orientation.
+         * live display rotation / metrics orientation. With [useNaturalOrientation] the size is the panel's
+         * natural (rotation 0) size instead, so a display that turns with the sensor keeps one identity.
          */
         fun resolveModeDimensions(
             modeWidth: Int,
             modeHeight: Int,
             rotation: Int,
             fallbackMetricsWidth: Int,
-            fallbackMetricsHeight: Int
+            fallbackMetricsHeight: Int,
+            useNaturalOrientation: Boolean = false
         ): Pair<Int, Int>? {
             if (modeWidth > 0 && modeHeight > 0) {
+                if (useNaturalOrientation) return modeWidth to modeHeight
                 if (fallbackMetricsWidth > 0 &&
                     fallbackMetricsHeight > 0 &&
                     fallbackMetricsWidth != fallbackMetricsHeight &&

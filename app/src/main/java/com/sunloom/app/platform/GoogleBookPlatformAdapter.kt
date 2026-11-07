@@ -28,6 +28,7 @@ import com.sunloom.app.domain.model.RememberedDisplayRecord
 import com.sunloom.app.domain.model.UserPreferences
 import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.model.WallpaperStatus
+import com.sunloom.app.domain.model.displaySetGeometryKey
 import com.sunloom.app.domain.renderer.CropRenderer
 import com.sunloom.app.domain.renderer.EnvelopePlan
 import com.sunloom.app.domain.renderer.EnvelopePlanner
@@ -238,8 +239,10 @@ class GoogleBookPlatformAdapter(
                     )
                     if (syntheticCheck != null && syntheticCheck.excludedDisplays.isNotEmpty()) {
                         excludedNote = "Excluded from envelope target: " +
-                            syntheticCheck.excludedDisplays.joinToString { "${it.name} (${it.resolutionLabel})" } +
-                            " — incompatible orientation or exceeds 16 MP system wallpaper cap."
+                            syntheticCheck.excludedDisplays.joinToString("; ") {
+                                val reason = syntheticCheck.exclusionReasons[it.displayId]?.let { r -> " — $r" }.orEmpty()
+                                "${it.name} (${it.resolutionLabel})$reason"
+                            } + "."
                     }
                     "Detected ${displays.size} displays (${displays.joinToString { "${it.name} ${it.resolutionLabel}" }}). " +
                         "Android shares one WallpaperManager surface; Sunloom renders a shared native-resolution envelope " +
@@ -285,10 +288,7 @@ class GoogleBookPlatformAdapter(
         displayPolicy: DisplayPolicy = DisplayPolicy.SAME_ON_ALL_DISPLAYS
     ): String {
         if (displays.isEmpty()) return "unknown"
-        val perDisplay = displays
-            .sortedBy { it.displayId }
-            .joinToString("+") { "${it.displayId}:${it.geometryKey}" }
-        return "$perDisplay|policy=${displayPolicy.name}"
+        return "${displaySetGeometryKey(displays)}|policy=${displayPolicy.name}"
     }
 
     /**

@@ -62,7 +62,8 @@ class WallpaperMatcher(
         currentWallpaperId: String? = null,
         recentlyUsedIds: Set<String> = emptySet(),
         deterministic: Boolean = false,
-        taste: TasteProfile = TasteProfile.NEUTRAL
+        taste: TasteProfile = TasteProfile.NEUTRAL,
+        subjectFit: SubjectFit = SubjectFit.ANY
     ): WallpaperRecord? {
         return rankCandidatesForSelection(
             candidates = candidates,
@@ -72,7 +73,8 @@ class WallpaperMatcher(
             recentlyUsedIds = recentlyUsedIds,
             maxResults = 1,
             deterministic = deterministic,
-            taste = taste
+            taste = taste,
+            subjectFit = subjectFit
         ).firstOrNull()
     }
 
@@ -92,7 +94,8 @@ class WallpaperMatcher(
         recentlyUsedIds: Set<String> = emptySet(),
         maxResults: Int = 3,
         deterministic: Boolean = false,
-        taste: TasteProfile = TasteProfile.NEUTRAL
+        taste: TasteProfile = TasteProfile.NEUTRAL,
+        subjectFit: SubjectFit = SubjectFit.ANY
     ): List<WallpaperRecord> {
         if (maxResults <= 0) return emptyList()
         val eligiblePool = filterEligiblePool(candidates, preferences)
@@ -112,9 +115,10 @@ class WallpaperMatcher(
             // Every result must be a different wallpaper: they are fallbacks for a failed apply.
             val nonSeedLeft = nonSeedPool.filter { it.id !in picked }
             val seedLeft = seedPool.filter { it.id !in picked }
-            val next = selectFromPool(nonSeedLeft, targetBrightness, currentWallpaperId, currentSourceId, excluded, deterministic, taste)
-                ?: selectFromPool(seedLeft, targetBrightness, currentWallpaperId, currentSourceId, excluded, deterministic, taste)
-                ?: return out
+            fun pick(pool: List<WallpaperRecord>) = selectFromPool(
+                pool, targetBrightness, currentWallpaperId, currentSourceId, excluded, deterministic, taste, subjectFit
+            )
+            val next = pick(nonSeedLeft) ?: pick(seedLeft) ?: return out
             out.add(next)
             excluded.add(next.id)
             picked.add(next.id)
@@ -136,7 +140,8 @@ class WallpaperMatcher(
         currentSourceId: String?,
         recentlyUsedIds: Set<String>,
         deterministic: Boolean,
-        taste: TasteProfile
+        taste: TasteProfile,
+        subjectFit: SubjectFit
     ): WallpaperRecord? {
         if (pool.isEmpty()) return null
         val recentShown = pool.filter { it.lastAppliedEpochMs > 0L }
@@ -160,7 +165,7 @@ class WallpaperMatcher(
         )
         for (rung in rungs) {
             val candidates = rung()
-            if (candidates.isNotEmpty()) return choose(candidates, currentSourceId, deterministic, recentShown, taste)
+            if (candidates.isNotEmpty()) return choose(candidates, currentSourceId, deterministic, recentShown, taste, subjectFit)
         }
 
         // Keep a current wallpaper that suits the target before settling for a Balanced image that does not.
@@ -170,12 +175,12 @@ class WallpaperMatcher(
         // Then a Balanced image on the wrong side of the band, or the current one if that is what it is,
         // before crossing to the opposite brightness.
         illFittingNeutral(notCurrent).takeIf { it.isNotEmpty() }
-            ?.let { return choose(it, currentSourceId, deterministic, recentShown, taste) }
+            ?.let { return choose(it, currentSourceId, deterministic, recentShown, taste, subjectFit) }
         pool.firstOrNull { it.id == currentWallpaperId && it.evaluation.brightnessClass == BrightnessClass.NEUTRAL }
             ?.let { return it }
 
         // Last resort: this pool only holds wallpapers of the other brightness.
-        if (notCurrent.isNotEmpty()) return choose(notCurrent, currentSourceId, deterministic, recentShown, taste)
+        if (notCurrent.isNotEmpty()) return choose(notCurrent, currentSourceId, deterministic, recentShown, taste, subjectFit)
         return pool.firstOrNull()
     }
 
@@ -217,20 +222,25 @@ class WallpaperMatcher(
      * Picks one of [candidates]: never-shown images first, otherwise the least recently applied half
      * (lifetime `appliedCount` would trap newcomers behind a long-running favourite), then a different
      * source than the active wallpaper when one exists, then a weighted random pick that gently favours
-     * Kept images (Article XI §2).
+     * Kept images (Article XI §2). Pictures whose subject would be cut off on a display come last ([SubjectFit]).
      */
     private fun choose(
         candidates: List<WallpaperRecord>,
         currentSourceId: String?,
         deterministic: Boolean,
         recentShown: List<WallpaperRecord>,
-        taste: TasteProfile
+        taste: TasteProfile,
+        subjectFit: SubjectFit
     ): WallpaperRecord {
-        val unseen = candidates.filter { it.appliedCount == 0 }
+        // A picture whose subject would be cut off on one of the screens only wins when nothing else in this
+        // rung fits, and it never costs a brightness match (the rungs above are decided first).
+        val fitting = candidates.filter(subjectFit::accepts)
+        val pool = fitting.ifEmpty { candidates }
+        val unseen = pool.filter { it.appliedCount == 0 }
         var tier = if (unseen.isNotEmpty()) {
             unseen
         } else {
-            val oldestFirst = candidates.sortedWith(compareBy({ it.lastAppliedEpochMs }, { it.appliedCount }))
+            val oldestFirst = pool.sortedWith(compareBy({ it.lastAppliedEpochMs }, { it.appliedCount }))
             oldestFirst.take((oldestFirst.size + 1) / 2)
         }
         if (currentSourceId != null) {

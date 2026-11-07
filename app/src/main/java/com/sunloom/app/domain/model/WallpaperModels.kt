@@ -212,8 +212,12 @@ data class DisplayProfile(
             }
         }
 
+    /**
+     * What a display is, not which id Android gave it: Android hands out a new [displayId] when the
+     * same monitor is re-plugged, and that must not look like a different display (Article IV §6).
+     */
     val signature: String
-        get() = "${displayId}:${widthPx}x${heightPx}@${densityDpi}:${qualityTier.name}"
+        get() = "${widthPx}x${heightPx}@${densityDpi}:${qualityTier.name}"
 
     val isHighDensityOrRetina: Boolean
         get() = qualityTier == DisplayQualityTier.HIGH_65
@@ -225,6 +229,19 @@ data class DisplayProfile(
     val geometryKey: String
         get() = "${widthPx}x${heightPx}@${qualityTier.name}"
 }
+
+private fun displaySetKey(displays: List<DisplayProfile>, perDisplay: (DisplayProfile) -> String): String =
+    displays.map { (if (it.isPrimary) "*" else "") + perDisplay(it) }.sorted().joinToString("+")
+
+/**
+ * Identifies a whole display set for display-scoped rejections; independent of ids and order. The
+ * primary display is marked because the envelope anchors on it, so a rejection made for one anchor
+ * is not reused for another.
+ */
+fun displaySetSignature(displays: List<DisplayProfile>): String = displaySetKey(displays) { it.signature }
+
+/** Identifies a whole display set's crop geometry; independent of ids and order (primary marked, as above). */
+fun displaySetGeometryKey(displays: List<DisplayProfile>): String = displaySetKey(displays) { it.geometryKey }
 
 data class RememberedDisplayRecord(
     val key: String,

@@ -2,6 +2,7 @@ package com.sunloom.app.platform.display
 
 import android.app.Application
 import android.content.Context
+import android.view.Display
 import android.view.Surface
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -18,6 +19,32 @@ import org.robolectric.annotation.Config
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class DisplayProbeTest {
+
+    @Test
+    fun `when every display is asleep they all stay connected`() {
+        // Screen timeout / monitor sleep must not look like an undock (Article IV §6).
+        val asleep = listOf(
+            DisplayProbe.Listed(0, flags = 0, state = Display.STATE_OFF),
+            DisplayProbe.Listed(1, flags = 0, state = Display.STATE_OFF)
+        )
+        assertEquals(asleep, DisplayProbe.selectConnected(asleep))
+    }
+
+    @Test
+    fun `a sleeping display is left out while another display is awake`() {
+        // Lid closed on a docked laptop: the dark built-in panel is not planned for.
+        val builtInOff = DisplayProbe.Listed(0, flags = 0, state = Display.STATE_OFF)
+        val external = DisplayProbe.Listed(2, flags = 0, state = Display.STATE_ON)
+        assertEquals(listOf(external), DisplayProbe.selectConnected(listOf(builtInOff, external)))
+    }
+
+    @Test
+    fun `private displays never count as connected`() {
+        val private = DisplayProbe.Listed(5, flags = Display.FLAG_PRIVATE, state = Display.STATE_ON)
+        val normal = DisplayProbe.Listed(0, flags = 0, state = Display.STATE_ON)
+        assertEquals(listOf(normal), DisplayProbe.selectConnected(listOf(private, normal)))
+        assertTrue(DisplayProbe.selectConnected(listOf(private)).isEmpty())
+    }
 
     @Test
     fun `resolvePhysicalPpi accepts calibrated EDID PPI across standard mid and high tiers`() {
@@ -62,6 +89,69 @@ class DisplayProbeTest {
             physicalPpi = DisplayProbe.resolvePhysicalPpi(2560, 1600, 96f, 96f)
         )
         assertEquals(DisplayQualityTier.HIGH_65, retinaFallback.qualityTier)
+    }
+
+    @Test
+    fun `an auto-rotating display is measured in its natural orientation whatever its live rotation`() {
+        // Laptop-native 2560x1600 panel, auto-rotate on, currently turned into portrait (Article IV §6).
+        val upright = DisplayProbe.resolveModeDimensions(
+            modeWidth = 2560, modeHeight = 1600, rotation = Surface.ROTATION_0,
+            fallbackMetricsWidth = 2560, fallbackMetricsHeight = 1600, useNaturalOrientation = true
+        )
+        val turned = DisplayProbe.resolveModeDimensions(
+            modeWidth = 2560, modeHeight = 1600, rotation = Surface.ROTATION_90,
+            fallbackMetricsWidth = 1600, fallbackMetricsHeight = 2560, useNaturalOrientation = true
+        )
+        assertEquals(2560 to 1600, upright)
+        assertEquals(upright, turned)
+    }
+
+    @Test
+    fun `a portrait-native panel keeps its portrait natural orientation when auto-rotated`() {
+        val heldInLandscape = DisplayProbe.resolveModeDimensions(
+            modeWidth = 1600, modeHeight = 2560, rotation = Surface.ROTATION_90,
+            fallbackMetricsWidth = 2560, fallbackMetricsHeight = 1600, useNaturalOrientation = true
+        )
+        assertEquals(1600 to 2560, heldInLandscape)
+    }
+
+    @Test
+    fun `natural orientation falls back to live metrics when the physical mode is unknown`() {
+        val noMode = DisplayProbe.resolveModeDimensions(
+            modeWidth = 0, modeHeight = 0, rotation = Surface.ROTATION_90,
+            fallbackMetricsWidth = 1600, fallbackMetricsHeight = 2560, useNaturalOrientation = true
+        )
+        assertEquals(1600 to 2560, noMode)
+    }
+
+    @Test
+    fun `scaledDpi gives the same density whether the panel is upright or turned`() {
+        val upright = DisplayProbe.scaledDpi(2560, 1600, 2560, 1600, xdpi = 227f, ydpi = 226f)
+        val turned = DisplayProbe.scaledDpi(2560, 1600, 1600, 2560, xdpi = 226f, ydpi = 227f)
+        assertEquals(upright.first, turned.first, 0.01f)
+        assertEquals(upright.second, turned.second, 0.01f)
+    }
+
+    @Test
+    fun `scaledDpi does not treat a square panel as turned`() {
+        val (x, y) = DisplayProbe.scaledDpi(1600, 1600, 1920, 1080, xdpi = 100f, ydpi = 200f)
+        // Axes stay as measured (not swapped): x is out of the scaling range, y scales by 1600/1080.
+        assertEquals(100f, x, 0.01f)
+        assertEquals(200f * 1600f / 1080f, y, 0.01f)
+    }
+
+    @Test
+    fun `a dozing display is still visible and stays connected alongside an awake one`() {
+        val dozing = DisplayProbe.Listed(0, flags = 0, state = Display.STATE_DOZE)
+        val awake = DisplayProbe.Listed(2, flags = 0, state = Display.STATE_ON)
+        assertEquals(listOf(dozing, awake), DisplayProbe.selectConnected(listOf(dozing, awake)))
+    }
+
+    @Test
+    fun `scaledDpi scales up when the physical mode is larger than the scaled metrics`() {
+        val (x, y) = DisplayProbe.scaledDpi(3840, 2160, 1920, 1080, xdpi = 80f, ydpi = 80f)
+        assertEquals(160f, x, 0.01f)
+        assertEquals(160f, y, 0.01f)
     }
 
     @Test

@@ -76,6 +76,40 @@ class GoogleBookPlatformAdapterTest {
     }
 
     @Test
+    fun `excluded display note gives the real reason`() {
+        val adapter = GoogleBookPlatformAdapter(
+            context,
+            FakeWallpaperGateway(
+                displays = listOf(
+                    DisplayProfile(0, "GoogleBook Primary", 2560, 1600, densityDpi = 240, physicalPpi = 227.0),
+                    DisplayProfile(1, "8K TV", 7680, 4320, densityDpi = 160, physicalPpi = 80.0, isPrimary = false)
+                )
+            )
+        )
+
+        val note = adapter.probeCapabilities().excludedDisplaysNote
+
+        assertTrue(note, note.contains("8K TV"))
+        assertTrue(note, note.contains("16 MP"))
+        assertTrue(note, !note.contains("orientation"))
+    }
+
+    @Test
+    fun `geometry key is unchanged when the same monitor comes back under a new display id`() {
+        val before = GoogleBookPlatformAdapter(context, FakeWallpaperGateway())
+        val replugged = GoogleBookPlatformAdapter(
+            context,
+            FakeWallpaperGateway(
+                displays = listOf(
+                    DisplayProfile(0, "GoogleBook Primary", 2560, 1600),
+                    DisplayProfile(7, "External Ultrawide", 3440, 1440)
+                )
+            )
+        )
+        assertEquals(before.computeDisplayGeometryKey(), replugged.computeDisplayGeometryKey())
+    }
+
+    @Test
     fun `applyWallpaperAtomically crops without stretching and applies to configured destinations`() {
         val fakeGateway = FakeWallpaperGateway()
         val adapter = GoogleBookPlatformAdapter(context, fakeGateway)

@@ -166,4 +166,91 @@ class EnvelopePlannerTest {
         )
         assertNull("Undersized 2400x1600 image must be rejected when docked to 3440x1440 UWQHD", rejected)
     }
+
+    @Test
+    fun `an excluded portrait display says it was excluded for its opposite orientation`() {
+        val laptop = DisplayProfile(0, "Laptop 16:10", 2560, 1600, densityDpi = 240, physicalPpi = 227.0, isPrimary = true)
+        val uhdLandscape = DisplayProfile(1, "4K Landscape", 3840, 2160, densityDpi = 160, physicalPpi = 163.0, isPrimary = false)
+        val uhdPortrait = DisplayProfile(2, "4K Portrait Side Monitor", 2160, 3840, densityDpi = 160, physicalPpi = 109.0, isPrimary = false)
+
+        val plan = requireNotNull(
+            planner.planEnvelope(3840, 2400, 0.5, 0.5, listOf(laptop, uhdLandscape, uhdPortrait))
+        )
+
+        assertTrue(requireNotNull(plan.exclusionReasons[uhdPortrait.displayId]).contains("orientation"))
+        assertTrue(plan.disclosureNote.contains("orientation"))
+    }
+
+    @Test
+    fun `an excluded super-ultrawide says it was excluded for its aspect ratio`() {
+        val laptop = DisplayProfile(0, "Laptop 16:10", 2560, 1600, densityDpi = 240, physicalPpi = 227.0, isPrimary = true)
+        val superWide = DisplayProfile(1, "Super Ultrawide 32:9", 5120, 1440, densityDpi = 160, physicalPpi = 109.0, isPrimary = false)
+
+        // 2400 px is too narrow for 5120, so the full set fails and the aspect outlier is dropped.
+        val plan = requireNotNull(planner.planEnvelope(2400, 1500, 0.5, 0.5, listOf(laptop, superWide)))
+
+        assertEquals(listOf(superWide), plan.excludedDisplays)
+        assertTrue(requireNotNull(plan.exclusionReasons[superWide.displayId]).contains("aspect"))
+    }
+
+    @Test
+    fun `an excluded display beyond the 16 MP cap says so`() {
+        val laptop = DisplayProfile(0, "Laptop 16:10", 2560, 1600, densityDpi = 240, physicalPpi = 227.0, isPrimary = true)
+        val tv8k = DisplayProfile(1, "8K TV", 7680, 4320, densityDpi = 160, physicalPpi = 80.0, isPrimary = false)
+
+        val plan = requireNotNull(planner.planEnvelope(10_000, 10_000, 0.5, 0.5, listOf(laptop, tv8k)))
+
+        assertEquals(listOf(tv8k), plan.excludedDisplays)
+        assertTrue(requireNotNull(plan.exclusionReasons[tv8k.displayId]).contains("16 MP"))
+    }
+
+    @Test
+    fun `a subject near the edge is reported as cut off on a narrow portrait display`() {
+        // Strict (98%) tier: a narrow compromise envelope would be too soft for this panel.
+        val laptop = DisplayProfile(0, "Laptop 16:10", 2560, 1600, densityDpi = 160, isPrimary = true)
+        val portrait = DisplayProfile(1, "Portrait Monitor", 1200, 1920, densityDpi = 160, isPrimary = false)
+
+        val plan = requireNotNull(planner.planEnvelope(4800, 3000, 0.02, 0.5, listOf(laptop, portrait)))
+
+        assertEquals(listOf(portrait), plan.subjectClippedDisplays)
+        assertTrue(plan.disclosureNote.contains("Portrait Monitor"))
+        assertTrue(plan.disclosureNote.contains("cut off"))
+    }
+
+    @Test
+    fun `a centred subject is cut off on no display`() {
+        // Strict (98%) tier: a narrow compromise envelope would be too soft for this panel.
+        val laptop = DisplayProfile(0, "Laptop 16:10", 2560, 1600, densityDpi = 160, isPrimary = true)
+        val portrait = DisplayProfile(1, "Portrait Monitor", 1200, 1920, densityDpi = 160, isPrimary = false)
+
+        val plan = requireNotNull(planner.planEnvelope(4800, 3000, 0.5, 0.5, listOf(laptop, portrait)))
+
+        assertTrue(plan.subjectClippedDisplays.isEmpty())
+        assertFalse(plan.disclosureNote.contains("cut off"))
+    }
+
+    @Test
+    fun `a high-density panel lets the envelope narrow so the subject survives on a portrait display`() {
+        val laptop = DisplayProfile(0, "Laptop 16:10 Retina", 2560, 1600, densityDpi = 240, physicalPpi = 227.0, isPrimary = true)
+        val portrait = DisplayProfile(1, "Portrait Monitor", 1200, 1920, densityDpi = 160, isPrimary = false)
+
+        val plan = requireNotNull(planner.planEnvelope(4800, 3000, 0.02, 0.5, listOf(laptop, portrait)))
+
+        assertTrue(plan.subjectClippedDisplays.isEmpty())
+        assertTrue(plan.excludedDisplays.isEmpty())
+    }
+
+    @Test
+    fun `single-display and sharpest-only plans keep their own disclosure wording`() {
+        val laptop = DisplayProfile(0, "Laptop 16:10", 2560, 1600, densityDpi = 240, physicalPpi = 227.0, isPrimary = true)
+        val uwqhd = DisplayProfile(1, "UWQHD 21:9", 3440, 1440, densityDpi = 160, physicalPpi = 109.0, isPrimary = false)
+
+        val single = requireNotNull(planner.planEnvelope(3840, 2400, 0.5, 0.5, listOf(laptop)))
+        assertTrue(single.disclosureNote, single.disclosureNote.startsWith("Native crop for"))
+
+        val sharpest = requireNotNull(
+            planner.planEnvelope(3840, 2160, 0.5, 0.5, listOf(laptop, uwqhd), DisplayPolicy.OPTIMIZE_PRIMARY_SHARPEST)
+        )
+        assertTrue(sharpest.disclosureNote, sharpest.disclosureNote.startsWith("Optimized crop for sharpest display"))
+    }
 }

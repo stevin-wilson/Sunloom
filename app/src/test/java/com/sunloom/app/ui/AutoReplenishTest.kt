@@ -48,6 +48,11 @@ class AutoReplenishTest {
 
     private class CountingGateway(var state: SunloomUiState, private val perRefresh: (Int) -> Int = { 0 }) : SunloomGateway {
         var refreshCalls = 0
+        var afterDisplayChange: SunloomUiState? = null
+        override suspend fun onDisplaysChanged(): SunloomUiState {
+            afterDisplayChange?.let { state = it }
+            return state
+        }
         override suspend fun loadInitialSnapshot() = state
         override suspend fun savePreferences(preferences: UserPreferences): SunloomUiState {
             state = state.copy(preferences = preferences)
@@ -233,5 +238,65 @@ class AutoReplenishTest {
         vm.advanceToNextWallpaperSmart()
         assertEquals("overlapping triggers must not start more fetches", 1, gateway.calls)
         release.complete(Unit)
+    }
+
+    private val laptop = com.sunloom.app.domain.model.DisplayProfile(0, "Built-in", 2560, 1600, 240)
+    private val ultrawide = com.sunloom.app.domain.model.DisplayProfile(1, "Ultrawide", 3440, 1440, 160)
+
+    private fun withDisplays(state: SunloomUiState, vararg displays: com.sunloom.app.domain.model.DisplayProfile) =
+        state.copy(capabilities = state.capabilities.copy(connectedDisplays = displays.toList()))
+
+    @Test
+    fun `docking a display that shrinks the eligible pool tops the reserve up straight away`() {
+        val gateway = CountingGateway(withDisplays(stateWith(unseenCount = target), laptop))
+        val vm = launch(gateway)
+        assertEquals(0, gateway.refreshCalls)
+
+        // Docking the ultrawide pauses most of the pool: the reserve is now low.
+        gateway.afterDisplayChange = withDisplays(stateWith(unseenCount = 2), laptop, ultrawide)
+        vm.onDisplaysChanged()
+
+        assertEquals(1, gateway.refreshCalls)
+    }
+
+    @Test
+    fun `a rotation or replug that leaves the display geometry unchanged does not trigger a fetch`() {
+        val gateway = CountingGateway(withDisplays(stateWith(unseenCount = 2), laptop, ultrawide))
+        val vm = launch(gateway)
+        val afterLaunch = gateway.refreshCalls
+        now += 11 * 60 * 1000L // the throttle is not what holds it back
+
+        gateway.afterDisplayChange = withDisplays(stateWith(unseenCount = 2), laptop, ultrawide.copy(displayId = 9))
+        vm.onDisplaysChanged()
+
+        assertEquals(afterLaunch, gateway.refreshCalls)
+    }
+
+    @Test
+    fun `a dock is a fresh reason to fetch even inside the throttle interval`() {
+        val gateway = CountingGateway(withDisplays(stateWith(unseenCount = 0), laptop)) { round -> if (round == 1) 1 else 0 }
+        val vm = launch(gateway)
+        val afterLaunch = gateway.refreshCalls // added images, so the next automatic fetch would wait ten minutes
+
+        gateway.afterDisplayChange = withDisplays(gateway.state, laptop, ultrawide)
+        vm.onDisplaysChanged()
+
+        assertEquals(afterLaunch + 1, gateway.refreshCalls)
+    }
+
+    @Test
+    fun `several display events for one dock fetch once`() = kotlinx.coroutines.test.runTest {
+        val gateway = CountingGateway(withDisplays(stateWith(unseenCount = target), laptop))
+        val dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
+        val vm = MainViewModel(gateway = gateway, workDispatcher = dispatcher, clockMs = { now }, roundPauseMs = 0L)
+        testScheduler.advanceUntilIdle()
+        assertEquals(0, gateway.refreshCalls)
+
+        gateway.afterDisplayChange = withDisplays(stateWith(unseenCount = 2), laptop, ultrawide)
+        vm.onDisplaysChanged() // both events are queued before either has run
+        vm.onDisplaysChanged()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(1, gateway.refreshCalls)
     }
 }

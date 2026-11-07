@@ -38,6 +38,7 @@ import com.sunloom.app.domain.model.SourceDiagnostics
 import com.sunloom.app.domain.model.UserPreferences
 import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.model.WallpaperStatus
+import com.sunloom.app.domain.model.displaySetSignature
 import com.sunloom.app.domain.renderer.CropRenderer
 import com.sunloom.app.domain.renderer.EnvelopePlanner
 import com.sunloom.app.domain.safety.GateTrace
@@ -1061,15 +1062,7 @@ class LocalLibraryRepository(
             val focalY = record.evaluation.cropRect?.focalY ?: 0.5
             val isUserLocal = record.provenance.sourceId == "user_local"
 
-            val plan = envelopePlanner.planEnvelope(
-                sourceWidth = srcW,
-                sourceHeight = srcH,
-                focalX = focalX,
-                focalY = focalY,
-                connectedDisplays = validDisplays,
-                policy = preferences.displayPolicy,
-                allowBlurredFrameFill = isUserLocal || preferences.allowBlurredFrameFill
-            )
+            val plan = envelopePlanner.planForRecord(record, validDisplays, preferences)
 
             val updatedEval: com.sunloom.app.domain.model.ImageEvaluationResult
             val newRendW: Int
@@ -1211,7 +1204,7 @@ class LocalLibraryRepository(
     ): Int {
         val activeDisplaySet = connectedDisplays.filter { it.widthPx > 0 && it.heightPx > 0 }
             .ifEmpty { listOf(display) }
-        val displaySetSignature = activeDisplaySet.sortedBy { it.displayId }.joinToString("+") { it.signature }
+        val currentSetSignature = displaySetSignature(activeDisplaySet)
 
         purgeRevokedSources()
         revalidateGateVersionIfNeeded(display)
@@ -1241,7 +1234,7 @@ class LocalLibraryRepository(
         }
         val permanentlyBlockedIds = getPermanentBlockedAssetIds().toMutableSet()
         val displayScopedRejectedIds = store.getAllRejections()
-            .filter { !it.isPermanent && it.displaySignature == displaySetSignature }
+            .filter { !it.isPermanent && it.displaySignature == currentSetSignature }
             .map { it.assetId }
             .toMutableSet()
         val blockedSha256s = getPermanentBlockedSha256s().toMutableSet()
@@ -1351,7 +1344,7 @@ class LocalLibraryRepository(
                         Rejections.displayScoped(
                             candidate.id, adapter.sourceId, metaVerdict.reasonCode,
                             metaVerdict.explanation,
-                            displaySetSignature
+                            currentSetSignature
                         )
                     )
                     displayScopedRejectedIds.add(candidate.id)
@@ -1395,7 +1388,7 @@ class LocalLibraryRepository(
                             } else {
                                 "Source advertises ${advertisedW}×${advertisedH}, too small for ${display.resolutionLabel}; not downloaded."
                             },
-                            displaySetSignature
+                            currentSetSignature
                         )
                     )
                     displayScopedRejectedIds.add(candidate.id)
@@ -1521,7 +1514,7 @@ class LocalLibraryRepository(
                             Rejections.displayScoped(
                                 candidate.id, adapter.sourceId, "NEAR_DUPLICATE_OF_LIBRARY",
                                 "Perceptual hash ($dHash) is almost identical to a wallpaper already in the library.",
-                                displaySetSignature
+                                currentSetSignature
                             )
                         )
                         displayScopedRejectedIds.add(candidate.id)
@@ -1545,7 +1538,7 @@ class LocalLibraryRepository(
                             Rejections.displayScoped(
                                 candidate.id, adapter.sourceId, reason,
                                 eval.explanation,
-                                displaySetSignature
+                                currentSetSignature
                             )
                         )
                         displayScopedRejectedIds.add(candidate.id)
@@ -1566,7 +1559,7 @@ class LocalLibraryRepository(
                             Rejections.displayScoped(
                                 candidate.id, adapter.sourceId, "INSUFFICIENT_ENVELOPE_RESOLUTION",
                                 "Source (${srcW}×${srcH}) cannot satisfy the connected multi-display envelope without upscaling.",
-                                displaySetSignature
+                                currentSetSignature
                             )
                         )
                         displayScopedRejectedIds.add(candidate.id)

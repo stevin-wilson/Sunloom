@@ -16,6 +16,7 @@ import androidx.work.WorkerParameters
 import com.sunloom.app.appContainer
 import com.sunloom.app.data.repository.LibraryStoreUnavailableException
 import com.sunloom.app.data.repository.LocalLibraryRepository
+import com.sunloom.app.domain.matcher.SubjectFit
 import com.sunloom.app.domain.matcher.TasteProfile
 import com.sunloom.app.domain.matcher.WallpaperMatcher
 import com.sunloom.app.domain.model.ScheduleMode
@@ -209,7 +210,8 @@ class SunloomWallpaperScheduler(
                 currentWallpaperId = currentId,
                 recentlyUsedIds = setOfNotNull(currentId, repo.getPreviousWallpaperId()),
                 maxResults = 3,
-                taste = TasteProfile.from(allWallpapers)
+                taste = TasteProfile.from(allWallpapers),
+                subjectFit = SubjectFit.forDisplays(connectedDisplays, prefs)
             )
 
             val currentGeometryKey = platform.computeDisplayGeometryKey(connectedDisplays, prefs.displayPolicy)
