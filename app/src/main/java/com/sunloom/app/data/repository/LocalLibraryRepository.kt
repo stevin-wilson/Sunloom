@@ -45,6 +45,7 @@ import com.sunloom.app.domain.safety.GateTrace
 import com.sunloom.app.domain.safety.SafetyDenylist
 import com.sunloom.app.domain.safety.SafetyGate
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.ensureActive
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -90,6 +91,7 @@ class LocalLibraryRepository(
         private const val KEY_SOFT_SWEEP_VERSION = "soft_rejections_denylist_version"
         private const val TAG = "LocalLibraryRepository"
         private val LIBRARY_WRITE_LOCK = Any()
+        private val SYNC_MUTEX = kotlinx.coroutines.sync.Mutex()
         private val HEAL_EXEMPT_SOURCES = setOf("seed_reserve", "user_local")
         private val LEGACY_V1_3_SOURCES = setOf(
             "seed_reserve",
@@ -1198,10 +1200,21 @@ class LocalLibraryRepository(
     var lastSyncFailedSources: Int = 0
         private set
 
+    /**
+     * One sync at a time per process. The app and the background worker each build their own repository, so without
+     * this they can poll the same sources together (doubling the request rate the register budgets) and race on the
+     * fetch cursors. A second caller waits, then finds the first one's images already in the library.
+     */
     suspend fun refreshOnlineCatalog(
         display: DisplayProfile,
         maxSourcesPerSync: Int = DEFAULT_MAX_SOURCES_PER_SYNC,
         connectedDisplays: List<DisplayProfile> = listOf(display)
+    ): Int = SYNC_MUTEX.withLock { refreshOnlineCatalogLocked(display, maxSourcesPerSync, connectedDisplays) }
+
+    private suspend fun refreshOnlineCatalogLocked(
+        display: DisplayProfile,
+        maxSourcesPerSync: Int,
+        connectedDisplays: List<DisplayProfile>
     ): Int {
         val activeDisplaySet = connectedDisplays.filter { it.widthPx > 0 && it.heightPx > 0 }
             .ifEmpty { listOf(display) }

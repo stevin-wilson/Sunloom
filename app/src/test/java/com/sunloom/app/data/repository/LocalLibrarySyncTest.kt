@@ -20,6 +20,7 @@ import com.sunloom.app.domain.model.UserPreferences
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
+import kotlinx.coroutines.async
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -407,6 +408,25 @@ class LocalLibrarySyncTest {
         )
         assertEquals(3, repo.refreshOnlineCatalog(display))
         assertTrue(repo.getAllWallpapers().none { it.id == "pic-2" })
+    }
+
+    @Test
+    fun `two syncs never run at once, so the app and the background worker cannot double a source's request rate`() = kotlinx.coroutines.test.runTest {
+        var running = 0
+        var peak = 0
+        val slowFetch: suspend (HttpClient) -> Unit = {
+            running++
+            peak = maxOf(peak, running)
+            kotlinx.coroutines.delay(100)
+            running--
+        }
+        val a = repo(FixedAdapter("artic_cc0", listOf(candidate("a-1")), onFetch = slowFetch))
+        val b = repo(FixedAdapter("artic_cc0", listOf(candidate("b-1")), onFetch = slowFetch))
+        val first = async { a.refreshOnlineCatalog(display) }
+        val second = async { b.refreshOnlineCatalog(display) }
+        first.await()
+        second.await()
+        assertEquals("syncs overlapped", 1, peak)
     }
 
     @Test
