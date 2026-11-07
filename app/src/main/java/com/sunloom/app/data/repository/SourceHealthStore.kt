@@ -43,6 +43,8 @@ class SourceHealthStore(
         val fails = failureCount(sourceId) + 1
         val backoffMs = when {
             error is RateLimitException -> maxOf(error.retryAfterSeconds * 1000L, 15L * 60L * 1000L)
+            // Auto-disabled: stop hammering a source that keeps failing, and probe it once a day in case it recovered.
+            fails >= SourceRegistry.AUTO_DISABLE_FAILURE_THRESHOLD -> 24L * 60L * 60L * 1000L
             fails >= DEGRADED_FAILURES -> minOf(60L * 60L * 1000L, 5L * 60L * 1000L * (1L shl (fails - DEGRADED_FAILURES).coerceAtMost(4)))
             else -> 0L
         }

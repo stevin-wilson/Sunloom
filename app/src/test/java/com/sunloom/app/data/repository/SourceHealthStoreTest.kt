@@ -47,6 +47,22 @@ class SourceHealthStoreTest {
     }
 
     @Test
+    fun `an auto-disabled source is only probed about once a day`() {
+        val now = 10_000_000L
+        repeat(5) { store.recordFailure("met_cc0", IllegalStateException("HTTP 500"), now) }
+        assertEquals(SourceHealthState.AUTO_DISABLED, store.stateFor("met_cc0", admitted = true, now = now))
+        assertTrue("still off after 23 hours", store.isInBackoff("met_cc0", now + 23L * 3_600_000L))
+        assertFalse("probed again after a day", store.isInBackoff("met_cc0", now + 25L * 3_600_000L))
+    }
+
+    @Test
+    fun `a degraded source keeps the short backoff`() {
+        val now = 10_000_000L
+        repeat(4) { store.recordFailure("met_cc0", IllegalStateException("HTTP 500"), now) }
+        assertFalse(store.isInBackoff("met_cc0", now + 61L * 60_000L))
+    }
+
+    @Test
     fun `a rate limit backs off at least fifteen minutes whatever the server asked`() {
         val now = 5_000L
         store.recordFailure("nasa_library", RateLimitException(retryAfterSeconds = 30, message = "429"), now)
