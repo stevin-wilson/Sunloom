@@ -36,6 +36,9 @@ class SourceBudgetExceededException(
 interface HttpClient {
     suspend fun getText(url: String): String
     suspend fun getBytes(url: String, maxBytes: Int = 35 * 1024 * 1024): ByteArray
+
+    /** A client whose redirects may only reach [sourceId]'s own hosts (Article VI §7); fakes may stay unscoped. */
+    fun scopedTo(sourceId: String): HttpClient = this
 }
 
 /**
@@ -94,6 +97,8 @@ class BudgetedSourceHttpClient(
     private val sleeper: suspend (Long) -> Unit = { delay(it) }
 ) : HttpClient {
 
+    private val scopedDelegate: HttpClient = delegate.scopedTo(sourceId)
+
     var requestCount: Int = 0
         private set
 
@@ -136,11 +141,11 @@ class BudgetedSourceHttpClient(
     }
 
     override suspend fun getText(url: String): String = acquireAndRun(url) {
-        tracked { delegate.getText(url) }
+        tracked { scopedDelegate.getText(url) }
     }
 
     override suspend fun getBytes(url: String, maxBytes: Int): ByteArray = acquireAndRun(url) {
-        tracked { delegate.getBytes(url, maxBytes) }
+        tracked { scopedDelegate.getBytes(url, maxBytes) }
     }
 }
 
@@ -160,10 +165,22 @@ class DefaultHttpsClient(
         }
     }
 
-    override suspend fun getText(url: String): String = withContext(Dispatchers.IO) {
+    override suspend fun getText(url: String): String = fetchText(url, null)
+
+    override suspend fun getBytes(url: String, maxBytes: Int): ByteArray = fetchBytes(url, maxBytes, null)
+
+    override fun scopedTo(sourceId: String): HttpClient = object : HttpClient {
+        override suspend fun getText(url: String): String = fetchText(url, sourceId)
+        override suspend fun getBytes(url: String, maxBytes: Int): ByteArray = fetchBytes(url, maxBytes, sourceId)
+        override fun scopedTo(sourceId: String): HttpClient = this@DefaultHttpsClient.scopedTo(sourceId)
+    }
+
+    private suspend fun fetchText(url: String, scopeSourceId: String?): String = withContext(Dispatchers.IO) {
         val cached = synchronized(conditionalTextCache) { conditionalTextCache[url] }
+        val deadline = System.nanoTime() + REQUEST_DEADLINE_NANOS
         executeFollowingValidatedRedirects(
             initialUrl = url,
+            scopeSourceId = scopeSourceId,
             acceptHeader = "application/json",
             ifNoneMatch = cached?.etag,
             ifModifiedSince = cached?.lastModified
@@ -175,7 +192,9 @@ class DefaultHttpsClient(
             if (contentLength > MAX_TEXT_BYTES) {
                 throw IllegalArgumentException("JSON payload Content-Length ($contentLength) exceeds limit ($MAX_TEXT_BYTES)")
             }
-            val text = conn.inputStream.bufferedReader(Charsets.UTF_8).use { readTextBounded(it, MAX_TEXT_BYTES) }
+            val text = conn.inputStream.bufferedReader(Charsets.UTF_8).use {
+                readTextBounded(it, MAX_TEXT_BYTES, deadlineNanos = deadline)
+            }
             val etag = conn.getHeaderField("ETag")?.trim()?.takeIf { it.isNotEmpty() }
             val lastMod = conn.getHeaderField("Last-Modified")?.trim()?.takeIf { it.isNotEmpty() }
             // Only small bodies are worth retaining; 32 large JSON pages could pin tens of MB.
@@ -188,9 +207,11 @@ class DefaultHttpsClient(
         }
     }
 
-    override suspend fun getBytes(url: String, maxBytes: Int): ByteArray = withContext(Dispatchers.IO) {
+    private suspend fun fetchBytes(url: String, maxBytes: Int, scopeSourceId: String?): ByteArray = withContext(Dispatchers.IO) {
+        val deadline = System.nanoTime() + REQUEST_DEADLINE_NANOS
         executeFollowingValidatedRedirects(
             initialUrl = url,
+            scopeSourceId = scopeSourceId,
             acceptHeader = "image/jpeg,image/png,image/webp,*/*;q=0.8"
         ) { conn, _ ->
             val contentLength = conn.contentLengthLong
@@ -210,6 +231,7 @@ class DefaultHttpsClient(
                 while (true) {
                     val read = input.read(chunk)
                     if (read <= 0) break
+                    if (System.nanoTime() > deadline) throw java.io.IOException("Download exceeded its deadline")
                     total += read
                     if (total > maxBytes) {
                         throw IllegalArgumentException("Asset exceeds maximum permitted download size ($maxBytes bytes)")
@@ -223,6 +245,7 @@ class DefaultHttpsClient(
 
     private fun <T> executeFollowingValidatedRedirects(
         initialUrl: String,
+        scopeSourceId: String? = null,
         acceptHeader: String,
         ifNoneMatch: String? = null,
         ifModifiedSince: String? = null,
@@ -230,7 +253,7 @@ class DefaultHttpsClient(
     ): T {
         var currentUrl = initialUrl
         for (hop in 0..MAX_REDIRECT_HOPS) {
-            validateHttpsAndHost(currentUrl)
+            validateHttpsAndHost(currentUrl, scopeSourceId)
             val conn = connectionFactory(URL(currentUrl)).apply {
                 instanceFollowRedirects = false
                 requestMethod = "GET"
@@ -254,7 +277,7 @@ class DefaultHttpsClient(
                         throw IllegalStateException("HTTP $code redirect missing Location header from $currentUrl")
                     }
                     val resolvedUrl = URL(URL(currentUrl), location).toString()
-                    validateHttpsAndHost(resolvedUrl)
+                    validateHttpsAndHost(resolvedUrl, scopeSourceId)
                     currentUrl = resolvedUrl
                     continue
                 }
@@ -287,12 +310,21 @@ class DefaultHttpsClient(
         /** Process-wide client so the conditional-GET cache is shared by all adapters and workers. */
         val shared: DefaultHttpsClient by lazy { DefaultHttpsClient() }
 
-        internal fun readTextBounded(reader: java.io.Reader, maxChars: Long): String {
+        /** A whole request, including a slow body, may not take longer than this (read timeouts are per read). */
+        private const val REQUEST_DEADLINE_NANOS = 90_000_000_000L
+
+        internal fun readTextBounded(
+            reader: java.io.Reader,
+            maxChars: Long,
+            deadlineNanos: Long = Long.MAX_VALUE,
+            nanoClock: () -> Long = System::nanoTime
+        ): String {
             val out = StringBuilder()
             val buf = CharArray(8 * 1024)
             while (true) {
                 val n = reader.read(buf)
                 if (n < 0) break
+                if (nanoClock() > deadlineNanos) throw java.io.IOException("Download exceeded its deadline")
                 out.append(buf, 0, n)
                 if (out.length > maxChars) {
                     throw IllegalArgumentException("JSON payload exceeds limit ($maxChars)")
