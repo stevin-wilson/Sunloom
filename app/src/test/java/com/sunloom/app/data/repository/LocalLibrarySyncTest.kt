@@ -388,6 +388,28 @@ class LocalLibrarySyncTest {
     }
 
     @Test
+    fun `one picture that cannot be stored does not abort the rest of the sync`() = kotlinx.coroutines.test.runTest {
+        // A disk-full write or a store error on one candidate used to leave refreshOnlineCatalog, skipping the other
+        // candidates, the sync summary and the cache cleanup.
+        val inner = InMemoryLibraryStore(java.io.File(context.filesDir, "sync_failing_store"))
+        val flaky = object : LibraryStore by inner {
+            override fun upsertWallpaper(record: com.sunloom.app.domain.model.WallpaperRecord) {
+                if (record.id == "pic-2") throw java.io.IOException("No space left on device")
+                inner.upsertWallpaper(record)
+            }
+        }
+        val repo = LocalLibraryRepository(
+            context = context,
+            store = flaky,
+            httpClient = okClient,
+            sourceAdapters = listOf(FixedAdapter("artic_cc0", (1..4).map { candidate("pic-$it") })),
+            random = kotlin.random.Random(1)
+        )
+        assertEquals(3, repo.refreshOnlineCatalog(display))
+        assertTrue(repo.getAllWallpapers().none { it.id == "pic-2" })
+    }
+
+    @Test
     fun `no more than three unseen images from one creator are kept`() = kotlinx.coroutines.test.runTest {
         val monet = (1..5).map { candidate("monet-$it", creator = "Claude Monet") }
         val repo = repo(FixedAdapter("artic_cc0", monet))

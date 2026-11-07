@@ -88,6 +88,7 @@ class LocalLibraryRepository(
          */
         internal val SOFT_SAFETY_REASONS = setOf("UNRECOGNIZED_SAFE_DOMAIN", "MISSING_SAFETY_TAGS")
         private const val KEY_SOFT_SWEEP_VERSION = "soft_rejections_denylist_version"
+        private const val TAG = "LocalLibraryRepository"
         private val LIBRARY_WRITE_LOCK = Any()
         private val HEAL_EXEMPT_SOURCES = setOf("seed_reserve", "user_local")
         private val LEGACY_V1_3_SOURCES = setOf(
@@ -1635,6 +1636,15 @@ class LocalLibraryRepository(
                     existingIds.add(candidate.id)
                     diversityGuard.noteAdded(adapter.sourceId, candidate.provenance.creatorName, dHash)
                     newlyAdded++
+                } catch (cancel: CancellationException) {
+                    throw cancel
+                } catch (err: Exception) {
+                    if (SourceHealthStore.isCancellation(err)) {
+                        throw CancellationException(err.message).apply { initCause(err) }
+                    }
+                    // One picture that cannot be staged, evaluated or stored (a full disk, a store error) is skipped;
+                    // the other candidates, the sync summary and the cache cleanup still run.
+                    android.util.Log.w(TAG, "candidate_skipped", err)
                 } finally {
                     runCatching { quarantineFile.delete() }
                 }

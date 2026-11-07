@@ -390,6 +390,35 @@ class SafetyGate {
          * from the byte stream without allocating a Bitmap. Returns null if the byte stream
          * is a synthetic test buffer without a full dimension header.
          */
+        /** SOF0..SOF15 carry the picture size; DHT (C4), JPG (C8) and DAC (CC) share the range but do not. */
+        private fun isJpegFrameMarker(marker: Int): Boolean = marker in 0xC0..0xCF && marker !in NON_FRAME_MARKERS
+
+        private val NON_FRAME_MARKERS = setOf(0xC4, 0xC8, 0xCC)
+
+        /** Lossy `VP8 ` and lossless `VP8L` WebP, the common kinds; extended `VP8X` is read by the caller. */
+        private fun webpSimpleBounds(bytes: ByteArray): ImageHeaderBounds? {
+            if (bytes.size < 30 || String(bytes, 12, 3, Charsets.ISO_8859_1) != "VP8") return null
+            fun u8(i: Int) = bytes[i].toInt() and 0xFF
+            when (bytes[15]) {
+                ' '.code.toByte() -> {
+                    // Frame tag (3 bytes), start code 9D 01 2A, then two 14-bit little-endian sizes.
+                    if (u8(23) != 0x9D || u8(24) != 0x01 || u8(25) != 0x2A) return null
+                    val w = (u8(26) or (u8(27) shl 8)) and 0x3FFF
+                    val h = (u8(28) or (u8(29) shl 8)) and 0x3FFF
+                    if (w > 0 && h > 0) return ImageHeaderBounds(w, h, ImageFormat.WEBP.mimeType)
+                }
+                'L'.code.toByte() -> {
+                    // Signature 0x2F, then 14 bits of width-1 and 14 bits of height-1.
+                    if (u8(20) != 0x2F) return null
+                    val bits = u8(21) or (u8(22) shl 8) or (u8(23) shl 16) or (u8(24) shl 24)
+                    val w = (bits and 0x3FFF) + 1
+                    val h = ((bits ushr 14) and 0x3FFF) + 1
+                    return ImageHeaderBounds(w, h, ImageFormat.WEBP.mimeType)
+                }
+            }
+            return null
+        }
+
         fun inspectImageHeaderBounds(bytes: ByteArray): ImageHeaderBounds? {
             val format = detectImageFormat(bytes)
             when (format) {
@@ -428,8 +457,8 @@ class SafetyGate {
                         val segLen = ((bytes[offset + 2].toInt() and 0xFF) shl 8) or
                             (bytes[offset + 3].toInt() and 0xFF)
                         if (segLen < 2) break
-                        // SOF0 (0xC0), SOF1 (0xC1), SOF2 (0xC2)
-                        if (marker == 0xC0 || marker == 0xC1 || marker == 0xC2) {
+                        // Every frame header (SOF0..SOF15) carries the size, except DHT (C4), JPG (C8) and DAC (CC).
+                        if (isJpegFrameMarker(marker)) {
                             if (offset + 9 < bytes.size) {
                                 val h = ((bytes[offset + 5].toInt() and 0xFF) shl 8) or
                                     (bytes[offset + 6].toInt() and 0xFF)
@@ -445,6 +474,7 @@ class SafetyGate {
                     }
                 }
                 ImageFormat.WEBP -> {
+                    webpSimpleBounds(bytes)?.let { return it }
                     if (bytes.size >= 30 &&
                         bytes[12] == 'V'.code.toByte() &&
                         bytes[13] == 'P'.code.toByte() &&

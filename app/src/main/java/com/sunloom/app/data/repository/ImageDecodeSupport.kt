@@ -69,9 +69,19 @@ internal fun decodeSampledBitmapSafely(
     return try {
         val opts = BitmapFactory.Options()
         val safeMaxEdge = maxEdgePx.coerceAtLeast(64)
-        if (headerW > 0 && headerH > 0) {
+        var w = headerW
+        var h = headerH
+        if (w <= 0 || h <= 0) {
+            // The header parser could not size this file. Measure it with the decoder (no pixels are allocated) rather
+            // than decode at full size: a tiny file can describe a picture of hundreds of megapixels.
+            val probe = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, probe)
+            w = probe.outWidth
+            h = probe.outHeight
+        }
+        if (w > 0 && h > 0) {
             var sampleSize = 1
-            while ((headerW / sampleSize) > safeMaxEdge || (headerH / sampleSize) > safeMaxEdge) {
+            while ((w / sampleSize) > safeMaxEdge || (h / sampleSize) > safeMaxEdge) {
                 sampleSize *= 2
             }
             opts.inSampleSize = sampleSize

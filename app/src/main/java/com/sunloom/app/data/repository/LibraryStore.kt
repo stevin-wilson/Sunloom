@@ -292,6 +292,17 @@ object WallpaperRowMapper {
  * Production SQLite store with non-destructive v1 -> v2 schema migration,
  * indexed queries, capped rejection logs, and dedicated permanent blocklist table.
  */
+/**
+ * Android's default handler deletes a corrupt database and starts empty, which would silently drop the permanent
+ * "Reject forever" blocklist and every safety ban (Article VII §6: fail closed). This one leaves the file where it is,
+ * so opening fails, automation is suspended and the problem is shown, instead of the blocklist vanishing.
+ */
+internal object KeepCorruptDatabaseHandler : android.database.DatabaseErrorHandler {
+    override fun onCorruption(dbObj: SQLiteDatabase) {
+        android.util.Log.e("SqliteLibraryStore", "database_corrupt: keeping the file, storage unavailable")
+    }
+}
+
 class SqliteLibraryStore(context: Context) : LibraryStore {
     companion object {
         const val DATABASE_NAME = "sunloom_library.db"
@@ -320,8 +331,13 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
         context.applicationContext,
         DATABASE_NAME,
         null,
-        DATABASE_VERSION
+        DATABASE_VERSION,
+        KeepCorruptDatabaseHandler
     ) {
+        // Every migration only adds columns, so a build older than the database (a Play rollback, a sideloaded older
+        // build) can still read it. The default would throw and leave storage permanently unavailable.
+        override fun onDowngrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+
         override fun onCreate(db: SQLiteDatabase) {
             db.execSQL(
                 """
