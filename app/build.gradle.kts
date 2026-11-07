@@ -41,7 +41,9 @@ val hasUploadSigningCredentials =
 
 gradle.taskGraph.whenReady {
     val isReleaseBuildRequested = allTasks.any { task ->
+        // packageReleaseResources only feeds lint and shrinking: it produces nothing that is signed.
         task.name.contains("Release", ignoreCase = true) &&
+            !task.name.endsWith("Resources") &&
             (task.name.startsWith("assemble") || task.name.startsWith("bundle") || task.name.startsWith("package"))
     }
     if (isReleaseBuildRequested && !hasUploadSigningCredentials) {
