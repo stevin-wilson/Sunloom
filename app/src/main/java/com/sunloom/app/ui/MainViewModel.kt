@@ -179,9 +179,10 @@ class MainViewModel(
                         block(_uiState.value)
                     } catch (e: CancellationException) {
                         throw e
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
                         // Nothing above this scope handles exceptions, so a storage error (disk full, SQLite) would
                         // end the process. Keep the screen as it was and say so.
+                        android.util.Log.w("MainViewModel", "action_failed", e)
                         _uiState.value.copy(statusBannerMessage = strings.storageProblem)
                     }
                     publish(next, preserveNavigation, ownPreferenceEdit = preferenceEdit)
@@ -203,7 +204,8 @@ class MainViewModel(
                     } catch (e: CancellationException) {
                         _uiState.update { s -> s.copy(isApplyingWallpaper = false) }
                         throw e
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        android.util.Log.w("MainViewModel", "apply_failed", e)
                         _uiState.value.copy(statusBannerMessage = strings.storageProblem)
                     }
                     publish(next) { it.copy(isApplyingWallpaper = false) }

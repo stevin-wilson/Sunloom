@@ -26,7 +26,7 @@ interface UiStrings {
             override val loadingLibrary = "Loading wallpaper library…"
             override val manualModeEnabled = "Manual mode enabled — click Next Wallpaper whenever you'd like a change"
             override val settingNotSaved = "Couldn't save that setting. Your previous choice was kept."
-            override val storageProblem = "Couldn't finish that because storage had a problem. Check free space and try again."
+            override val storageProblem = "Couldn't finish that. Check free space and your connection, then try again."
             override val fetchingCatalogs = "Fetching high-resolution wallpapers from online catalogs…"
             override fun scheduleEnabled(modeLabel: String) = "Automatic wallpaper schedule enabled ($modeLabel)"
             override fun syncInterrupted(reason: String?) = "Online sync interrupted: ${reason ?: "check connection"}"

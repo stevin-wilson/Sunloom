@@ -149,7 +149,7 @@
     <!-- Status messages built by the ViewModel (see UiStrings) -->
     <string name="msg_loading_library">Loading wallpaper library…</string>
     <string name="msg_manual_mode_enabled">Manual mode enabled — click Next Wallpaper whenever you\'d like a change</string>
-    <string name="msg_storage_problem">Couldn\'t finish that because storage had a problem. Check free space and try again.</string>
+    <string name="msg_storage_problem">Couldn\'t finish that. Check free space and your connection, then try again.</string>
     <string name="msg_setting_not_saved">Couldn\'t save that setting. Your previous choice was kept.</string>
     <string name="msg_fetching_catalogs">Fetching high-resolution wallpapers from online catalogs…</string>
     <string name="msg_schedule_enabled">Automatic wallpaper schedule enabled (%1$s)</string>

@@ -77,9 +77,10 @@ class SunloomWallpaperScheduler(
             preferences.isPaused,
             preferences.scheduleMode == ScheduleMode.MANUAL_ONLY
         )
+        // If WorkManager cannot be queried, assume something is pending: replacing a valid request is worse than waiting.
         val pending = runCatching {
             workManager.getWorkInfosForUniqueWork(WORK_NAME_CHANGE).get().any { !it.state.isFinished }
-        }.getOrDefault(false)
+        }.getOrDefault(true)
         if (plan.scheduleChanges && pending) {
             // The change is armed; the periodic refresh uses KEEP, so re-syncing it is harmless and restores it too.
             syncRefreshOnly(preferences)
