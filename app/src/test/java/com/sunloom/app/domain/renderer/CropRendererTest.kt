@@ -269,4 +269,51 @@ class CropRendererTest {
         assertTrue(CropRenderer.canSourceSatisfyDisplay(1686, uwqhd, allowBlurredFrameFill = true))
         assertTrue(CropRenderer.canSourceSatisfyDisplay(1686, retinaLaptop, allowBlurredFrameFill = false))
     }
+
+    private fun sliceOf(canvasW: Int, canvasH: Int, displayAspect: Double): Triple<Int, Int, Int> {
+        val (w, h) = if (canvasW.toDouble() / canvasH >= displayAspect) {
+            Math.round(canvasH * displayAspect).toInt().coerceIn(1, canvasW) to canvasH
+        } else {
+            canvasW to Math.round(canvasW / displayAspect).toInt().coerceIn(1, canvasH)
+        }
+        return Triple((canvasW - w) / 2, w, h)
+    }
+
+    @Test
+    fun `blurred fill on a single display fits the picture inside that display`() {
+        val laptop = DisplayProfile(0, "Laptop", 2560, 1600)
+        val layout = CropRenderer.blurredFillLayout(4000, 3000, listOf(laptop))
+
+        assertEquals(2560, layout.canvasWidth)
+        assertEquals(1600, layout.canvasHeight)
+        assertEquals(1600, layout.fgHeight)
+        assertEquals(2133, layout.fgWidth)
+    }
+
+    @Test
+    fun `blurred fill keeps the whole picture inside every display's centre-crop`() {
+        val laptop = DisplayProfile(0, "Laptop", 2560, 1600)
+        val ultrawide = DisplayProfile(1, "Ultrawide", 3440, 1440)
+        val sourceShapes = listOf(4000 to 3000, 3000 to 4000, 6000 to 2000, 1000 to 1000)
+
+        for ((srcW, srcH) in sourceShapes) {
+            val layout = CropRenderer.blurredFillLayout(srcW, srcH, listOf(laptop, ultrawide))
+            for (d in listOf(laptop, ultrawide)) {
+                val (sliceLeft, sliceW, sliceH) = sliceOf(layout.canvasWidth, layout.canvasHeight, d.aspectRatio)
+                val sliceTop = (layout.canvasHeight - sliceH) / 2
+                assertTrue("$srcW×$srcH left edge on ${d.name}", layout.fgLeft >= sliceLeft)
+                assertTrue("$srcW×$srcH right edge on ${d.name}", layout.fgLeft + layout.fgWidth <= sliceLeft + sliceW)
+                assertTrue("$srcW×$srcH top edge on ${d.name}", layout.fgTop >= sliceTop)
+                assertTrue("$srcW×$srcH bottom edge on ${d.name}", layout.fgTop + layout.fgHeight <= sliceTop + sliceH)
+            }
+        }
+    }
+
+    @Test
+    fun `blurred fill never stretches the picture`() {
+        val layout = CropRenderer.blurredFillLayout(
+            4000, 3000, listOf(DisplayProfile(0, "Laptop", 2560, 1600), DisplayProfile(1, "Ultrawide", 3440, 1440))
+        )
+        assertEquals(4.0 / 3.0, layout.fgWidth.toDouble() / layout.fgHeight, 0.01)
+    }
 }

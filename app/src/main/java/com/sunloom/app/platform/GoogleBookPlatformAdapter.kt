@@ -334,13 +334,7 @@ class GoogleBookPlatformAdapter(
         val allowBlurred = record.provenance.sourceId == "user_local" ||
             record.evaluation.cropRect?.usesBlurredFrameFill == true
 
-        val envelopePlan: EnvelopePlan? = if (
-            !record.isBaselineRestore &&
-            record.provenance.sourceId != "seed_reserve" &&
-            record.provenance.originalWidth > 0 &&
-            record.provenance.originalHeight > 0 &&
-            !(record.provenance.sourceId == "user_local" && record.evaluation.cropRect?.usesBlurredFrameFill == true)
-        ) {
+        val envelopePlan: EnvelopePlan? = if (canPlanEnvelope(record)) {
             envelopePlanner.planEnvelope(
                 sourceWidth = record.provenance.originalWidth,
                 sourceHeight = record.provenance.originalHeight,
@@ -370,13 +364,18 @@ class GoogleBookPlatformAdapter(
 
         var preparedBitmap: Bitmap? = null
         val applied = try {
-            preparedBitmap = if (envelopePlan != null) {
-                prepareEnvelopeBitmap(source = sourceBitmap, plan = envelopePlan, fallbackDisplay = effectiveDisplay)
-            } else {
-                prepareNonStretchedBitmap(
+            preparedBitmap = when {
+                envelopePlan != null ->
+                    prepareEnvelopeBitmap(source = sourceBitmap, plan = envelopePlan, fallbackDisplay = effectiveDisplay)
+                // A bundled seed is rendered for the whole display set (as wide as the widest and as tall as the
+                // tallest), so it is applied as stored: cropping it to the largest display's aspect would cut the
+                // height other displays need and soften them.
+                isSharedSeed(record, effectiveDisplays) -> sourceBitmap
+                else -> prepareNonStretchedBitmap(
                     source = sourceBitmap,
                     display = effectiveDisplay,
-                    cropRect = record.evaluation.cropRect
+                    cropRect = record.evaluation.cropRect,
+                    displays = effectiveDisplays
                 )
             }
 
@@ -401,6 +400,15 @@ class GoogleBookPlatformAdapter(
             else -> WallpaperStatus.FAILED_TEMPORARILY
         }
     }
+
+    /** Fetched and imported pictures are planned per display set; seeds and the baseline copy are not. */
+    private fun canPlanEnvelope(record: WallpaperRecord): Boolean {
+        val rendered = record.isBaselineRestore || record.provenance.sourceId == "seed_reserve"
+        return !rendered && record.provenance.originalWidth > 0 && record.provenance.originalHeight > 0
+    }
+
+    private fun isSharedSeed(record: WallpaperRecord, displays: List<DisplayProfile>): Boolean =
+        record.provenance.sourceId == "seed_reserve" && displays.size > 1
 
     @SuppressLint("ExifInterface")
     private fun decodeBitmapBounded(file: File, targetWidthPx: Int, targetHeightPx: Int): Bitmap? {
@@ -468,7 +476,7 @@ class GoogleBookPlatformAdapter(
         fallbackDisplay: DisplayProfile
     ): Bitmap {
         if (plan.envelopeCrop.usesBlurredFrameFill) {
-            return renderBlurredFrameFillBitmap(source, fallbackDisplay)
+            return renderBlurredFrameFillBitmap(source, fallbackDisplay, plan.satisfiedDisplays)
         }
         val srcW = source.width.coerceAtLeast(1)
         val srcH = source.height.coerceAtLeast(1)
@@ -505,13 +513,14 @@ class GoogleBookPlatformAdapter(
     fun prepareNonStretchedBitmap(
         source: Bitmap,
         display: DisplayProfile,
-        cropRect: CropRect? = null
+        cropRect: CropRect? = null,
+        displays: List<DisplayProfile> = listOf(display)
     ): Bitmap {
         val srcW = source.width.coerceAtLeast(1)
         val srcH = source.height.coerceAtLeast(1)
 
         if (cropRect != null && cropRect.usesBlurredFrameFill) {
-            return renderBlurredFrameFillBitmap(source, display)
+            return renderBlurredFrameFillBitmap(source, display, displays)
         }
 
         val bounds = cropRenderer.computeAspectCropBounds(
@@ -542,15 +551,18 @@ class GoogleBookPlatformAdapter(
      * Renders a blurred, darkened ambient frame extension behind the unstretched foreground image
      * when `usesBlurredFrameFill == true` (Article IV §4).
      */
-    fun renderBlurredFrameFillBitmap(source: Bitmap, display: DisplayProfile): Bitmap {
-        val (outW, outH) = CropRenderer.budgetedSize(
-            display.widthPx.coerceAtLeast(64),
-            display.heightPx.coerceAtLeast(64)
-        )
+    fun renderBlurredFrameFillBitmap(
+        source: Bitmap,
+        display: DisplayProfile,
+        displays: List<DisplayProfile> = listOf(display)
+    ): Bitmap {
+        val layout = CropRenderer.blurredFillLayout(source.width, source.height, displays.ifEmpty { listOf(display) })
+        val outW = layout.canvasWidth
+        val outH = layout.canvasHeight
         val canvasBmp = createBitmap(outW, outH)
         val canvas = Canvas(canvasBmp)
 
-        // 1. Create low-res blurred + darkened background fill matching display aspect ratio
+        // 1. Create low-res blurred + darkened background fill matching the canvas aspect ratio
         val (rawBlurW, rawBlurH) = CropRenderer.budgetedSize(outW, outH, maxPixels = 2304)
         val blurW = rawBlurW.coerceAtLeast(16)
         val blurH = rawBlurH.coerceAtLeast(16)
@@ -561,13 +573,8 @@ class GoogleBookPlatformAdapter(
         canvas.drawBitmap(tiny, null, bgRect, paint)
         if (tiny != source) tiny.recycle()
 
-        // 2. Draw unstretched foreground centered proportionally inside outW x outH
-        val scale = min(outW.toDouble() / source.width.coerceAtLeast(1), outH.toDouble() / source.height.coerceAtLeast(1))
-        val fgW = (source.width * scale).roundToInt().coerceIn(1, outW)
-        val fgH = (source.height * scale).roundToInt().coerceIn(1, outH)
-        val fgLeft = (outW - fgW) / 2
-        val fgTop = (outH - fgH) / 2
-        val fgRect = Rect(fgLeft, fgTop, fgLeft + fgW, fgTop + fgH)
+        // 2. Draw the unstretched foreground where every display's centre-crop still shows all of it
+        val fgRect = Rect(layout.fgLeft, layout.fgTop, layout.fgLeft + layout.fgWidth, layout.fgTop + layout.fgHeight)
         canvas.drawBitmap(source, null, fgRect, paint)
 
         return canvasBmp

@@ -1220,9 +1220,17 @@ class LocalLibraryRepository(
         val ghostRows = allActiveWallpapers
             .filter { !it.isBaselineRestore && !hasUsableFile(it) }
             .associateBy { it.id }
-        val existingIds = allActiveWallpapers.filter { it.id !in ghostRows }.map { it.id }.toMutableSet()
+        // An image downloaded too small for the connected displays is paused, not lost. If the source later
+        // offers a larger rendition of it, it is fetched again like a missing file (below); until then it only
+        // waits. Both kinds of row are left out of the duplicate and creator-cap checks, which would otherwise
+        // refuse the new copy as a duplicate of its own old row.
+        val pausedRows = allActiveWallpapers
+            .filter { it.id !in ghostRows && isPausedForResolution(it) }
+            .associateBy { it.id }
+        val redownloadRows = ghostRows + pausedRows
+        val existingIds = allActiveWallpapers.filter { it.id !in redownloadRows }.map { it.id }.toMutableSet()
         val diversityGuard = LibraryDiversityGuard(
-            allActiveWallpapers.filter { it.id !in ghostRows && !it.isBaselineRestore }
+            allActiveWallpapers.filter { it.id !in redownloadRows && !it.isBaselineRestore }
         )
         val unseenDarkCount = allActiveWallpapers.count {
             it.id !in ghostRows &&
@@ -1325,6 +1333,12 @@ class LocalLibraryRepository(
 
             candidateLoop@ for (candidate in candidates) {
                 coroutineContext.ensureActive()
+                pausedRows[candidate.id]?.let { previous ->
+                    if (!offersLargerRendition(candidate, previous)) {
+                        alreadyHad++
+                        continue@candidateLoop
+                    }
+                }
                 if (candidate.id in existingIds ||
                     candidate.id in permanentlyBlockedIds ||
                     candidate.id in displayScopedRejectedIds
@@ -1600,7 +1614,7 @@ class LocalLibraryRepository(
                         status = WallpaperStatus.PREPARED,
                         decisionExplanation = "Safety Gate: ${approved.auditNotes.joinToString("; ")}. Evaluator: ${finalEval.explanation}"
                     ).let { fresh ->
-                        ghostRows[candidate.id]?.let { previous ->
+                        redownloadRows[candidate.id]?.let { previous ->
                             fresh.copy(
                                 isFavorite = previous.isFavorite,
                                 appliedCount = previous.appliedCount,
@@ -1614,6 +1628,10 @@ class LocalLibraryRepository(
                         runCatching { outFile.delete() } // do not leave an image no row refers to
                         throw e
                     }
+                    // A larger rendition may use another file type; the old copy is no longer referenced.
+                    pausedRows[candidate.id]?.localFilePath
+                        ?.takeIf { it.isNotBlank() && it != outFile.absolutePath }
+                        ?.let { runCatching { File(it).delete() } }
                     existingIds.add(candidate.id)
                     diversityGuard.noteAdded(adapter.sourceId, candidate.provenance.creatorName, dHash)
                     newlyAdded++
@@ -1652,6 +1670,23 @@ class LocalLibraryRepository(
         return com.sunloom.app.domain.matcher.ReserveBuffer.needsTopUp(
             usable, preferences.enabledCategories, bytes, preferences.maxCacheBytes
         )
+    }
+
+    /** A fetched picture kept on disk but paused because it is too small for the connected displays. */
+    private fun isPausedForResolution(record: WallpaperRecord): Boolean =
+        !record.isRejected &&
+            !record.isBaselineRestore &&
+            record.provenance.sourceId != "seed_reserve" &&
+            record.provenance.sourceId != "user_local" &&
+            !record.evaluation.isEligible &&
+            record.evaluation.rejectionReasonCode == "RESOLUTION_BELOW_DISPLAY_TARGET" &&
+            hasUsableFile(record)
+
+    /** Whether the source now advertises more pixels than the copy we hold, so fetching it again can help. */
+    private fun offersLargerRendition(candidate: CandidateAsset, held: WallpaperRecord): Boolean {
+        val advertised = candidate.provenance.originalWidth.toLong() * candidate.provenance.originalHeight
+        val heldPixels = held.provenance.originalWidth.toLong() * held.provenance.originalHeight
+        return advertised > 0L && advertised > heldPixels
     }
 
     /** True when the record still has a readable, non-empty image file on disk. */

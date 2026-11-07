@@ -125,6 +125,34 @@ class GoogleBookPlatformAdapterTest {
     }
 
     @Test
+    fun `a seed on several displays is applied at its stored envelope, not cropped to the largest display`() {
+        val laptop = DisplayProfile(0, "GoogleBook Primary", 2560, 1600, isPrimary = true)
+        val ultrawide = DisplayProfile(1, "External Ultrawide", 3440, 1440, isPrimary = false)
+        val displays = listOf(laptop, ultrawide)
+        val fakeGateway = FakeWallpaperGateway(displays = displays)
+        val adapter = GoogleBookPlatformAdapter(context, fakeGateway)
+
+        val seed = repository.ensureSeedReserveLoadedForDisplays(displays).first { it.provenance.sourceId == "seed_reserve" }
+        val stored = android.graphics.BitmapFactory.decodeFile(seed.localFilePath)
+        val storedAspect = stored.width.toDouble() / stored.height
+        stored.recycle()
+
+        val status = adapter.applyWallpaperAtomically(
+            record = seed,
+            policy = LockWorkspacePolicy.SAME_ON_BOTH,
+            targetDisplay = ultrawide,
+            connectedDisplays = displays
+        )
+
+        assertEquals(WallpaperStatus.APPLIED_SUCCESSFULLY, status)
+        // 3440×1600 keeps the laptop's full height; cropping to the ultrawide's 21:9 would soften the laptop.
+        val appliedAspect = fakeGateway.lastAppliedWidth.toDouble() / fakeGateway.lastAppliedHeight
+        assertEquals(storedAspect, appliedAspect, 0.02)
+        assertTrue("narrower than the ultrawide's 21:9: $appliedAspect", appliedAspect < ultrawide.aspectRatio - 0.1)
+        assertTrue("wider than the laptop's 16:10: $appliedAspect", appliedAspect > laptop.aspectRatio + 0.1)
+    }
+
+    @Test
     fun `applyWallpaperAtomically returns UNSUPPORTED_BY_SYSTEM when OS forbids wallpaper changes`() {
         val restrictedGateway = FakeWallpaperGateway(supported = false, allowed = false)
         val adapter = GoogleBookPlatformAdapter(context, restrictedGateway)
@@ -359,7 +387,9 @@ class GoogleBookPlatformAdapterTest {
             dockedState.currentWallpaper?.id != "artic-dock-test"
         )
         val appliedAspect = dynamicWallpaperGateway.lastWidth.toDouble() / dynamicWallpaperGateway.lastHeight.toDouble()
-        assertEquals(3440.0 / 1440.0, appliedAspect, 0.02)
+        // A seed is applied as the shared envelope it was rendered at (3440×1600: as wide as the ultrawide and as
+        // tall as the laptop), so both displays keep their native pixels. It lies between their 16:10 and 21:9.
+        assertEquals(3440.0 / 1600.0, appliedAspect, 0.02)
     }
 
     @Test
