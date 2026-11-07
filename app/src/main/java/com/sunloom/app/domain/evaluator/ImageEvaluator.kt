@@ -78,7 +78,7 @@ class ImageEvaluator(
             val floorDesc = when (display.qualityTier) {
                 DisplayQualityTier.HIGH_65 -> "65% high-DPI floor (>= 1600px long edge)"
                 DisplayQualityTier.MID_80 -> "80% mid-PPI floor (120–209 PPI)"
-                DisplayQualityTier.STANDARD_100 -> "100% native pixel floor"
+                DisplayQualityTier.STANDARD_100 -> "98% native pixel floor"
             }
             return rejected(
                 "INSUFFICIENT_POST_CROP_RESOLUTION",
@@ -206,8 +206,10 @@ class ImageEvaluator(
         val fillNote = when {
             cropRect.usesBlurredFrameFill ->
                 "Prepared with user-approved blurred frame extension (${coveragePct}% native core)."
-            coveragePct >= 100 ->
+            cropRect.pixelCoverageRatio >= 1.0 - 1e-4 ->
                 "100% native pixel coverage (${cropRect.width} × ${cropRect.height} crop for ${display.resolutionLabel})."
+            display.qualityTier == DisplayQualityTier.STANDARD_100 ->
+                "${coveragePct}% native pixel coverage (${cropRect.width} × ${cropRect.height} crop for ${display.resolutionLabel}; passes >= 98% native floor)."
             display.qualityTier == DisplayQualityTier.MID_80 ->
                 "${coveragePct}% native pixel coverage (${cropRect.width} × ${cropRect.height} crop for ${display.resolutionLabel}; passes >= 80% mid-PPI floor)."
             else ->

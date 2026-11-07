@@ -21,7 +21,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +30,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.sunloom.app.BuildConfig
 import com.sunloom.app.R
@@ -119,7 +119,7 @@ class MainActivity : ComponentActivity() {
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return MainViewModel(gateway) as T
+                    return MainViewModel(gateway, strings = AndroidUiStrings(applicationContext)) as T
                 }
             }
         )[MainViewModel::class.java]
@@ -130,7 +130,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null && !intent.isFromHistory()) importFromIntent(intent)
 
         setContent {
-            val uiState by viewModel.uiState.collectAsState()
+            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
             var pickingAsBaselineRestore by remember { mutableStateOf(false) }
 
             val photoPickerLauncher = rememberLauncherForActivityResult(
@@ -143,46 +143,48 @@ class MainActivity : ComponentActivity() {
 
             SunloomApp(
                 uiState = uiState,
-                onCompleteSetup = { viewModel.completeFirstRunSetup(it) },
-                onSelectTab = { viewModel.selectTab(it) },
-                onNextWallpaper = { viewModel.triggerNextWallpaperSmart() },
-                onPreviousWallpaper = { viewModel.returnToPreviousWallpaper() },
-                onToggleKeep = { viewModel.toggleKeepCurrentWallpaper() },
-                onRejectForever = { viewModel.dislikeCurrentWithUndo() },
-                onUndoDiscard = { viewModel.undoPendingDiscard() },
-                onCommitDiscard = { viewModel.commitPendingDiscard() },
-                onTogglePause = { viewModel.togglePauseAutomation() },
-                onRestoreOriginal = { viewModel.restoreOriginalBaselineWallpaper() },
-                onRestoreSystemDefault = { viewModel.restoreSystemDefaultWallpaper() },
-                onApplySpecific = { viewModel.applySpecificWallpaper(it) },
-                onDeleteFromReserve = { viewModel.removeFromReserveWithUndo(it) },
-                onToggleKeepSpecific = { viewModel.toggleKeepSpecificWallpaper(it) },
-                onToggleLegibilityOverlay = { viewModel.toggleLegibilityOverlay() },
-                onSyncOnline = { viewModel.triggerOnlineSync() },
-                onToggleCategory = { viewModel.toggleCategory(it) },
-                onToggleSource = { viewModel.toggleSource(it) },
-                onSelectCity = { viewModel.selectCity(it) },
-                onUpdateScheduleMode = { mode -> viewModel.updatePreferences { it.copy(scheduleMode = mode) } },
-                onUpdateLockPolicy = { pol -> viewModel.updatePreferences { it.copy(lockWorkspacePolicy = pol) } },
-                onToggleBlurredFill = { fill -> viewModel.updatePreferences { it.copy(allowBlurredFrameFill = fill) } },
-                onToggleWifiOnly = { wifi -> viewModel.updatePreferences { it.copy(wifiOnlyDownloads = wifi) } },
-                onUpdateFixedHours = { lightH, darkH -> viewModel.updateFixedHours(lightH, darkH) },
-                onUpdateCustomCoordinates = { lat, lon, label -> viewModel.updateCustomCoordinates(lat, lon, label) },
-                onUpdateMaxCacheBytes = { bytes -> viewModel.updateMaxCacheBytes(bytes) },
-                onToggleBatterySaverDeferral = { enabled -> viewModel.toggleBatterySaverDeferral(enabled) },
-                onUpdateDisplayPolicy = { pol -> viewModel.updateDisplayPolicy(pol) },
-                onForgetRememberedDisplay = { key -> viewModel.forgetRememberedDisplay(key) },
                 isFullscreen = isFullscreen,
-                onToggleFullscreen = { applyFullscreen(!isFullscreen) },
-                onDropImages = { dragEvent -> importDroppedImages(dragEvent) },
-                onSaveAs = { saveWallpaperAs(it) },
-                onDeleteManyFromReserve = { viewModel.removeManyFromReserveWithUndo(it) },
-                onPickLocalPhoto = { asBaseline ->
-                    pickingAsBaselineRestore = asBaseline
-                    photoPickerLauncher.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                    )
-                }
+                actions = SunloomActions(
+                    onCompleteSetup = { viewModel.completeFirstRunSetup(it) },
+                    onSelectTab = { viewModel.selectTab(it) },
+                    onNextWallpaper = { viewModel.triggerNextWallpaperSmart() },
+                    onPreviousWallpaper = { viewModel.returnToPreviousWallpaper() },
+                    onToggleKeep = { viewModel.toggleKeepCurrentWallpaper() },
+                    onRejectForever = { viewModel.dislikeCurrentWithUndo() },
+                    onUndoDiscard = { viewModel.undoPendingDiscard() },
+                    onCommitDiscard = { viewModel.commitPendingDiscard() },
+                    onTogglePause = { viewModel.togglePauseAutomation() },
+                    onRestoreOriginal = { viewModel.restoreOriginalBaselineWallpaper() },
+                    onRestoreSystemDefault = { viewModel.restoreSystemDefaultWallpaper() },
+                    onApplySpecific = { viewModel.applySpecificWallpaper(it) },
+                    onDeleteFromReserve = { viewModel.removeFromReserveWithUndo(it) },
+                    onToggleKeepSpecific = { viewModel.toggleKeepSpecificWallpaper(it) },
+                    onToggleLegibilityOverlay = { viewModel.toggleLegibilityOverlay() },
+                    onSyncOnline = { viewModel.triggerOnlineSync() },
+                    onToggleCategory = { viewModel.toggleCategory(it) },
+                    onToggleSource = { viewModel.toggleSource(it) },
+                    onSelectCity = { viewModel.selectCity(it) },
+                    onUpdateScheduleMode = { mode -> viewModel.updatePreferences { it.copy(scheduleMode = mode) } },
+                    onUpdateLockPolicy = { pol -> viewModel.updatePreferences { it.copy(lockWorkspacePolicy = pol) } },
+                    onToggleBlurredFill = { fill -> viewModel.updatePreferences { it.copy(allowBlurredFrameFill = fill) } },
+                    onToggleWifiOnly = { wifi -> viewModel.updatePreferences { it.copy(wifiOnlyDownloads = wifi) } },
+                    onUpdateFixedHours = { lightH, darkH -> viewModel.updateFixedHours(lightH, darkH) },
+                    onUpdateCustomCoordinates = { lat, lon, label -> viewModel.updateCustomCoordinates(lat, lon, label) },
+                    onUpdateMaxCacheBytes = { bytes -> viewModel.updateMaxCacheBytes(bytes) },
+                    onToggleBatterySaverDeferral = { enabled -> viewModel.toggleBatterySaverDeferral(enabled) },
+                    onUpdateDisplayPolicy = { pol -> viewModel.updateDisplayPolicy(pol) },
+                    onForgetRememberedDisplay = { key -> viewModel.forgetRememberedDisplay(key) },
+                    onToggleFullscreen = { applyFullscreen(!isFullscreen) },
+                    onDropImages = { dragEvent -> importDroppedImages(dragEvent) },
+                    onSaveAs = { saveWallpaperAs(it) },
+                    onDeleteManyFromReserve = { viewModel.removeManyFromReserveWithUndo(it) },
+                    onPickLocalPhoto = { asBaseline ->
+                        pickingAsBaselineRestore = asBaseline
+                        photoPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }
+                )
             )
         }
     }

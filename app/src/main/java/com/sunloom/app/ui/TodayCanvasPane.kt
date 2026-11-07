@@ -60,7 +60,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -297,7 +296,7 @@ internal fun TodayCanvasPane(
                                             Icon(
                                                 imageVector = if (current?.isFavorite == true) SunloomIcons.Favorite else SunloomIcons.FavoriteBorder,
                                                 contentDescription = if (current?.isFavorite == true) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
-                                                tint = if (current?.isFavorite == true) Color(0xFFF43F5E) else MaterialTheme.colorScheme.onSurface,
+                                                tint = if (current?.isFavorite == true) SunloomColors.Favorite else MaterialTheme.colorScheme.onSurface,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
@@ -539,9 +538,9 @@ fun WallpaperPreviewSurface(
 
     val isDark = record.evaluation.brightnessClass == BrightnessClass.DARK
     val fallbackBrush = if (isDark) {
-        Brush.verticalGradient(listOf(Color(0xFF0B1120), Color(0xFF1E1B4B), Color(0xFF0F172A)))
+        SunloomColors.PreviewFallbackDark
     } else {
-        Brush.verticalGradient(listOf(Color(0xFFBAE6FD), Color(0xFFE0F2FE), Color(0xFFFDE68A)))
+        SunloomColors.PreviewFallbackLight
     }
 
     Box(
@@ -565,22 +564,22 @@ fun WallpaperPreviewSurface(
                 val w = size.width
                 val h = size.height
                 drawRect(
-                    color = Color(0x5538BDF8),
+                    color = SunloomColors.ZoneBars,
                     topLeft = Offset(0f, 0f),
                     size = Size(w, h * 0.10f)
                 )
                 drawRect(
-                    color = Color(0x55F59E0B),
+                    color = SunloomColors.ZoneClock,
                     topLeft = Offset(w * 0.25f, h * 0.10f),
                     size = Size(w * 0.50f, h * 0.28f)
                 )
                 drawRect(
-                    color = Color(0x5538BDF8),
+                    color = SunloomColors.ZoneBars,
                     topLeft = Offset(0f, h * 0.88f),
                     size = Size(w, h * 0.12f)
                 )
                 drawRect(
-                    color = Color(0x44818CF8),
+                    color = SunloomColors.ZoneSide,
                     topLeft = Offset(0f, h * 0.10f),
                     size = Size(w * 0.15f, h * 0.78f)
                 )
@@ -589,7 +588,7 @@ fun WallpaperPreviewSurface(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 24.dp)
-                    .background(Color(0xAA0F172A), RoundedCornerShape(8.dp))
+                    .background(SunloomColors.ZoneCaptionBackdrop, RoundedCornerShape(8.dp))
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Text(

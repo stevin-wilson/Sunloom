@@ -211,3 +211,24 @@ class DesktopInputTest {
         assertEquals(null, tabForCtrlShortcut(Key.N))
     }
 }
+
+/** Article XII §4: Back steps out of a section to Home before it leaves the app, like Esc steps out of a context. */
+class BackNavigationTest {
+
+    @Test
+    fun `back on any section other than Home goes to Home`() {
+        for (tab in DesktopNavTab.entries.filter { it != DesktopNavTab.TODAY_CANVAS }) {
+            org.junit.Assert.assertEquals(DesktopNavTab.TODAY_CANVAS, tabAfterBack(tab, workspaceReady = true))
+        }
+    }
+
+    @Test
+    fun `back on Home is left to the system so it can leave the app`() {
+        org.junit.Assert.assertNull(tabAfterBack(DesktopNavTab.TODAY_CANVAS, workspaceReady = true))
+    }
+
+    @Test
+    fun `back during loading or first-run setup is left to the system`() {
+        org.junit.Assert.assertNull(tabAfterBack(DesktopNavTab.RESERVE_AND_HISTORY, workspaceReady = false))
+    }
+}

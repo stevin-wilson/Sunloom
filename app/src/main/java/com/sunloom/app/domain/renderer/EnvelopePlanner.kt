@@ -98,7 +98,7 @@ class EnvelopePlanner(
         // Standard compatible multi-monitor sets (e.g. 16:10 laptop + 21:9 UWQHD or 16:9 4K) are NOT
         // outliers, so low-resolution images are properly rejected rather than shown blurry on externals.
         val anchor = validDisplays.firstOrNull { it.isPrimary }
-            ?: validDisplays.maxByOrNull { it.widthPx.toLong() * it.heightPx.toLong() }!!
+            ?: validDisplays.maxBy { it.widthPx.toLong() * it.heightPx.toLong() }
         val excludableIds = validDisplays
             .filter { d -> d.displayId != anchor.displayId && isIncompatibleOutlierDisplay(d, anchor) }
             .map { it.displayId }
@@ -135,7 +135,7 @@ class EnvelopePlanner(
                 ) != null
             }
             if (allPassBlurred) {
-                val sharpest = coreDisplays.maxByOrNull { it.widthPx.toLong() * it.heightPx.toLong() }!!
+                val sharpest = coreDisplays.maxBy { it.widthPx.toLong() * it.heightPx.toLong() }
                 val (outW, outH) = CropRenderer.budgetedSize(sharpest.widthPx, sharpest.heightPx)
                 val perDisplay = coreDisplays.associate { d ->
                     val cov = min(

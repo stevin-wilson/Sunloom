@@ -353,7 +353,7 @@ class SafetyGate {
         )
 
         const val GATE_VERSION = "v0.6.0"
-        const val EVALUATOR_VERSION = "eval-v5"
+        const val EVALUATOR_VERSION = "eval-v6"
         const val BLOCKLIST_SCHEMA_VERSION = "bl-v2"
         val COMPOSITE_GATE_VERSION: String =
             "$GATE_VERSION:${SafetyDenylist.DENYLIST_VERSION}:$EVALUATOR_VERSION:$BLOCKLIST_SCHEMA_VERSION"

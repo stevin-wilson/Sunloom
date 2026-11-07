@@ -656,6 +656,41 @@ class LocalLibraryRepositoryTest {
     }
 
     @Test
+    fun `revalidation without a known display does not stamp records it could not re-evaluate`() {
+        val seeds = repository.ensureSeedReserveLoaded(display)
+        val stale = seeds.first().copy(
+            id = "stale-eval",
+            rawCategoriesAndTags = listOf("landscape", "mountain"),
+            provenance = seeds.first().provenance.copy(
+                sourceId = "wikimedia_featured",
+                assetId = "stale-eval",
+                perceptualHash = "",
+                safetyGateVersion = "v0.1.0"
+            )
+        )
+        repository.upsertWallpaper(stale)
+
+        // No display: the safety layers still run, but the brightness/crop evaluation needs a display.
+        assertEquals(0, repository.revalidateGateVersionIfNeeded(display = null))
+        assertTrue(
+            "the hash worked out on the way is kept, so the near-duplicate guard has it",
+            repository.getWallpaperById("stale-eval")!!.provenance.perceptualHash.isNotBlank()
+        )
+        assertEquals(
+            "still marked as needing re-evaluation",
+            "v0.1.0",
+            repository.getWallpaperById("stale-eval")!!.provenance.safetyGateVersion
+        )
+
+        // Once a display is known the record is evaluated and stamped.
+        assertEquals(0, repository.revalidateGateVersionIfNeeded(display))
+        assertEquals(
+            com.sunloom.app.domain.safety.SafetyGate.COMPOSITE_GATE_VERSION,
+            repository.getWallpaperById("stale-eval")!!.provenance.safetyGateVersion
+        )
+    }
+
+    @Test
     fun `revalidateGateVersionIfNeeded re-runs L3 and L4 on local bytes and never fakes recordWallpaperApplied on replacement`() {
         val seeds = repository.ensureSeedReserveLoaded(display)
         val corruptFile = File(repository.wallpaperDir, "corrupt-reval.jpg").apply {

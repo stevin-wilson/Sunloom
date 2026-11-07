@@ -104,6 +104,24 @@ class WorkerResultMappingTest {
     }
 
     @Test
+    fun change_outOfMemoryIsRetriedAndRearmedLikeAnyOtherFailure() {
+        var rearmed = 0
+        fun run(attempt: Int) =
+            runBlocking { mapChangeWorkResult(attempt, { throw OutOfMemoryError("bitmap") }, onGiveUp = { rearmed++ }) { } }
+
+        assertEquals(Result.retry(), run(0))
+        assertEquals(0, rearmed)
+        assertEquals(Result.failure(), run(3))
+        assertEquals("the schedule is re-armed so automation does not silently stop", 1, rearmed)
+    }
+
+    @Test
+    fun refresh_outOfMemoryDoesNotEscapeTheWorker() {
+        assertEquals(Result.retry(), refresh(0) { throw OutOfMemoryError("download") })
+        assertEquals(Result.success(), refresh(2) { throw OutOfMemoryError("download") })
+    }
+
+    @Test
     fun change_rearmsScheduleOnlyWhenRetriesAreExhausted() {
         var rearmed = 0
         fun run(attempt: Int, exec: suspend () -> WallpaperStatus?) =

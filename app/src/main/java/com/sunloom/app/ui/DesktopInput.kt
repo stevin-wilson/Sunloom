@@ -115,6 +115,13 @@ fun Modifier.dismissOnEscape(onDismiss: () -> Unit): Modifier = onPreviewKeyEven
  */
 val LocalRestoreRootFocus = staticCompositionLocalOf<() -> Unit> { {} }
 
+/**
+ * Where system Back should go: from any section other than Home to Home, so Back steps out of a section before it
+ * leaves the app. Null means "not ours": on Home, or while loading or in first-run setup, the system decides.
+ */
+internal fun tabAfterBack(active: DesktopNavTab, workspaceReady: Boolean): DesktopNavTab? =
+    if (workspaceReady && active != DesktopNavTab.TODAY_CANVAS) DesktopNavTab.TODAY_CANVAS else null
+
 /** Maps Ctrl+1..5 to the workspace tab at that position, or null for any other key. */
 internal fun tabForCtrlShortcut(key: Key): DesktopNavTab? {
     val index = when (key) {

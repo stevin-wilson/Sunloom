@@ -255,6 +255,19 @@ class LocalLibrarySyncTest {
     }
 
     @Test
+    fun `a source that dies with a JVM error is recorded as failed and the other sources still sync`() = kotlinx.coroutines.test.runTest {
+        val broken = FixedAdapter("cma_cc0", emptyList()) { throw StackOverflowError("deeply nested JSON") }
+        val healthy = FixedAdapter("artic_cc0", listOf(candidate("after-crash")))
+        val repo = repo(broken, healthy)
+
+        assertEquals(1, repo.refreshOnlineCatalog(display))
+
+        assertEquals(1, repo.lastSyncFailedSources)
+        assertEquals(1, repo.getSourceDiagnostics().single { it.sourceId == "cma_cc0" }.consecutiveFailures)
+        assertNotNull(repo.getWallpaperById("after-crash"))
+    }
+
+    @Test
     fun `each source advances its own cursor and keeps going past 48`() = kotlinx.coroutines.test.runTest {
         rawPrefs.edit().putInt("fetch_cursor_artic_cc0", 48).putInt("fetch_cursor_cma_cc0", 100).commit()
         val articOffsets = mutableListOf<Int>()
@@ -347,6 +360,25 @@ class LocalLibrarySyncTest {
         assertNotNull(repo.getWallpaperById("orig-1"))
         assertEquals(null, repo.getWallpaperById("copy-1"))
         assertTrue(repo.getAllRejections().any { it.assetId == "copy-1" && it.reasonCode == "NEAR_DUPLICATE_OF_LIBRARY" && !it.isPermanent })
+    }
+
+    @Test
+    fun `an accepted image is moved out of quarantine with its bytes intact and nothing is left behind`() = kotlinx.coroutines.test.runTest {
+        var downloaded: ByteArray? = null
+        val capturing = object : HttpClient {
+            override suspend fun getText(url: String): String = "{}"
+            override suspend fun getBytes(url: String, maxBytes: Int): ByteArray =
+                jpegFor(imageKey(url)).also { downloaded = it }
+        }
+        val repo = repo(FixedAdapter("artic_cc0", listOf(candidate("moved-1"))), client = capturing)
+        assertEquals(1, repo.refreshOnlineCatalog(display))
+
+        val stored = repo.getWallpaperById("moved-1")!!
+        val file = java.io.File(stored.localFilePath)
+        assertTrue(file.exists())
+        assertEquals(stored.fileSizeBytes, file.length())
+        assertTrue("stored bytes are exactly the downloaded bytes", file.readBytes().contentEquals(downloaded!!))
+        assertEquals("quarantine is empty afterwards", 0, repo.quarantineDir.listFiles().orEmpty().size)
     }
 
     @Test
@@ -569,5 +601,22 @@ class LocalLibrarySyncTest {
         repo.upsertWallpaper(row.copy(provenance = row.provenance.copy(sourceId = "user_local")))
         assertEquals(0, repo.healMissingFiles())
         assertEquals(row.localFilePath, repo.getWallpaperById("mine-1")!!.localFilePath)
+    }
+
+    @Test
+    fun `healing does not overwrite a record that was just re-downloaded`() = kotlinx.coroutines.test.runTest {
+        val base = InMemoryLibraryStore()
+        val repo = LocalLibraryRepository(context = context, httpClient = okClient, sourceAdapters = listOf(FixedAdapter("artic_cc0", listOf(candidate("race-1")))), store = base)
+        repo.refreshOnlineCatalog(display)
+        val fresh = repo.getWallpaperById("race-1")!!
+        // A stale view: the same row as it was before the file was written back.
+        val stale = fresh.copy(localFilePath = "/definitely/missing.jpg")
+        val racingStore = object : LibraryStore by base {
+            override fun getAllWallpapers() = base.getAllWallpapers().map { if (it.id == "race-1") stale else it }
+        }
+        val racing = LocalLibraryRepository(context = context, httpClient = okClient, sourceAdapters = emptyList(), store = racingStore)
+
+        assertEquals(0, racing.healMissingFiles())
+        assertEquals(fresh.localFilePath, base.getWallpaperById("race-1")!!.localFilePath)
     }
 }

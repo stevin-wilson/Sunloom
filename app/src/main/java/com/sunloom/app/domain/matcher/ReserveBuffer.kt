@@ -17,6 +17,9 @@ object ReserveBuffer {
     /** Above this share of the cache cap, new images would only evict others, so fetching pauses. */
     const val CACHE_FULL_FRACTION = 0.9
 
+    /** Unseen fetched images after which fetching stops, however short one mode is: Dark images can be rare. */
+    const val MAX_UNSEEN_STOCK = 100
+
     fun unseenFor(
         records: List<WallpaperRecord>,
         mode: BrightnessClass,
@@ -24,7 +27,7 @@ object ReserveBuffer {
     ): Int = records.count {
         it.isFetchedStock(enabledCategories) &&
             it.appliedCount == 0 &&
-            (it.evaluation.brightnessClass == mode || it.evaluation.brightnessClass == BrightnessClass.NEUTRAL)
+            BrightnessFit.accepts(it.evaluation, mode)
     }
 
     /** All usable fetched stock, seen or not; used to tell whether a fetch round actually added images. */
@@ -38,6 +41,7 @@ object ReserveBuffer {
         maxBytes: Long
     ): Boolean {
         if (maxBytes > 0 && bytesUsed >= maxBytes * CACHE_FULL_FRACTION) return false
+        if (records.count { it.isFetchedStock(enabledCategories) && it.appliedCount == 0 } >= MAX_UNSEEN_STOCK) return false
         return minOf(
             unseenFor(records, BrightnessClass.LIGHT, enabledCategories),
             unseenFor(records, BrightnessClass.DARK, enabledCategories)

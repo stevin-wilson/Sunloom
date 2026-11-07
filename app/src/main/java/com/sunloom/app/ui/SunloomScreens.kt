@@ -1,6 +1,7 @@
 package com.sunloom.app.ui
 
 import com.sunloom.app.R
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -69,8 +70,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -116,81 +115,48 @@ import com.sunloom.app.domain.model.UserPreferences
 import com.sunloom.app.domain.solar.CityCoordinates
 import com.sunloom.app.domain.solar.SolarCalculator
 
-private val SunloomDarkPalette = darkColorScheme(
-    primary = Color(0xFF38BDF8),
-    onPrimary = Color(0xFF082F49),
-    secondary = Color(0xFFF59E0B),
-    onSecondary = Color(0xFF451A03),
-    tertiary = Color(0xFF818CF8),
-    background = Color(0xFF0B1120),
-    surface = Color(0xFF131C31),
-    surfaceVariant = Color(0xFF1E293B),
-    onBackground = Color(0xFFF1F5F9),
-    onSurface = Color(0xFFE2E8F0),
-    onSurfaceVariant = Color(0xFF94A3B8),
-    outline = Color(0xFF64748B),
-    outlineVariant = Color(0xFF334155),
-    error = Color(0xFFF87171)
-)
-
-private val SunloomLightPalette = lightColorScheme(
-    primary = Color(0xFF0369A1),
-    onPrimary = Color(0xFFFFFFFF),
-    secondary = Color(0xFFD97706),
-    onSecondary = Color(0xFFFFFFFF),
-    tertiary = Color(0xFF4F46E5),
-    background = Color(0xFFF8FAFC),
-    surface = Color(0xFFFFFFFF),
-    surfaceVariant = Color(0xFFE2E8F0),
-    onBackground = Color(0xFF0F172A),
-    onSurface = Color(0xFF0F172A),
-    onSurfaceVariant = Color(0xFF475569),
-    outline = Color(0xFF94A3B8),
-    outlineVariant = Color(0xFFCBD5E1),
-    error = Color(0xFFDC2626)
-)
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SunloomApp(
     uiState: SunloomUiState,
-    onCompleteSetup: (UserPreferences) -> Unit,
-    onSelectTab: (DesktopNavTab) -> Unit,
-    onNextWallpaper: () -> Unit,
-    onPreviousWallpaper: () -> Unit,
-    onToggleKeep: () -> Unit,
-    onRejectForever: () -> Unit,
-    onTogglePause: () -> Unit,
-    onRestoreOriginal: () -> Unit,
-    onApplySpecific: (String) -> Unit,
-    onToggleLegibilityOverlay: () -> Unit,
-    onSyncOnline: () -> Unit,
-    onToggleCategory: (SafeCategory) -> Unit,
-    onToggleSource: (String) -> Unit,
-    onSelectCity: (CityCoordinates) -> Unit,
-    onUpdateScheduleMode: (ScheduleMode) -> Unit,
-    onUpdateLockPolicy: (LockWorkspacePolicy) -> Unit,
-    onToggleBlurredFill: (Boolean) -> Unit,
-    onToggleWifiOnly: (Boolean) -> Unit,
-    onPickLocalPhoto: (asBaselineRestore: Boolean) -> Unit,
-    onDeleteFromReserve: (String) -> Unit = {},
-    onToggleKeepSpecific: (String) -> Unit = {},
-    onUpdateFixedHours: (lightHour: Int, darkHour: Int) -> Unit = { _, _ -> },
-    onUpdateCustomCoordinates: (lat: Double, lon: Double, label: String) -> Unit = { _, _, _ -> },
-    onUpdateMaxCacheBytes: (Long) -> Unit = {},
-    onToggleBatterySaverDeferral: (Boolean) -> Unit = {},
-    onUpdateDisplayPolicy: (DisplayPolicy) -> Unit = {},
-    onForgetRememberedDisplay: (String) -> Unit = {},
-    onRestoreSystemDefault: () -> Unit = onRestoreOriginal,
+    actions: SunloomActions,
     isFullscreen: Boolean = false,
-    onToggleFullscreen: () -> Unit = {},
-    onDropImages: (android.view.DragEvent) -> Boolean = { false },
-    onSaveAs: (com.sunloom.app.domain.model.WallpaperRecord) -> Unit = {},
-    onDeleteManyFromReserve: (Collection<String>) -> Unit = { ids -> ids.forEach(onDeleteFromReserve) },
-    onUndoDiscard: () -> Unit = {},
-    onCommitDiscard: () -> Unit = {},
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
+    val onCompleteSetup = actions.onCompleteSetup
+    val onSelectTab = actions.onSelectTab
+    val onNextWallpaper = actions.onNextWallpaper
+    val onPreviousWallpaper = actions.onPreviousWallpaper
+    val onToggleKeep = actions.onToggleKeep
+    val onRejectForever = actions.onRejectForever
+    val onTogglePause = actions.onTogglePause
+    val onRestoreOriginal = actions.onRestoreOriginal
+    val onApplySpecific = actions.onApplySpecific
+    val onToggleLegibilityOverlay = actions.onToggleLegibilityOverlay
+    val onSyncOnline = actions.onSyncOnline
+    val onToggleCategory = actions.onToggleCategory
+    val onToggleSource = actions.onToggleSource
+    val onSelectCity = actions.onSelectCity
+    val onUpdateScheduleMode = actions.onUpdateScheduleMode
+    val onUpdateLockPolicy = actions.onUpdateLockPolicy
+    val onToggleBlurredFill = actions.onToggleBlurredFill
+    val onToggleWifiOnly = actions.onToggleWifiOnly
+    val onPickLocalPhoto = actions.onPickLocalPhoto
+    val onDeleteFromReserve = actions.onDeleteFromReserve
+    val onToggleKeepSpecific = actions.onToggleKeepSpecific
+    val onUpdateFixedHours = actions.onUpdateFixedHours
+    val onUpdateCustomCoordinates = actions.onUpdateCustomCoordinates
+    val onUpdateMaxCacheBytes = actions.onUpdateMaxCacheBytes
+    val onToggleBatterySaverDeferral = actions.onToggleBatterySaverDeferral
+    val onUpdateDisplayPolicy = actions.onUpdateDisplayPolicy
+    val onForgetRememberedDisplay = actions.onForgetRememberedDisplay
+    val onRestoreSystemDefault = actions.onRestoreSystemDefault
+    val onToggleFullscreen = actions.onToggleFullscreen
+    val onDropImages = actions.onDropImages
+    val onSaveAs = actions.onSaveAs
+    val onDeleteManyFromReserve = actions.onDeleteManyFromReserve
+    val onUndoDiscard = actions.onUndoDiscard
+    val onCommitDiscard = actions.onCommitDiscard
     val snackbarHostState = remember { SnackbarHostState() }
     val colorScheme = if (darkTheme) SunloomDarkPalette else SunloomLightPalette
     val shortcutGate = remember { ShortcutGate() }
@@ -198,6 +164,10 @@ fun SunloomApp(
     val workspaceReady = !uiState.isInitialLoading &&
         !uiState.isStorageUnavailable &&
         uiState.preferences.isSetupCompleted
+
+    // System Back steps out of a section to Home before it leaves the app (Article XII §4).
+    val backTarget = tabAfterBack(uiState.activeTab, workspaceReady)
+    BackHandler(enabled = backTarget != null) { backTarget?.let(onSelectTab) }
 
     // Give the root focus once the workspace is usable, and again after the reject dialog
     // closes, so single-key accelerators work without needing a click first.

@@ -13,6 +13,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.sunloom.app.appContainer
 import com.sunloom.app.data.repository.LibraryStoreUnavailableException
 import com.sunloom.app.data.repository.LocalLibraryRepository
 import com.sunloom.app.domain.matcher.TasteProfile
@@ -74,11 +75,11 @@ class SunloomWallpaperScheduler(
         val workManager = runCatching { WorkManager.getInstance(context) }.getOrNull() ?: return
         val schedulePrefs = context.applicationContext.getSharedPreferences("sunloom_preferences", Context.MODE_PRIVATE)
         val effectivePrefs = preferences ?: try {
-            LocalLibraryRepository(context).loadPreferences()
+            context.appContainer().newRepository().loadPreferences()
         } catch (_: LibraryStoreUnavailableException) {
             cancelAllScheduledWork()
             return
-        } catch (_: Throwable) {
+        } catch (_: Exception) {
             null
         }
         val isManualMode = effectivePrefs?.scheduleMode == ScheduleMode.MANUAL_ONLY
@@ -168,7 +169,7 @@ class SunloomWallpaperScheduler(
          */
         suspend fun executeScheduledWallpaperChange(
             appContext: Context,
-            repo: LocalLibraryRepository = LocalLibraryRepository(appContext),
+            repo: LocalLibraryRepository = appContext.appContainer().newRepository(),
             platform: GoogleBookPlatformAdapter = GoogleBookPlatformAdapter(appContext),
             nowZonedOverride: ZonedDateTime? = null
         ): WallpaperStatus? {
@@ -274,8 +275,8 @@ class SunloomWallpaperScheduler(
         /** Re-enqueues the next transition after a change attempt exhausted its retries. */
         fun rearmAfterGivingUp(appContext: Context) {
             val prefs = try {
-                LocalLibraryRepository(appContext).loadPreferences()
-            } catch (_: Throwable) {
+                appContext.appContainer().newRepository().loadPreferences()
+            } catch (_: Exception) {
                 return
             }
             SunloomWallpaperScheduler(appContext).syncPeriodicSchedule(
@@ -293,7 +294,7 @@ class SunloomWallpaperScheduler(
          */
         suspend fun executeScheduledCatalogRefresh(
             appContext: Context,
-            repo: LocalLibraryRepository = LocalLibraryRepository(appContext),
+            repo: LocalLibraryRepository = appContext.appContainer().newRepository(),
             platform: GoogleBookPlatformAdapter = GoogleBookPlatformAdapter(appContext),
             gateway: SystemWallpaperGateway = DefaultSystemWallpaperGateway(appContext)
         ): Int {
@@ -321,7 +322,7 @@ class SunloomWallpaperScheduler(
                 total
             } catch (cancel: CancellationException) {
                 throw cancel
-            } catch (_: Throwable) {
+            } catch (_: Exception) {
                 total
             }
         }
@@ -376,13 +377,12 @@ internal suspend fun mapChangeWorkResult(
     } catch (_: LibraryStoreUnavailableException) {
         onStoreUnavailable()
         ListenableWorker.Result.failure()
-    } catch (_: Throwable) {
-        if (runAttemptCount < 3) {
-            ListenableWorker.Result.retry()
-        } else {
-            runCatching(onGiveUp)
-            ListenableWorker.Result.failure()
-        }
+    } catch (_: Exception) {
+        retryOrGiveUp(runAttemptCount, onGiveUp)
+    } catch (_: VirtualMachineError) {
+        // Out of memory while decoding or rendering is a failed attempt like any other; it must reach the
+        // retry and re-arm logic or the schedule would silently stop.
+        retryOrGiveUp(runAttemptCount, onGiveUp)
     }
 }
 
@@ -400,7 +400,20 @@ internal suspend fun mapRefreshWorkResult(
     } catch (_: LibraryStoreUnavailableException) {
         onStoreUnavailable()
         ListenableWorker.Result.failure()
-    } catch (_: Throwable) {
-        if (runAttemptCount < 2) ListenableWorker.Result.retry() else ListenableWorker.Result.success()
+    } catch (_: Exception) {
+        retryOrSettle(runAttemptCount)
+    } catch (_: VirtualMachineError) {
+        retryOrSettle(runAttemptCount)
     }
 }
+
+private fun retryOrGiveUp(runAttemptCount: Int, onGiveUp: () -> Unit): ListenableWorker.Result =
+    if (runAttemptCount < 3) {
+        ListenableWorker.Result.retry()
+    } else {
+        runCatching(onGiveUp)
+        ListenableWorker.Result.failure()
+    }
+
+private fun retryOrSettle(runAttemptCount: Int): ListenableWorker.Result =
+    if (runAttemptCount < 2) ListenableWorker.Result.retry() else ListenableWorker.Result.success()

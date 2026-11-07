@@ -74,6 +74,7 @@ internal class UserImportPipeline(
             val gridW = 32
             val gridH = 20
             val rgbGrid = sampleBitmapToRgbGrid(bitmap, gridW, gridH)
+            val evalGrid = sampleBitmapToEvaluationGrid(bitmap, gridW, gridH)
             val dHash = SafetyGate.computePerceptualDHashFromPixels(rgbGrid, gridW, gridH)
 
             if (!asBaselineRestore) {
@@ -104,7 +105,7 @@ internal class UserImportPipeline(
             val eval = imageEvaluator.evaluateRgbGrid(
                 imageWidth = srcW,
                 imageHeight = srcH,
-                rgbGrid = rgbGrid,
+                rgbGrid = evalGrid,
                 gridWidth = gridW,
                 gridHeight = gridH,
                 display = display,
@@ -333,6 +334,7 @@ internal class UserImportPipeline(
             val gridW = 32
             val gridH = 20
             val rgbGrid = sampleBitmapToRgbGrid(orientedSample, gridW, gridH)
+            val evalGrid = sampleBitmapToEvaluationGrid(orientedSample, gridW, gridH)
             orientedSample.recycle()
 
             val dHash = SafetyGate.computePerceptualDHashFromPixels(rgbGrid, gridW, gridH)
@@ -356,7 +358,7 @@ internal class UserImportPipeline(
             val eval = imageEvaluator.evaluateRgbGrid(
                 imageWidth = origW,
                 imageHeight = origH,
-                rgbGrid = rgbGrid,
+                rgbGrid = evalGrid,
                 gridWidth = gridW,
                 gridHeight = gridH,
                 display = display,
