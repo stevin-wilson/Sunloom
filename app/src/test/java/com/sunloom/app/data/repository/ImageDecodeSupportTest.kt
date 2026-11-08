@@ -52,4 +52,11 @@ class ImageDecodeSupportTest {
         val outcome = decodeSampledOutcome(jpeg(800, 600), 800, 600, maxEdgePx = 512)
         assertTrue(outcome is DecodeOutcome.Decoded)
     }
+
+    @Test
+    fun `a picture that cannot be sized at all is refused, never decoded at full size`() {
+        // No header bounds and the decoder's own probe reports no size either.
+        val outcome = decodeSampledOutcome(ByteArray(10), 0, 0, decoder = { _, _ -> null })
+        assertTrue(outcome is DecodeOutcome.Corrupt)
+    }
 }

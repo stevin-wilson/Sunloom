@@ -24,6 +24,7 @@ import kotlinx.coroutines.async
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import com.sunloom.app.data.sources.SourceBudgetExceededException
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -480,6 +481,38 @@ class LocalLibrarySyncTest {
         val repo = repo(FixedAdapter("artic_cc0", (1..3).map { candidate("ok-$it") }), client = client)
         assertEquals(2, repo.refreshOnlineCatalog(display))
         assertEquals(0, repo.lastSyncFailedSources)
+    }
+
+    @Test
+    fun `a store that becomes unavailable mid-sync is not swallowed as a skipped picture`() = kotlinx.coroutines.test.runTest {
+        val inner = InMemoryLibraryStore(java.io.File(context.filesDir, "sync_unavailable_store"))
+        val dead = object : LibraryStore by inner {
+            override fun upsertWallpaper(record: com.sunloom.app.domain.model.WallpaperRecord) {
+                throw LibraryStoreUnavailableException("down")
+            }
+        }
+        val repo = LocalLibraryRepository(
+            context = context, store = dead, httpClient = okClient,
+            sourceAdapters = listOf(FixedAdapter("artic_cc0", listOf(candidate("u-1")))), random = kotlin.random.Random(1)
+        )
+        try {
+            repo.refreshOnlineCatalog(display)
+            org.junit.Assert.fail("the worker must see the store failure so it can retry and suspend")
+        } catch (_: LibraryStoreUnavailableException) {
+        }
+    }
+
+    @Test
+    fun `running out of request budget before any download is not a failing source`() = kotlinx.coroutines.test.runTest {
+        val client = object : HttpClient {
+            override suspend fun getText(url: String): String = "{}"
+            override suspend fun getBytes(url: String, maxBytes: Int): ByteArray =
+                throw SourceBudgetExceededException("artic_cc0", 5)
+        }
+        val repo = repo(FixedAdapter("artic_cc0", listOf(candidate("b-1"))), client = client)
+        repo.refreshOnlineCatalog(display)
+        assertEquals(0, repo.lastSyncFailedSources)
+        assertEquals(0, repo.getSourceDiagnostics().single { it.sourceId == "artic_cc0" }.consecutiveFailures)
     }
 
     @Test

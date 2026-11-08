@@ -29,8 +29,17 @@ internal object ChangeAlarm {
 
     fun cancel(context: Context) {
         val manager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
-        runCatching { manager.cancel(pendingIntent(context)) }
+        // AlarmManager.cancel removes the alarm but the PendingIntent lives on, which isScheduled would mistake for it.
+        runCatching { pendingIntent(context).also { manager.cancel(it) }.cancel() }
     }
+
+    /** Whether the alarm is set (a reboot or force-stop clears it while WorkManager's own job survives). */
+    fun isScheduled(context: Context): Boolean = runCatching {
+        PendingIntent.getBroadcast(
+            context.applicationContext, 0, Intent(context, SunloomScheduleReceiver::class.java).setAction(ACTION),
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        ) != null
+    }.getOrDefault(false)
 
     private fun pendingIntent(context: Context): PendingIntent {
         val intent = Intent(context, SunloomScheduleReceiver::class.java).setAction(ACTION)

@@ -78,4 +78,10 @@ class RefreshSchedulePolicyTest {
         assertFalse("no wallpaper yet", RefreshSchedulePolicy.isRedundantFollowOsChange(ScheduleMode.FOLLOW_OS_THEME, currentSuitsTarget = null))
         assertFalse("timed modes always change", RefreshSchedulePolicy.isRedundantFollowOsChange(ScheduleMode.SUNRISE_SUNSET, currentSuitsTarget = true))
     }
+
+    @Test
+    fun `the backstop alarm never replaces a change that is already running`() {
+        assertFalse(RefreshSchedulePolicy.shouldReplaceChangeOnAlarm(changeRunning = true))
+        assertTrue(RefreshSchedulePolicy.shouldReplaceChangeOnAlarm(changeRunning = false))
+    }
 }

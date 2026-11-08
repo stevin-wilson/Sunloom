@@ -11,6 +11,7 @@ import androidx.work.ListenableWorker
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.sunloom.app.appContainer
@@ -82,7 +83,7 @@ class SunloomWallpaperScheduler(
         val pending = runCatching {
             workManager.getWorkInfosForUniqueWork(WORK_NAME_CHANGE).get().any { !it.state.isFinished }
         }.getOrDefault(true)
-        if (plan.scheduleChanges && pending) {
+        if (plan.scheduleChanges && pending && ChangeAlarm.isScheduled(context)) {
             // The change is armed; the periodic refresh uses KEEP, so re-syncing it is harmless and restores it too.
             syncRefreshOnly(preferences)
             return
@@ -105,6 +106,10 @@ class SunloomWallpaperScheduler(
     /** Runs the change now in place of the delayed job that the system is holding (see [ChangeAlarm]). */
     fun runChangeNow() {
         val workManager = runCatching { WorkManager.getInstance(context) }.getOrNull() ?: return
+        val running = runCatching {
+            workManager.getWorkInfosForUniqueWork(WORK_NAME_CHANGE).get().any { it.state == WorkInfo.State.RUNNING }
+        }.getOrDefault(false)
+        if (!RefreshSchedulePolicy.shouldReplaceChangeOnAlarm(running)) return
         workManager.enqueueUniqueWork(
             WORK_NAME_CHANGE,
             ExistingWorkPolicy.REPLACE,

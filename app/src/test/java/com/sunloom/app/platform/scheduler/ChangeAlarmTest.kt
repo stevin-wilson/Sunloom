@@ -47,4 +47,14 @@ class ChangeAlarmTest {
         ChangeAlarm.cancel(context)
         assertNull(alarms.nextScheduledAlarm)
     }
+
+    @Test
+    fun `isScheduled follows schedule and cancel`() {
+        ChangeAlarm.cancel(context)
+        org.junit.Assert.assertFalse(ChangeAlarm.isScheduled(context))
+        ChangeAlarm.schedule(context, nowMs = 0L, delayMs = 60_000L)
+        org.junit.Assert.assertTrue(ChangeAlarm.isScheduled(context))
+        ChangeAlarm.cancel(context)
+        org.junit.Assert.assertFalse(ChangeAlarm.isScheduled(context))
+    }
 }

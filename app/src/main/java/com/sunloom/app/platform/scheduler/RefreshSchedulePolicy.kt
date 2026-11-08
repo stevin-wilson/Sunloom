@@ -42,4 +42,7 @@ internal object RefreshSchedulePolicy {
         mode == ScheduleMode.FOLLOW_OS_THEME && currentSuitsTarget == true
 
     const val FOLLOW_OS_POLL_MINUTES = 15L
+
+    /** The backstop alarm replaces the held change job, but never a change that is running right now. */
+    fun shouldReplaceChangeOnAlarm(changeRunning: Boolean): Boolean = !changeRunning
 }

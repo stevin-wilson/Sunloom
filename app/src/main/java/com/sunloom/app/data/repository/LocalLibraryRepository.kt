@@ -1350,6 +1350,7 @@ class LocalLibraryRepository(
             var downloadsTried = 0
             var downloadsOk = 0
             var failureRecorded = false
+            var budgetStopped = false
 
             candidateLoop@ for (candidate in candidates) {
                 coroutineContext.ensureActive()
@@ -1458,6 +1459,8 @@ class LocalLibraryRepository(
                             failureRecorded = true
                             break@candidateLoop
                         } catch (_: SourceBudgetExceededException) {
+                            // Our own request budget ran out; that says nothing about the source's health.
+                            budgetStopped = true
                             break@candidateLoop
                         } catch (err: Exception) {
                             if (SourceHealthStore.isCancellation(err)) {
@@ -1667,6 +1670,9 @@ class LocalLibraryRepository(
                     newlyAdded++
                 } catch (cancel: CancellationException) {
                     throw cancel
+                } catch (unavailable: LibraryStoreUnavailableException) {
+                    // The store itself is gone: the worker must see it to retry and suspend, not skip every picture.
+                    throw unavailable
                 } catch (err: Exception) {
                     if (SourceHealthStore.isCancellation(err)) {
                         throw CancellationException(err.message).apply { initCause(err) }
@@ -1679,7 +1685,7 @@ class LocalLibraryRepository(
                 }
             }
             if (!failureRecorded) {
-                if (downloadsTried > 0 && downloadsOk == 0) {
+                if (downloadsTried > 0 && downloadsOk == 0 && !budgetStopped) {
                     lastSyncFailedSources++
                     sourceHealth.recordFailure(adapter.sourceId, budgetedClient.lastHttpError)
                 } else {

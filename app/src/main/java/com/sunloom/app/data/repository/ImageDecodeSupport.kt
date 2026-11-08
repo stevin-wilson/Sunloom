@@ -87,13 +87,13 @@ internal fun decodeSampledOutcome(
             w = probe.outWidth
             h = probe.outHeight
         }
-        if (w > 0 && h > 0) {
-            var sampleSize = 1
-            while ((w / sampleSize) > safeMaxEdge || (h / sampleSize) > safeMaxEdge) {
-                sampleSize *= 2
-            }
-            opts.inSampleSize = sampleSize
+        // Still no size: nothing says how big this is, so do not decode it at full size.
+        if (w <= 0 || h <= 0) return DecodeOutcome.Corrupt
+        var sampleSize = 1
+        while ((w / sampleSize) > safeMaxEdge || (h / sampleSize) > safeMaxEdge) {
+            sampleSize *= 2
         }
+        opts.inSampleSize = sampleSize
         decoder(bytes, opts)?.let { DecodeOutcome.Decoded(it) } ?: DecodeOutcome.Corrupt
     } catch (_: OutOfMemoryError) {
         DecodeOutcome.OutOfMemory
