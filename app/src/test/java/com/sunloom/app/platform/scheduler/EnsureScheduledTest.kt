@@ -75,9 +75,10 @@ class EnsureScheduledTest {
     private fun watchWork() = workManager.getWorkInfosForUniqueWork(SunloomWallpaperScheduler.WORK_NAME_STORE_WATCH).get()
 
     /**
-     * The test WorkManager runs unconstrained work at once. These tests are about an outage, so the store is made to
-     * fail to open: the watch then runs, finds it still down and stays enqueued. (With a working store it would find
-     * it open, resume automation and remove itself, which is its job but not what these tests check.)
+     * These tests are about an outage, so the store is made to fail to open. That keeps their outcome deterministic
+     * whether or not the test WorkManager runs the unconstrained watch straight away: if it does, the watch finds the
+     * store still down and stays enqueued. Recovery itself is covered by `mapStoreWatchResult` (WorkerResultMappingTest)
+     * and by "re-arming automation stops the store watch".
      */
     private fun storeIsDown() {
         LocalLibraryRepository.testStoreFactoryOverride = { throw LibraryStoreUnavailableException("down") }
@@ -115,12 +116,5 @@ class EnsureScheduledTest {
         val first = watchWork().single().id
         scheduler.suspendForUnavailableStore()
         assertEquals("the pending watch is kept, so repeated calls cannot postpone it forever", first, watchWork().single().id)
-    }
-
-    @Test
-    fun `when the store opens, the watch resumes automation and removes itself`() {
-        // The default test store works, and the test WorkManager runs the unconstrained watch at once.
-        SunloomWallpaperScheduler(context).suspendForUnavailableStore()
-        assertTrue("the watch found the store open and removed itself", watchWork().all { it.state == WorkInfo.State.CANCELLED })
     }
 }
