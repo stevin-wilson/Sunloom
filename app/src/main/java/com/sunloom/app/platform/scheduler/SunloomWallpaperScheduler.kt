@@ -62,6 +62,7 @@ class SunloomWallpaperScheduler(
         workManager.cancelUniqueWork(WORK_NAME)
         workManager.cancelUniqueWork(WORK_NAME_CHANGE)
         workManager.cancelUniqueWork(WORK_NAME_REFRESH)
+        ChangeAlarm.cancel(context)
         schedulePrefs.edit { remove(PREF_REFRESH_CONSTRAINTS_SIG) }
     }
 
@@ -101,6 +102,16 @@ class SunloomWallpaperScheduler(
         scheduleRefreshWork(workManager, schedulePrefs, preferences.wifiOnlyDownloads, preferences.deferOnBatterySaver, true)
     }
 
+    /** Runs the change now in place of the delayed job that the system is holding (see [ChangeAlarm]). */
+    fun runChangeNow() {
+        val workManager = runCatching { WorkManager.getInstance(context) }.getOrNull() ?: return
+        workManager.enqueueUniqueWork(
+            WORK_NAME_CHANGE,
+            ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<ChangeWorker>().setConstraints(buildChangeConstraints()).build()
+        )
+    }
+
     fun syncPeriodicSchedule(
         autoEnabled: Boolean,
         isPaused: Boolean,
@@ -131,6 +142,7 @@ class SunloomWallpaperScheduler(
         if (!plan.scheduleChanges) {
             workManager.cancelUniqueWork(WORK_NAME)
             workManager.cancelUniqueWork(WORK_NAME_CHANGE)
+            ChangeAlarm.cancel(context)
             scheduleRefreshWork(workManager, schedulePrefs, wifiOnly, deferBatterySaver, rescheduleRefreshWork)
             return
         }
@@ -159,6 +171,7 @@ class SunloomWallpaperScheduler(
             ExistingWorkPolicy.REPLACE,
             changeRequest
         )
+        ChangeAlarm.schedule(context, delayMs = delayMs)
 
         scheduleRefreshWork(workManager, schedulePrefs, wifiOnly, deferBatterySaver, rescheduleRefreshWork)
     }
