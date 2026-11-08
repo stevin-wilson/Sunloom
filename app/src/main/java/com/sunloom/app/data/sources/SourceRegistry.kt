@@ -96,7 +96,7 @@ object SourceRegistry {
             maxRequestsPerSync = 10,
             minRequestSpacingMs = 150L,
             publishedRateLimitNote = "1,000 req/hr anonymous limit; Sunloom <= 10 req/sync",
-            safetySignalsSummary = "JPL/JSC/GSFC only, no HQ ids or third-party credits + L2 denylist, press-event and map/rendering checks"
+            safetySignalsSummary = "Admitted photo families only, shape/size screen, no third-party credits + L2 denylist"
         ),
         SourceRegistration(
             sourceId = "artic_cc0",

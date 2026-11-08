@@ -23,7 +23,7 @@ import java.util.Locale
  */
 object SafetyDenylist {
 
-    const val DENYLIST_VERSION = "2026.11.08-v8"
+    const val DENYLIST_VERSION = "2026.11.08-v9"
 
     private val DIACRITICS_REGEX = Regex("\\p{M}+")
     private val NON_LETTER_DIGIT_REGEX = Regex("[^a-z0-9]+")

@@ -5,6 +5,7 @@ import com.sunloom.app.domain.model.LicenseType
 import com.sunloom.app.domain.model.ProvenanceRecord
 import com.sunloom.app.domain.model.SafeCategory
 import com.sunloom.app.domain.model.SafetyClassification
+import com.sunloom.app.domain.safety.NasaRecordPolicy
 import com.sunloom.app.domain.safety.SafetyGate
 import kotlinx.coroutines.delay
 import java.util.Locale
@@ -131,23 +132,45 @@ class NasaLibrarySourceAdapter(
                 }
             }
 
+            if (NasaRecordPolicy.rejection(nasaId, title, description, tags) != null) continue
+
             val linksArr = item.arr("links")
             var downloadUrl = ""
+            var origWidth = 0
+            var origHeight = 0
+            var largestWidth = 0
+            var largestHeight = 0
             if (linksArr != null) {
                 for (l in 0 until linksArr.size) {
                     val linkObj = linksArr.obj(l) ?: continue
                     val href = linkObj.str("href", "").trim()
-                    if (href.startsWith("https://") && (href.endsWith(".jpg") || href.endsWith(".png"))) {
+                    // NASA lists the pixel size of each rendition it offers: real numbers, not guesses.
+                    val linkWidth = linkObj.int("width", 0)
+                    val linkHeight = linkObj.int("height", 0)
+                    if (linkWidth.toLong() * linkHeight > largestWidth.toLong() * largestHeight) {
+                        largestWidth = linkWidth
+                        largestHeight = linkHeight
+                    }
+                    if (href.contains("~orig.") && linkWidth > 0 && linkHeight > 0) {
+                        origWidth = linkWidth
+                        origHeight = linkHeight
+                    }
+                    if (downloadUrl.isBlank() && isHttpsImage(href)) {
                         // Prefer ~orig.jpg first; LocalLibraryRepository automatically falls back to ~large.jpg if ~orig.jpg is a .tif
                         downloadUrl = href
                             .replace("~thumb.jpg", "~orig.jpg")
                             .replace("~medium.jpg", "~orig.jpg")
                             .replace("~small.jpg", "~orig.jpg")
-                        break
                     }
                 }
             }
             if (downloadUrl.isBlank()) continue
+            val shape = if (origWidth > 0) {
+                NasaRecordPolicy.shapeRejection(origWidth, origHeight, isOriginal = true)
+            } else {
+                NasaRecordPolicy.shapeRejection(largestWidth, largestHeight, isOriginal = false)
+            }
+            if (shape != null) continue
             val fallbackUrls = buildList {
                 val largeUrl = downloadUrl.replace("~orig.jpg", "~large.jpg")
                 if (largeUrl != downloadUrl) add(largeUrl)
@@ -172,8 +195,8 @@ class NasaLibrarySourceAdapter(
                         licenseType = LicenseType.PUBLIC_DOMAIN,
                         attributionText = "Courtesy of $resolvedCreator / NASA (Public Domain)",
                         retrievedAtEpochMs = System.currentTimeMillis(),
-                        originalWidth = 0,
-                        originalHeight = 0,
+                        originalWidth = origWidth,
+                        originalHeight = origHeight,
                         renditionWidth = 0,
                         renditionHeight = 0,
                         safetyClassification = SafetyClassification.SAFE,
@@ -237,6 +260,9 @@ class NasaLibrarySourceAdapter(
         }
         return false
     }
+
+    private fun isHttpsImage(href: String): Boolean =
+        href.startsWith("https://") && (href.endsWith(".jpg") || href.endsWith(".png"))
 
     private fun isHeadquartersId(nasaId: String): Boolean {
         val id = nasaId.uppercase(Locale.ROOT)

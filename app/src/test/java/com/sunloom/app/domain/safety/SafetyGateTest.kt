@@ -574,16 +574,25 @@ class SafetyGateTest {
         assertTrue("Expected aerial delta candidate to be Approved, got $verdictAerial", verdictAerial is SafetyVerdict.Approved)
     }
 
-    private fun nasaCandidate(title: String, description: String, tags: List<String>): CandidateAsset {
+    private fun nasaCandidate(
+        title: String,
+        description: String,
+        tags: List<String>,
+        nasaId: String = "PIA00001"
+    ): CandidateAsset {
         val base = validCandidate(
             title = title,
             description = description,
-            tags = tags,
+            tags = tags + "Galileo",
             licenseType = LicenseType.PUBLIC_DOMAIN,
             creatorName = "NASA",
             sourceId = "nasa_library"
         )
-        return base.copy(downloadUrl = "https://images-assets.nasa.gov/image/x/x~orig.jpg")
+        return base.copy(
+            id = "nasa-$nasaId",
+            downloadUrl = "https://images-assets.nasa.gov/image/x/x~orig.jpg",
+            provenance = base.provenance.copy(assetId = "nasa-$nasaId")
+        )
     }
 
     @Test
@@ -642,19 +651,15 @@ class SafetyGateTest {
         val iss = nasaCandidate(
             "Aurora over Earth's horizon",
             "An astronaut aboard the International Space Station took this photograph of an aurora streaming across Earth's horizon.",
-            listOf("Aurora", "Earth", "Horizon")
+            listOf("Aurora", "Earth", "Horizon"),
+            nasaId = "iss073e0293986"
         )
         val galaxy = nasaCandidate(
             "Spiral Galaxy NGC 1300",
             "The Hubble Space Telescope captured this barred spiral galaxy. Dust lanes cross the bright core.",
             listOf("Galaxy", "Hubble", "Space")
         )
-        val shadedRelief = nasaCandidate(
-            "Gulf Coast, Shaded Relief and Colored Height",
-            "The Gulf Coast as seen by the Shuttle Radar Topography Mission.",
-            listOf("Earth", "Coast")
-        )
-        for (candidate in listOf(iss, galaxy, shadedRelief)) {
+        for (candidate in listOf(iss, galaxy)) {
             val verdict = safetyGate.evaluateMetadata(candidate)
             assertTrue("Expected Approved for '${candidate.title}', got $verdict", verdict is SafetyVerdict.Approved)
         }
@@ -672,6 +677,23 @@ class SafetyGateTest {
         )
         val verdict = safetyGate.evaluateMetadata(candidate)
         assertTrue("Expected Rejected, got $verdict", verdict is SafetyVerdict.Rejected)
+    }
+
+    @Test
+    fun `NASA relief and radar products and records outside the admitted families are rejected`() {
+        val relief = nasaCandidate(
+            "Gulf Coast, Shaded Relief and Colored Height",
+            "The Gulf Coast as seen by the Shuttle Radar Topography Mission.",
+            listOf("Earth", "Coast")
+        )
+        val weather = nasaCandidate(
+            "Marine Layer Clouds off the California Coast", "NASA image acquired September 27, 2012.",
+            listOf("Earth", "clouds"), nasaId = "GSFC_20171208_Archive_e001627"
+        )
+        for (candidate in listOf(relief, weather)) {
+            val verdict = safetyGate.evaluateMetadata(candidate)
+            assertEquals("NASA_RECORD_NOT_ADMITTED", (verdict as SafetyVerdict.Rejected).reasonCode)
+        }
     }
 
     @Test

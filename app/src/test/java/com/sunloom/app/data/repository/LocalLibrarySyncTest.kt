@@ -580,7 +580,9 @@ class LocalLibrarySyncTest {
 
     @Test
     fun `the creator cap does not apply to institutional NASA imagery`() = kotlinx.coroutines.test.runTest {
-        val nasa = (1..5).map { candidate("nasa-$it", sourceId = "nasa_library", creator = "NASA") }
+        val nasa = (1..5).map {
+            candidate("nasa-PIA0000$it", sourceId = "nasa_library", creator = "NASA", tags = listOf("landscape", "Galileo"))
+        }
         val repo = repo(FixedAdapter("nasa_library", nasa))
         val added = repo.refreshOnlineCatalog(display)
         assertEquals("rejections=${repo.getAllRejections()}", 5, added)
