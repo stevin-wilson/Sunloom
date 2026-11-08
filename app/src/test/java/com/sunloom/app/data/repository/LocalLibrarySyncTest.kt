@@ -516,6 +516,34 @@ class LocalLibrarySyncTest {
     }
 
     @Test
+    fun `rejecting a picture records the rejection before it deletes the file`() = kotlinx.coroutines.test.runTest {
+        // If the process dies between the two steps, the picture must still be refused rather than fetched again.
+        val inner = InMemoryLibraryStore(java.io.File(context.filesDir, "reject_order_store"))
+        var failRejectedWrites = false
+        val flaky = object : LibraryStore by inner {
+            override fun upsertWallpaper(record: com.sunloom.app.domain.model.WallpaperRecord) {
+                if (failRejectedWrites && record.isRejected) throw IOException("crash")
+                inner.upsertWallpaper(record)
+            }
+        }
+        val repo = LocalLibraryRepository(
+            context = context, store = flaky, httpClient = okClient,
+            sourceAdapters = listOf(FixedAdapter("artic_cc0", listOf(candidate("r-1")))), random = kotlin.random.Random(1)
+        )
+        assertEquals(1, repo.refreshOnlineCatalog(display))
+        val file = java.io.File(repo.getAllWallpapers().single { it.id == "r-1" }.localFilePath)
+        assertTrue(file.exists())
+
+        failRejectedWrites = true
+        try {
+            repo.rejectWallpaperForever("r-1")
+        } catch (_: IOException) {
+        }
+        assertTrue("file is deleted only after the rejection is stored", file.exists())
+        assertTrue("the permanent blocklist already refuses it", repo.getPermanentBlockedAssetIds().contains("r-1"))
+    }
+
+    @Test
     fun `no more than three unseen images from one creator are kept`() = kotlinx.coroutines.test.runTest {
         val monet = (1..5).map { candidate("monet-$it", creator = "Claude Monet") }
         val repo = repo(FixedAdapter("artic_cc0", monet))

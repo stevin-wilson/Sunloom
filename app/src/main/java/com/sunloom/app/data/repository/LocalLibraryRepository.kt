@@ -428,21 +428,10 @@ class LocalLibraryRepository(
 
     fun rejectWallpaperForever(wallpaperId: String, reason: String = "User clicked Reject Forever") {
         val existing = getWallpaperById(wallpaperId) ?: return
-        if (existing.localFilePath.isNotBlank()) runCatching { File(existing.localFilePath).delete() }
-        if (existing.croppedFilePath.isNotBlank()) runCatching { File(existing.croppedFilePath).delete() }
 
+        // Record the rejection first and delete the files last: if the process dies in between, the picture is still
+        // refused (an orphan file is harmless), instead of being deleted but not refused and then fetched again.
         val now = System.currentTimeMillis()
-        upsertWallpaper(
-            existing.copy(
-                isRejected = true,
-                isFavorite = false,
-                localFilePath = "",
-                croppedFilePath = "",
-                fileSizeBytes = 0L,
-                status = WallpaperStatus.REJECTED_SAFETY_OR_QUALITY,
-                decisionExplanation = reason
-            )
-        )
         addPermanentBlocklistEntry(
             assetId = existing.id,
             sha256 = existing.provenance.sha256Checksum,
@@ -454,6 +443,19 @@ class LocalLibraryRepository(
         recordRejection(
             Rejections.permanent(existing.id, existing.provenance.sourceId, "USER_REJECTED", reason, nowMs = now)
         )
+        upsertWallpaper(
+            existing.copy(
+                isRejected = true,
+                isFavorite = false,
+                localFilePath = "",
+                croppedFilePath = "",
+                fileSizeBytes = 0L,
+                status = WallpaperStatus.REJECTED_SAFETY_OR_QUALITY,
+                decisionExplanation = reason
+            )
+        )
+        if (existing.localFilePath.isNotBlank()) runCatching { File(existing.localFilePath).delete() }
+        if (existing.croppedFilePath.isNotBlank()) runCatching { File(existing.croppedFilePath).delete() }
         clearInvalidatedActiveWallpaper(existing.id)
     }
 
@@ -785,8 +787,6 @@ class LocalLibraryRepository(
         dHashOverride: String? = null,
         addToPermanentBlocklist: Boolean = true
     ) {
-        if (record.localFilePath.isNotBlank()) runCatching { File(record.localFilePath).delete() }
-        if (record.croppedFilePath.isNotBlank()) runCatching { File(record.croppedFilePath).delete() }
         val now = System.currentTimeMillis()
         val effectiveSha = sha256Override ?: record.provenance.sha256Checksum
         val effectiveDHash = dHashOverride ?: record.provenance.perceptualHash
@@ -827,6 +827,9 @@ class LocalLibraryRepository(
                 isPermanent = addToPermanentBlocklist
             )
         )
+        // Files last: a crash before this leaves an orphan file, not a deleted picture with no record of why.
+        if (record.localFilePath.isNotBlank()) runCatching { File(record.localFilePath).delete() }
+        if (record.croppedFilePath.isNotBlank()) runCatching { File(record.croppedFilePath).delete() }
         clearInvalidatedActiveWallpaper(record.id)
     }
 
