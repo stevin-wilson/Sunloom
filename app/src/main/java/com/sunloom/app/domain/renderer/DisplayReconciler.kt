@@ -30,7 +30,7 @@ class DisplayReconciler(
         if (record.isRejected || record.isBaselineRestore || record.provenance.sourceId == SourceIds.SEED_RESERVE) {
             return null
         }
-        val primaryOrSharpest = validDisplays.maxBy { it.widthPx.toLong() * it.heightPx.toLong() }
+        val primaryOrSharpest = validDisplays.maxByOrNull { it.widthPx.toLong() * it.heightPx.toLong() } ?: return null
         val srcW = record.provenance.originalWidth
         val srcH = record.provenance.originalHeight
         if (srcW <= 0 || srcH <= 0) return null
@@ -95,6 +95,8 @@ class DisplayReconciler(
         val changed = record.evaluation.isEligible != updatedEval.isEligible ||
             record.evaluation.rejectionReasonCode != updatedEval.rejectionReasonCode ||
             record.evaluation.cropRect != updatedEval.cropRect ||
+            // The pause text names the displays, so it must follow them even when nothing else about the picture moved.
+            record.evaluation.explanation != updatedEval.explanation ||
             record.provenance.renditionWidth != newRendW ||
             record.provenance.renditionHeight != newRendH
         if (!changed) return null

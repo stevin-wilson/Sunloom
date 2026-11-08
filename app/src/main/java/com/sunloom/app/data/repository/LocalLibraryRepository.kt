@@ -756,10 +756,16 @@ class LocalLibraryRepository(
         if (validDisplays.isEmpty()) return false
 
         var changedAny = false
-        for (record in getAllWallpapers()) {
-            val updated = displayReconciler.reconcile(record, validDisplays, preferences) ?: continue
-            upsertWallpaper(updated)
-            changedAny = true
+        for (snapshot in getAllWallpapers()) {
+            // Re-read under the write lock: a rejection or a sync that landed since the snapshot must not be
+            // overwritten with the stale copy.
+            val changed = synchronized(LIBRARY_WRITE_LOCK) {
+                val current = getWallpaperById(snapshot.id) ?: return@synchronized false
+                val updated = displayReconciler.reconcile(current, validDisplays, preferences) ?: return@synchronized false
+                upsertWallpaper(updated)
+                true
+            }
+            if (changed) changedAny = true
         }
         return changedAny
     }
