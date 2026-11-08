@@ -313,7 +313,22 @@ class GoogleBookPlatformAdapter(
         targetDisplay: DisplayProfile? = getPrimaryOrSharpestDisplayOrNull(),
         dryRunPreviewOnly: Boolean = false,
         connectedDisplays: List<DisplayProfile>? = null,
-        displayPolicy: DisplayPolicy = DisplayPolicy.SAME_ON_ALL_DISPLAYS
+        displayPolicy: DisplayPolicy = DisplayPolicy.SAME_ON_ALL_DISPLAYS,
+        onApplied: () -> Unit = {}
+    ): WallpaperStatus = ApplyLock.run {
+        // [onApplied] runs inside the lock, so the app and the background worker cannot interleave an apply with the
+        // record of it and leave the wallpaper on screen different from the one recorded as active (Article V §2).
+        applyWallpaperLocked(record, policy, targetDisplay, dryRunPreviewOnly, connectedDisplays, displayPolicy)
+            .also { if (it == WallpaperStatus.APPLIED_SUCCESSFULLY) onApplied() }
+    }
+
+    private fun applyWallpaperLocked(
+        record: WallpaperRecord,
+        policy: LockWorkspacePolicy,
+        targetDisplay: DisplayProfile?,
+        dryRunPreviewOnly: Boolean,
+        connectedDisplays: List<DisplayProfile>?,
+        displayPolicy: DisplayPolicy
     ): WallpaperStatus {
         if (!gateway.isWallpaperSupported() || !gateway.isSetWallpaperAllowed()) {
             return WallpaperStatus.UNSUPPORTED_BY_SYSTEM
@@ -685,6 +700,19 @@ class GoogleBookPlatformAdapter(
                 platform = platform,
                 gateway = gateway
             )
+        }
+    }
+}
+
+/** One apply-and-record step at a time in the process (the app and the background worker both apply). */
+internal object ApplyLock {
+    private val lock = java.util.concurrent.locks.ReentrantLock()
+    fun <T> run(block: () -> T): T {
+        lock.lock()
+        try {
+            return block()
+        } finally {
+            lock.unlock()
         }
     }
 }

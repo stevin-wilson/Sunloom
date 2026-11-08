@@ -283,11 +283,11 @@ class SunloomWallpaperScheduler(
                     targetDisplay = display,
                     dryRunPreviewOnly = prefs.dryRunPreviewOnly,
                     connectedDisplays = connectedDisplays,
-                    displayPolicy = prefs.displayPolicy
+                    displayPolicy = prefs.displayPolicy,
+                    onApplied = { repo.recordWallpaperApplied(candidate.id) }
                 )
                 finalStatus = status
                 if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) {
-                    repo.recordWallpaperApplied(candidate.id)
                     repo.setLastAppliedDisplayGeometryKey(currentGeometryKey)
                     break
                 }
@@ -309,10 +309,10 @@ class SunloomWallpaperScheduler(
                         targetDisplay = display,
                         dryRunPreviewOnly = prefs.dryRunPreviewOnly,
                         connectedDisplays = connectedDisplays,
-                        displayPolicy = prefs.displayPolicy
+                        displayPolicy = prefs.displayPolicy,
+                    onApplied = { repo.recordWallpaperApplied(baseline.id) }
                     )
                     if (baseStatus == WallpaperStatus.APPLIED_SUCCESSFULLY) {
-                        repo.recordWallpaperApplied(baseline.id)
                         repo.setLastAppliedDisplayGeometryKey(currentGeometryKey)
                     } else {
                         platform.restoreSystemDefaultWallpaper(prefs.dryRunPreviewOnly)

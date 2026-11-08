@@ -185,10 +185,10 @@ class AndroidSunloomGateway(
                     targetDisplay = display,
                     dryRunPreviewOnly = prefs.dryRunPreviewOnly,
                     connectedDisplays = connectedDisplays,
-                    displayPolicy = prefs.displayPolicy
+                    displayPolicy = prefs.displayPolicy,
+                    onApplied = { repo.recordWallpaperApplied(replacement.id) }
                 )
                 if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) {
-                    repo.recordWallpaperApplied(replacement.id)
                     repo.setLastAppliedDisplayGeometryKey(currentGeometryKey)
                     return true
                 }
@@ -203,10 +203,10 @@ class AndroidSunloomGateway(
                         targetDisplay = display,
                         dryRunPreviewOnly = prefs.dryRunPreviewOnly,
                         connectedDisplays = connectedDisplays,
-                        displayPolicy = prefs.displayPolicy
+                        displayPolicy = prefs.displayPolicy,
+                    onApplied = { repo.recordWallpaperApplied(baseline.id) }
                     )
                     if (baseStatus == WallpaperStatus.APPLIED_SUCCESSFULLY) {
-                        repo.recordWallpaperApplied(baseline.id)
                         repo.setLastAppliedDisplayGeometryKey(currentGeometryKey)
                         return true
                     }
@@ -268,10 +268,10 @@ class AndroidSunloomGateway(
                         targetDisplay = display,
                         dryRunPreviewOnly = prefs.dryRunPreviewOnly,
                         connectedDisplays = connectedDisplays,
-                        displayPolicy = prefs.displayPolicy
+                        displayPolicy = prefs.displayPolicy,
+                    onApplied = { repo.recordWallpaperApplied(nextNonSeed.id) }
                     )
                     if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) {
-                        repo.recordWallpaperApplied(nextNonSeed.id)
                         repo.setLastAppliedDisplayGeometryKey(
                             platformAdapter.computeDisplayGeometryKey(connectedDisplays, prefs.displayPolicy)
                         )
@@ -343,10 +343,10 @@ class AndroidSunloomGateway(
             targetDisplay = display,
             dryRunPreviewOnly = prefs.dryRunPreviewOnly,
             connectedDisplays = connectedDisplays,
-            displayPolicy = prefs.displayPolicy
+            displayPolicy = prefs.displayPolicy,
+                    onApplied = { repo.recordWallpaperApplied(record.id) }
         )
         return if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) {
-            repo.recordWallpaperApplied(record.id)
             repo.setLastAppliedDisplayGeometryKey(
                 platformAdapter.computeDisplayGeometryKey(connectedDisplays, prefs.displayPolicy)
             )
