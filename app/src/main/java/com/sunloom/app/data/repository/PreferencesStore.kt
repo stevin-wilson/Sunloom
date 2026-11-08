@@ -17,19 +17,25 @@ import com.sunloom.app.domain.model.UserPreferences
  */
 internal class PreferencesStore(private val prefs: SharedPreferences) {
 
-    fun load(): UserPreferences {
+    /** What a save did: the enabled sources that are admitted, and whether the blurred-fill choice changed. */
+    class SaveResult(val enabledSources: Set<String>, val blurredFillChanged: Boolean)
+
+    fun load(): UserPreferences = synchronized(LOCK) { loadLocked() }
+
+    private fun loadLocked(): UserPreferences {
         migrateLegacyCacheDefaultIfNeeded()
+        val defaults = UserPreferences()
         val catsRaw = prefs.getStringSet("enabled_categories", null)
         val categories = if (catsRaw.isNullOrEmpty()) {
-            UserPreferences().enabledCategories
+            defaults.enabledCategories
         } else {
             catsRaw.mapNotNull { name -> SafeCategory.entries.firstOrNull { it.name == name } }.toSet()
-        }.ifEmpty { UserPreferences().enabledCategories }
+        }.ifEmpty { defaults.enabledCategories }
 
         val currentAdmittedIds = SourceRegistry.admittedSources().map { it.sourceId }.toSet()
         val sourcesRaw = prefs.getStringSet("enabled_sources", null)
         val sources = if (sourcesRaw.isNullOrEmpty()) {
-            UserPreferences().enabledSources
+            defaults.enabledSources
         } else {
             val knownRaw = prefs.getStringSet("known_admitted_sources", null) ?: LEGACY_V1_3_SOURCES
             val newlyAdmitted = currentAdmittedIds - knownRaw
@@ -43,7 +49,7 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             } else {
                 sourcesRaw.filter { SourceRegistry.isSourceAdmitted(it) }.toSet()
             }
-        }.ifEmpty { UserPreferences().enabledSources }
+        }.ifEmpty { defaults.enabledSources }
 
         return UserPreferences(
             isSetupCompleted = prefs.getBoolean("setup_completed", false),
@@ -75,9 +81,6 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
         )
     }
 
-    /** The stored blurred-fill choice, read without loading everything. */
-    fun allowsBlurredFill(): Boolean = prefs.getBoolean("allow_blurred_fill", false)
-
     /**
      * One-time (Article IX §3, v0.14): installs that still hold the old 250 MB default move to the new
      * 1 GB default. Any other stored value is a deliberate choice and is kept; once the flag is set a
@@ -93,8 +96,14 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
         }
     }
 
-    /** Stores [updated] and returns the enabled sources that are actually admitted (unknown ids are dropped). */
-    fun save(updated: UserPreferences): Set<String> {
+    /**
+     * Stores [updated]. Unknown source ids are dropped. Whether the blurred-fill choice changed is decided here, in the
+     * same step as the write, so two concurrent saves cannot both miss (or both report) the change.
+     */
+    fun save(updated: UserPreferences): SaveResult = synchronized(LOCK) { saveLocked(updated) }
+
+    private fun saveLocked(updated: UserPreferences): SaveResult {
+        val blurredFillChanged = prefs.getBoolean("allow_blurred_fill", false) != updated.allowBlurredFrameFill
         val enabledAdmittedSources = updated.enabledSources.filter { SourceRegistry.isSourceAdmitted(it) }.toSet()
         prefs.edit {
             putBoolean("setup_completed", updated.isSetupCompleted)
@@ -121,12 +130,17 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             putLong("max_cache_bytes", updated.maxCacheBytes)
             putString("baseline_restore_path", updated.baselineRestorePath)
             remove("dry_run_preview_only")
+            // A save is a deliberate choice, so it settles the one-time cache-default migration instead of leaving it
+            // to override what was just saved.
+            putBoolean(KEY_CACHE_DEFAULT_MIGRATED, true)
         }
 
-        return enabledAdmittedSources
+        return SaveResult(enabledAdmittedSources, blurredFillChanged)
     }
 
     private companion object {
+        /** One writer at a time across every repository in the process; each has its own store on the same file. */
+        val LOCK = Any()
         private const val KEY_CACHE_DEFAULT_MIGRATED = "cache_default_migrated_v1"
         private val LEGACY_V1_3_SOURCES = setOf(
             SourceIds.SEED_RESERVE,

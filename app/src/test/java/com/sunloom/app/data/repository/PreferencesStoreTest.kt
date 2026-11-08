@@ -49,7 +49,7 @@ class PreferencesStoreTest {
             scheduleMode = ScheduleMode.FIXED_CLOCK, selectedCityName = "Oslo, Norway",
             latitude = 59.91, longitude = 10.75, fixedLightHour = 6, fixedDarkHour = 21, rotationIntervalHours = 3,
             enabledCategories = setOf(SafeCategory.SPACE_ASTRONOMY),
-            enabledSources = setOf("nasa_library"),
+            enabledSources = setOf(SourceRegistry.admittedSources().first().sourceId),
             displayPolicy = DisplayPolicy.OPTIMIZE_PRIMARY_SHARPEST, lockWorkspacePolicy = LockWorkspacePolicy.LOCK_ONLY,
             allowBlurredFrameFill = true, wifiOnlyDownloads = true, deferOnBatterySaver = false,
             maxCacheBytes = 123_456_789L, baselineRestorePath = "/tmp/base.png"
@@ -80,9 +80,10 @@ class PreferencesStoreTest {
 
     @Test
     fun `sources that are not admitted are dropped, and the admitted ones are returned`() {
-        val admitted = store.save(UserPreferences(enabledSources = setOf("nasa_library", "not_a_real_source")))
-        assertEquals(setOf("nasa_library"), admitted)
-        assertEquals(setOf("nasa_library"), store.load().enabledSources)
+        val real = SourceRegistry.admittedSources().first().sourceId
+        val result = store.save(UserPreferences(enabledSources = setOf(real, "not_a_real_source")))
+        assertEquals(setOf(real), result.enabledSources)
+        assertEquals(setOf(real), store.load().enabledSources)
     }
 
     @Test
@@ -112,9 +113,17 @@ class PreferencesStoreTest {
     }
 
     @Test
-    fun `the stored blurred-fill choice can be read without loading everything`() {
-        assertFalse(store.allowsBlurredFill())
-        store.save(UserPreferences(allowBlurredFrameFill = true))
-        assertTrue(store.allowsBlurredFill())
+    fun `saving reports whether the blurred-fill choice changed, decided in the same step as the write`() {
+        assertFalse(store.save(UserPreferences(allowBlurredFrameFill = false)).blurredFillChanged)
+        assertTrue(store.save(UserPreferences(allowBlurredFrameFill = true)).blurredFillChanged)
+        assertFalse(store.save(UserPreferences(allowBlurredFrameFill = true)).blurredFillChanged)
+        assertTrue(store.save(UserPreferences(allowBlurredFrameFill = false)).blurredFillChanged)
+    }
+
+    @Test
+    fun `a 250 MB choice saved before anything was loaded is not migrated away afterwards`() {
+        // A save is a deliberate choice: it must settle the one-time migration instead of leaving it to override it.
+        store.save(UserPreferences(maxCacheBytes = UserPreferences.LEGACY_MAX_CACHE_BYTES))
+        assertEquals(UserPreferences.LEGACY_MAX_CACHE_BYTES, store.load().maxCacheBytes)
     }
 }

@@ -228,11 +228,10 @@ class LocalLibraryRepository(
     fun loadPreferences(): UserPreferences = preferencesStore.load()
 
     fun savePreferences(updated: UserPreferences) {
+        val saved = preferencesStore.save(updated)
         // Resolution rejections made under the old blur-fill setting no longer apply (Article XI §3).
-        if (preferencesStore.allowsBlurredFill() != updated.allowBlurredFrameFill) {
-            store.clearTransientRejections()
-        }
-        syncSourceEnabledStates(preferencesStore.save(updated))
+        if (saved.blurredFillChanged) store.clearTransientRejections()
+        syncSourceEnabledStates(saved.enabledSources)
     }
 
     /**
