@@ -147,6 +147,14 @@ class BoundedCacheManager(
     }
 
     companion object {
+        /**
+         * Imported photos are never evicted (they cannot be fetched again), so they alone can pass the cache limit.
+         * The reserve cannot shrink them, so the person is told.
+         */
+        fun importsExceedLimit(records: List<WallpaperRecord>, maxCacheBytes: Long): Boolean =
+            records.filter { !it.isRejected && it.provenance.sourceId == SourceIds.USER_LOCAL }
+                .sumOf { it.fileSizeBytes } > maxCacheBytes
+
         const val DEFAULT_PROTECTED_PER_BRIGHTNESS = 3
     }
 }

@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import androidx.core.net.toUri
 import com.sunloom.app.R
 import com.sunloom.app.appContainer
+import com.sunloom.app.data.cache.BoundedCacheManager
 import com.sunloom.app.data.repository.LibraryStoreUnavailableException
 import com.sunloom.app.data.repository.LocalLibraryRepository
 import com.sunloom.app.domain.matcher.SubjectFit
@@ -530,7 +531,12 @@ class AndroidSunloomGateway(
         if (asBaselineRestore) {
             buildSnapshot(repo, context.getString(R.string.msg_saved_as_your_permanent_original, record.title))
         } else if (!applyAfterImport) {
-            buildSnapshot(repo, context.getString(R.string.msg_added_to_your_reserve, record.title))
+            val added = context.getString(R.string.msg_added_to_your_reserve, record.title)
+            val over = BoundedCacheManager.importsExceedLimit(repo.getAllWallpapers(), repo.loadPreferences().maxCacheBytes)
+            buildSnapshot(
+                repo,
+                if (over) added + " " + context.getString(R.string.msg_imports_exceed_cache_limit) else added
+            )
         } else {
             applyWallpaperInternal(repo, record.id)
         }

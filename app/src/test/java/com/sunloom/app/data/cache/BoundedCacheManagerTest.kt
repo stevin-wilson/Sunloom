@@ -210,4 +210,23 @@ class BoundedCacheManagerTest {
         assertFalse("user_local must be protected", "mine" in report.evictedIds)
         assertTrue("mine" in report.protectedIds)
     }
+
+    private fun userRecord(id: String, sizeMb: Int, rejected: Boolean = false) =
+        record(id, sizeMb).let {
+            it.copy(isRejected = rejected, provenance = it.provenance.copy(sourceId = "user_local"))
+        }
+
+    @Test
+    fun `imported photos over the cache limit are flagged, because they are never evicted`() {
+        val limit = 20L * 1024L * 1024L
+        assertFalse(BoundedCacheManager.importsExceedLimit(listOf(userRecord("a", 5), userRecord("b", 10)), limit))
+        assertTrue(BoundedCacheManager.importsExceedLimit(listOf(userRecord("a", 15), userRecord("b", 10)), limit))
+    }
+
+    @Test
+    fun `fetched and rejected pictures do not count toward the imports warning`() {
+        val limit = 20L * 1024L * 1024L
+        val records = listOf(record("fetched", 50), userRecord("gone", 50, rejected = true), userRecord("mine", 5))
+        assertFalse(BoundedCacheManager.importsExceedLimit(records, limit))
+    }
 }
