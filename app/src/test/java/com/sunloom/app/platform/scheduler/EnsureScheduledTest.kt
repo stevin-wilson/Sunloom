@@ -69,4 +69,27 @@ class EnsureScheduledTest {
         SunloomWallpaperScheduler(context).ensureScheduled(prefs.copy(isPaused = true))
         assertTrue(changeWork().isEmpty())
     }
+
+    private fun watchWork() = workManager.getWorkInfosForUniqueWork(SunloomWallpaperScheduler.WORK_NAME_STORE_WATCH).get()
+
+    @Test
+    fun `suspending for an unavailable store cancels automation and starts the store watch`() {
+        val scheduler = SunloomWallpaperScheduler(context)
+        scheduler.ensureScheduled(prefs)
+        assertEquals(WorkInfo.State.ENQUEUED, changeWork().single().state)
+
+        scheduler.suspendForUnavailableStore()
+
+        assertTrue("automation is suspended", changeWork().all { it.state == WorkInfo.State.CANCELLED })
+        assertEquals(WorkInfo.State.ENQUEUED, watchWork().single().state)
+    }
+
+    @Test
+    fun `re-arming automation stops the store watch`() {
+        val scheduler = SunloomWallpaperScheduler(context)
+        scheduler.suspendForUnavailableStore()
+        scheduler.ensureScheduled(prefs)
+        assertTrue(watchWork().all { it.state == WorkInfo.State.CANCELLED })
+        assertEquals(WorkInfo.State.ENQUEUED, changeWork().last().state)
+    }
 }

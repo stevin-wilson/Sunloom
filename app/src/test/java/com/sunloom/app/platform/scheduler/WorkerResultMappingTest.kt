@@ -145,4 +145,34 @@ class WorkerResultMappingTest {
         run(3) { throw IllegalStateException("boom") }
         assertEquals(2, rearmed)
     }
+
+    private fun watch(opens: suspend () -> Boolean, recovered: BooleanArray) =
+        runBlocking { mapStoreWatchResult(opens) { recovered[0] = true } }
+
+    @Test
+    fun storeWatch_resumesAutomationOnceTheStoreOpens() {
+        val recovered = booleanArrayOf(false)
+        assertEquals(Result.success(), watch({ true }, recovered))
+        assertTrue(recovered[0])
+    }
+
+    @Test
+    fun storeWatch_staysQuietWhileTheStoreIsStillDown() {
+        val recovered = booleanArrayOf(false)
+        assertEquals(Result.success(), watch({ throw LibraryStoreUnavailableException("down") }, recovered))
+        assertFalse(recovered[0])
+        assertEquals(Result.success(), watch({ throw IllegalStateException("boom") }, recovered))
+        assertFalse(recovered[0])
+        assertEquals(Result.success(), watch({ false }, recovered))
+        assertFalse(recovered[0])
+    }
+
+    @Test
+    fun storeWatch_cancellationPropagates() {
+        try {
+            watch({ throw CancellationException("cancelled") }, booleanArrayOf(false))
+            fail("cancellation must propagate")
+        } catch (_: CancellationException) {
+        }
+    }
 }

@@ -55,7 +55,7 @@ class SunloomScheduleReceiver : BroadcastReceiver() {
                     preferences = prefs
                 )
             } catch (_: LibraryStoreUnavailableException) {
-                SunloomWallpaperScheduler(appContext).cancelAllScheduledWork()
+                SunloomWallpaperScheduler(appContext).suspendForUnavailableStore()
             } catch (_: Exception) {
                 // Fail-closed: do not crash broadcast process on transient store error
             } catch (_: VirtualMachineError) {
