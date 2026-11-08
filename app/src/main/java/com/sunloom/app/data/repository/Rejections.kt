@@ -43,4 +43,24 @@ internal object Rejections {
             displaySignature = displaySignature
         )
     }
+
+    /**
+     * A picture that was skipped by a fault of ours (a full disk, a store error), not by a judgement about it. It is
+     * listed in Diagnostics, but has no display signature, so it never matches the current display set and never
+     * blocks the picture: the next sync tries it again.
+     */
+    fun transient(
+        assetId: String,
+        sourceId: String,
+        reasonCode: String,
+        explanation: String,
+        nowMs: Long = System.currentTimeMillis()
+    ): RejectionRecord = RejectionRecord(
+        assetId = assetId,
+        sourceId = sourceId,
+        reasonCode = reasonCode,
+        explanation = explanation,
+        timestampEpochMs = nowMs,
+        isPermanent = false
+    )
 }

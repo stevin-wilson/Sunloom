@@ -153,7 +153,11 @@ internal fun DiagnosticsPane(
             val shownRejections = uiState.rejectionLog.take(50)
             items(shownRejections.size, key = { "diag_rej_$it" }) { index ->
                 val rej = shownRejections[index]
-                val scopeTag = if (rej.isPermanent) "PERMANENT" else "DISPLAY:${rej.displaySignature}"
+                val scopeTag = when {
+                    rej.isPermanent -> "PERMANENT"
+                    rej.displaySignature.isBlank() -> "TRANSIENT"
+                    else -> "DISPLAY:${rej.displaySignature}"
+                }
                 DiagnosticsListRow(
                     text = "• [${rej.reasonCode} / $scopeTag] Asset ${rej.assetId} (${rej.sourceId}): ${rej.explanation}",
                     monospace = true

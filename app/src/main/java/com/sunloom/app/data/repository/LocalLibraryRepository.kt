@@ -1661,6 +1661,15 @@ class LocalLibraryRepository(
                     // One picture that cannot be staged, evaluated or stored (a full disk, a store error) is skipped;
                     // the other candidates, the sync summary and the cache cleanup still run.
                     android.util.Log.w(TAG, "candidate_skipped", err)
+                    // Make the skip visible in Diagnostics. The store may be what is failing, so this must not throw.
+                    runCatching {
+                        recordRejection(
+                            Rejections.transient(
+                                candidate.id, adapter.sourceId, "STORAGE_ERROR",
+                                "Skipped after an error while staging or storing it: ${err.message ?: err.javaClass.simpleName}"
+                            )
+                        )
+                    }
                 } finally {
                     runCatching { quarantineFile.delete() }
                 }

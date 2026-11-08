@@ -484,6 +484,30 @@ class LocalLibrarySyncTest {
     }
 
     @Test
+    fun `a picture skipped by a storage error is listed in Diagnostics but never blocked`() = kotlinx.coroutines.test.runTest {
+        val inner = InMemoryLibraryStore(java.io.File(context.filesDir, "skip_visible_store"))
+        var failing = true
+        val flaky = object : LibraryStore by inner {
+            override fun upsertWallpaper(record: com.sunloom.app.domain.model.WallpaperRecord) {
+                if (failing && record.id == "pic-2") throw IOException("No space left on device")
+                inner.upsertWallpaper(record)
+            }
+        }
+        val repo = LocalLibraryRepository(
+            context = context, store = flaky, httpClient = okClient,
+            sourceAdapters = listOf(FixedAdapter("artic_cc0", (1..3).map { candidate("pic-$it") })),
+            random = kotlin.random.Random(1)
+        )
+        assertEquals(2, repo.refreshOnlineCatalog(display))
+        val skipped = repo.getAllRejections().single { it.assetId == "pic-2" }
+        assertEquals("STORAGE_ERROR", skipped.reasonCode)
+        assertEquals("not permanent", false, skipped.isPermanent)
+
+        failing = false
+        assertEquals("the same picture is fetched again once storage works", 1, repo.refreshOnlineCatalog(display))
+    }
+
+    @Test
     fun `a store that becomes unavailable mid-sync is not swallowed as a skipped picture`() = kotlinx.coroutines.test.runTest {
         val inner = InMemoryLibraryStore(java.io.File(context.filesDir, "sync_unavailable_store"))
         val dead = object : LibraryStore by inner {
