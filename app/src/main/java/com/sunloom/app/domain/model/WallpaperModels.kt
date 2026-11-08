@@ -1,5 +1,7 @@
 package com.sunloom.app.domain.model
 
+import com.sunloom.app.data.sources.SourceRegistry
+
 enum class SafetyClassification {
     SAFE,
     UNCERTAIN,
@@ -364,16 +366,7 @@ data class UserPreferences(
         SafeCategory.BOTANICAL_FLORA,
         SafeCategory.AERIAL_EARTH
     ),
-    val enabledSources: Set<String> = setOf(
-        SourceIds.SEED_RESERVE,
-        "wikimedia_featured",
-        "nasa_library",
-        "artic_cc0",
-        "met_museum_cc0",
-        "cma_cc0",
-        "smk_open",
-        SourceIds.USER_LOCAL
-    ),
+    val enabledSources: Set<String> = SourceRegistry.defaultEnabledSourceIds(),
     val displayPolicy: DisplayPolicy = DisplayPolicy.SAME_ON_ALL_DISPLAYS,
     val lockWorkspacePolicy: LockWorkspacePolicy = LockWorkspacePolicy.SAME_ON_BOTH,
     val allowBlurredFrameFill: Boolean = false,
@@ -396,4 +389,5 @@ data class UserPreferences(
 object SourceIds {
     const val SEED_RESERVE = "seed_reserve"
     const val USER_LOCAL = "user_local"
+    const val NASA_LIBRARY = "nasa_library"
 }

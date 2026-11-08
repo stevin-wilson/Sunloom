@@ -209,6 +209,41 @@ class SafetyGate {
             )
         }
 
+        // L2d. Not a scene: data maps, charts, diagrams and artist renderings (Constitution v0.25)
+        // Only NASA's library mixes photographs with maps, products and staff shots; museum prints and user files
+        // are not judged here. The record family is read from the stored asset id (`nasa-<id>`).
+        if (srcId == SourceIds.NASA_LIBRARY) {
+            val notAdmitted = NasaRecordPolicy.rejection(
+                nasaId = candidate.provenance.assetId.removePrefix("nasa-"),
+                title = candidate.title,
+                description = candidate.description,
+                keywords = candidate.rawCategoriesAndTags
+            )
+            if (notAdmitted != null) {
+                return SafetyVerdict.Rejected(
+                    reasonCode = "NASA_RECORD_NOT_ADMITTED",
+                    explanation = "NASA record is not a wallpaper-grade photograph: $notAdmitted.",
+                    failedLayer = "L2"
+                )
+            }
+        }
+        val nonPhotographicMatch = if (srcId == SourceIds.NASA_LIBRARY) {
+            SafetyDenylist.findNonPhotographicMatch(
+                title = candidate.title,
+                description = candidate.description,
+                rawCategoriesAndTags = candidate.rawCategoriesAndTags
+            )
+        } else {
+            null
+        }
+        if (nonPhotographicMatch != null) {
+            return SafetyVerdict.Rejected(
+                reasonCode = "NON_PHOTOGRAPHIC_CONTENT",
+                explanation = "Asset is a map, chart, diagram or rendering rather than a photograph (matched '$nonPhotographicMatch').",
+                failedLayer = "L2"
+            )
+        }
+
         // L2b. Internet candidates must have non-empty source tags and match a recognized safe visual domain
         if (!candidate.isUserLocal) {
             if (candidate.rawCategoriesAndTags.isEmpty()) {

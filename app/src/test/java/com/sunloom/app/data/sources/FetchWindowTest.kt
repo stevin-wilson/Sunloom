@@ -167,7 +167,7 @@ class FetchWindowTest {
             override suspend fun getText(url: String): String {
                 urls += url
                 fun item(id: String, keywords: String) = """{"data":[{"nasa_id":"$id","title":"Title $id","center":"JSC","description":"Earth from orbit","keywords":$keywords}],"links":[{"href":"https://images-assets.nasa.gov/image/$id/$id~thumb.jpg"}]}"""
-                return """{"collection":{"items":[${item("a", "[]")},${item("b", """["EARTH (PLANET)","HORIZON"]""")},${item("c", "[]")}]}}"""
+                return """{"collection":{"items":[${item("iss001e000001", "[]")},${item("iss001e000002", """["EARTH (PLANET)","HORIZON"]""")},${item("iss001e000003", "[]")}]}}"""
             }
             override suspend fun getBytes(url: String, maxBytes: Int): ByteArray = ByteArray(0)
         }

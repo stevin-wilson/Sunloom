@@ -32,24 +32,7 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             catsRaw.mapNotNull { name -> SafeCategory.entries.firstOrNull { it.name == name } }.toSet()
         }.ifEmpty { defaults.enabledCategories }
 
-        val currentAdmittedIds = SourceRegistry.admittedSources().map { it.sourceId }.toSet()
-        val sourcesRaw = prefs.getStringSet("enabled_sources", null)
-        val sources = if (sourcesRaw.isNullOrEmpty()) {
-            defaults.enabledSources
-        } else {
-            val knownRaw = prefs.getStringSet("known_admitted_sources", null) ?: LEGACY_V1_3_SOURCES
-            val newlyAdmitted = currentAdmittedIds - knownRaw
-            if (newlyAdmitted.isNotEmpty()) {
-                val merged = (sourcesRaw + newlyAdmitted).filter { SourceRegistry.isSourceAdmitted(it) }.toSet()
-                prefs.edit {
-                    putStringSet("enabled_sources", merged)
-                    putStringSet("known_admitted_sources", currentAdmittedIds)
-                }
-                merged
-            } else {
-                sourcesRaw.filter { SourceRegistry.isSourceAdmitted(it) }.toSet()
-            }
-        }.ifEmpty { defaults.enabledSources }
+        val sources = loadEnabledSources(defaults)
 
         return UserPreferences(
             isSetupCompleted = prefs.getBoolean("setup_completed", false),
@@ -86,6 +69,32 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
      * 1 GB default. Any other stored value is a deliberate choice and is kept; once the flag is set a
      * later explicit choice of 250 MB is respected.
      */
+    private fun loadEnabledSources(defaults: UserPreferences): Set<String> {
+        val sourcesRaw = prefs.getStringSet("enabled_sources", null)
+        if (sourcesRaw.isNullOrEmpty()) return defaults.enabledSources
+
+        val currentAdmittedIds = SourceRegistry.admittedSources().map { it.sourceId }.toSet()
+        val known = prefs.getStringSet("known_admitted_sources", null) ?: LEGACY_V1_3_SOURCES
+        val unseen = currentAdmittedIds - known
+        val defaultOn = SourceRegistry.defaultEnabledSourceIds()
+        // A source admitted since the last run joins only if it is on by default; an opt-in source waits to be chosen.
+        var sources = (sourcesRaw + unseen.filter { it in defaultOn }).filter { SourceRegistry.isSourceAdmitted(it) }.toSet()
+
+        // A source that moved from on-by-default to opt-in is switched off once; the person's later choice is kept.
+        val applied = prefs.getStringSet(KEY_SWITCHED_OFF_APPLIED, null) ?: emptySet()
+        val due = SourceRegistry.switchedOffOnceSourceIds() - applied
+        sources = sources - due
+
+        if (unseen.isNotEmpty() || due.isNotEmpty()) {
+            prefs.edit {
+                putStringSet("enabled_sources", sources)
+                putStringSet("known_admitted_sources", currentAdmittedIds)
+                putStringSet(KEY_SWITCHED_OFF_APPLIED, applied + due)
+            }
+        }
+        return sources.ifEmpty { defaults.enabledSources }
+    }
+
     private fun migrateLegacyCacheDefaultIfNeeded() {
         if (prefs.getBoolean(KEY_CACHE_DEFAULT_MIGRATED, false)) return
         prefs.edit {
@@ -122,6 +131,11 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             putStringSet("enabled_categories", updated.enabledCategories.map { it.name }.toSet())
             putStringSet("enabled_sources", enabledAdmittedSources)
             putStringSet("known_admitted_sources", SourceRegistry.admittedSources().map { it.sourceId }.toSet())
+            // A save is a deliberate choice of sources, so it settles every one-time switch-off.
+            putStringSet(
+                KEY_SWITCHED_OFF_APPLIED,
+                (prefs.getStringSet(KEY_SWITCHED_OFF_APPLIED, null) ?: emptySet()) + SourceRegistry.switchedOffOnceSourceIds()
+            )
             putString("display_policy", updated.displayPolicy.name)
             putString("lock_workspace_policy", updated.lockWorkspacePolicy.name)
             putBoolean("allow_blurred_fill", updated.allowBlurredFrameFill)
@@ -141,6 +155,7 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
     private companion object {
         /** One writer at a time across every repository in the process; each has its own store on the same file. */
         val LOCK = Any()
+        private const val KEY_SWITCHED_OFF_APPLIED = "default_off_applied_sources"
         private const val KEY_CACHE_DEFAULT_MIGRATED = "cache_default_migrated_v1"
         private val LEGACY_V1_3_SOURCES = setOf(
             SourceIds.SEED_RESERVE,

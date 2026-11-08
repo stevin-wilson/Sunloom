@@ -27,17 +27,21 @@ class SourceCoverageMatrixTest {
             SourceRegistry.get(id)?.let { it.isAdmitted && !it.isBuiltInOffline } == true
         }.toSet()
 
+    /** Every admitted online source, including the opt-in ones: the structure of the whole catalogue. */
+    private val onlineSources: Set<String> =
+        SourceRegistry.admittedSources().filter { !it.isBuiltInOffline }.map { it.sourceId }.toSet()
+
     private val onlineCategories = SafeCategory.entries.filter { it != SafeCategory.USER_LOCAL }
 
     private fun compatibleSources(display: DisplayProfile, blur: Boolean): Set<String> =
-        defaultOnlineSources.filter {
+        onlineSources.filter {
             CropRenderer.canSourceSatisfyDisplay(SourceRegistry.get(it)!!.maxRenditionLongEdgePx, display, blur)
         }.toSet()
 
     @Test
     fun `the default online sources are the ones this matrix expects`() {
         assertEquals(
-            setOf("wikimedia_featured", "nasa_library", "artic_cc0", "met_museum_cc0", "cma_cc0", "smk_open"),
+            setOf("wikimedia_featured", "artic_cc0", "met_museum_cc0", "cma_cc0", "smk_open"),
             defaultOnlineSources
         )
     }
@@ -58,14 +62,14 @@ class SourceCoverageMatrixTest {
             assertEquals(
                 "sources left out for ${d.name}",
                 expectedExcluded.getValue(d.name),
-                defaultOnlineSources - compatibleSources(d, blur = false)
+                onlineSources - compatibleSources(d, blur = false)
             )
         }
     }
 
     @Test
-    fun `blurred frame fill brings every default source back on every display`() {
-        for (d in displays) assertEquals(d.name, defaultOnlineSources, compatibleSources(d, blur = true))
+    fun `blurred frame fill brings every online source back on every display`() {
+        for (d in displays) assertEquals(d.name, onlineSources, compatibleSources(d, blur = true))
     }
 
     @Test
@@ -76,6 +80,26 @@ class SourceCoverageMatrixTest {
                 val serving = usable.filter { category in SourceRegistry.get(it)!!.servedCategories }
                 assertTrue("${category.name} on ${d.name}: only $serving", serving.size >= 2)
             }
+        }
+    }
+
+    /**
+     * NASA is opt-in, so by default Space & Astronomy and Aerial & Earth are served by Wikimedia's Featured Pictures
+     * alone (checked live 2026-11-08: about 850 and 1,100 matches). That is enough supply, but one source cannot
+     * cover for another being down; switching NASA on restores the second source.
+     */
+    @Test
+    fun `by default only Space and Aerial Earth rest on a single source, and NASA is the second`() {
+        val thin = onlineCategories.filter { category ->
+            defaultOnlineSources.count { category in SourceRegistry.get(it)!!.servedCategories } < 2
+        }
+        assertEquals(setOf(SafeCategory.SPACE_ASTRONOMY, SafeCategory.AERIAL_EARTH), thin.toSet())
+        for (category in thin) {
+            assertEquals(
+                setOf("wikimedia_featured"),
+                defaultOnlineSources.filter { category in SourceRegistry.get(it)!!.servedCategories }.toSet()
+            )
+            assertTrue(category in SourceRegistry.get("nasa_library")!!.servedCategories)
         }
     }
 

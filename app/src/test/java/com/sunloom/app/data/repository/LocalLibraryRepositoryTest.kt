@@ -319,6 +319,9 @@ class LocalLibraryRepositoryTest {
 
     @Test
     fun `selectAdaptersForSync caps batch to 3 sources, prioritizes dark photography on deficit, and rotates cursor`() {
+        // NASA is opt-in; this test is about how the dark-capable sources are chosen once it is on.
+        val withNasa = repository.loadPreferences().let { it.copy(enabledSources = it.enabledSources + "nasa_library") }
+        repository.savePreferences(withNasa)
         val prefs = repository.loadPreferences()
         val now = 1762280000000L
 
@@ -459,7 +462,7 @@ class LocalLibraryRepositoryTest {
 
         // Both healed dark-capable sources are immediately eligible for sync again
         val selectedIds = healedRepo.selectAdaptersForSync(
-            preferences = healedRepo.loadPreferences(),
+            preferences = healedRepo.loadPreferences().let { it.copy(enabledSources = it.enabledSources + "nasa_library") },
             nowEpochMs = now,
             unseenDarkCount = 0,
             maxSourcesPerSync = 3

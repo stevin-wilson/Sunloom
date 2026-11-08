@@ -23,7 +23,7 @@ import java.util.Locale
  */
 object SafetyDenylist {
 
-    const val DENYLIST_VERSION = "2026.11.07-v5"
+    const val DENYLIST_VERSION = "2026.11.08-v9"
 
     private val DIACRITICS_REGEX = Regex("\\p{M}+")
     private val NON_LETTER_DIGIT_REGEX = Regex("[^a-z0-9]+")
@@ -140,6 +140,8 @@ object SafetyDenylist {
         "selvportraet", "zelfportret",
         "group portrait", "official portrait", "astronaut portrait", "crew portrait",
         "press conference", "ribbon cutting", "award ceremony",
+        // Press and staff events on agency photo sites, whose keywords still read as scenery (Earth, Cloud)
+        "media day", "media interview", "media briefing", "science briefing", "news conference",
         // Text-Dominated Images & Document Scans (Article VII §2)
         "document scan", "manuscript page", "newspaper page", "infographic",
         "motivational quote", "text heavy", "meme",
@@ -184,6 +186,44 @@ object SafetyDenylist {
     val COMPOSITE_LAYOUT_TERMS: Set<String> = listOf(
         "montage", "photomontage", "collage"
     ).map { normalizePhrase(it) }.toSet()
+
+    /**
+     * Non-photographic content (Constitution v0.25): data maps, charts, diagrams and artist or computer
+     * renderings are not scenes. Matched against the title, the source-supplied categories and the first sentence
+     * of the description only, so a later mention ("... compared with a map of the region") does not reject.
+     */
+    /** Phrases a record uses to say what it is. Matched anywhere in the description, for NASA records only. */
+    val SELF_DESCRIBED_RENDERING_TERMS: Set<String> = listOf(
+        "this illustration", "this animation", "this map", "this diagram", "this chart", "this graphic",
+        "this rendering", "this visualization", "this artist s concept", "this artist concept",
+        "computer model", "computer modeling", "computer modelling", "computer generated", "computer simulation"
+    ).map { normalizePhrase(it) }.toSet()
+
+    val NON_PHOTOGRAPHIC_TERMS: Set<String> = listOf(
+        "map", "chart", "graph", "diagram", "illustration", "animation", "visualization",
+        "simulation", "rendering", "artist concept", "artist s concept", "artist s impression"
+    ).map { normalizePhrase(it) }.toSet()
+
+    fun findNonPhotographicMatch(
+        title: String,
+        description: String,
+        rawCategoriesAndTags: List<String>
+    ): String? {
+        val firstSentence = description.trim().split(FIRST_SENTENCE_END_REGEX, limit = 2).first()
+        val tokens = buildList {
+            addAll(tokenizeAndStem(title))
+            add("|")
+            for (tag in rawCategoriesAndTags) {
+                addAll(tokenizeAndStem(tag))
+                add("|")
+            }
+            addAll(tokenizeAndStem(firstSentence))
+        }
+        findMatchInTokenStream(tokens, NON_PHOTOGRAPHIC_TERMS)?.let { return it }
+        return findMatchInTokenStream(tokenizeAndStem(description), SELF_DESCRIBED_RENDERING_TERMS)
+    }
+
+    private val FIRST_SENTENCE_END_REGEX = Regex("""[.!?](?=\s)""")
 
     /** Grid categories such as "3x2 arrays" or "4 x 3 arrays" (normalized: "3x2 array"). */
     private val GRID_ARRAY_REGEX = Regex("""(?:^| )\d+ ?x ?\d+ array(?: |$)""")

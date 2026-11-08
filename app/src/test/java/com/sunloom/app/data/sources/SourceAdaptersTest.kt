@@ -302,8 +302,8 @@ class SourceAdaptersTest {
             {
               "collection": {
                 "items": [{
-                  "data": [{ "nasa_id": "N1", "title": "Untagged Space", "center": "JPL" }],
-                  "links": [{ "href": "https://images-assets.nasa.gov/image/N1/N1~thumb.jpg" }]
+                  "data": [{ "nasa_id": "iss001e000001", "title": "Untagged Space", "center": "JSC" }],
+                  "links": [{ "href": "https://images-assets.nasa.gov/image/iss001e000001/iss001e000001~thumb.jpg" }]
                 }]
               }
             }
@@ -503,11 +503,11 @@ class SourceAdaptersTest {
                   },
                   {
                     "data": [{
-                      "nasa_id": "VALID-JPL-03",
+                      "nasa_id": "PIA03003",
                       "title": "Europa Horizon from Juno",
                       "center": "JPL",
                       "description": "Courtesy of NASA/JPL-Caltech",
-                      "keywords": ["Jupiter", "Europa", "Space"]
+                      "keywords": ["Jupiter", "Europa", "Juno"]
                     }],
                     "links": [{ "href": "https://images-assets.nasa.gov/image/VALID-JPL-03/VALID-JPL-03~thumb.jpg" }]
                   }
@@ -518,7 +518,7 @@ class SourceAdaptersTest {
 
         val items = nasa.parseResponse(json)
         assertEquals(1, items.size)
-        assertEquals("nasa-VALID-JPL-03", items.first().id)
+        assertEquals("nasa-PIA03003", items.first().id)
 
         val manifestJson = """
             [
@@ -532,6 +532,74 @@ class SourceAdaptersTest {
             "https://images-assets.nasa.gov/image/PIA25432/PIA25432~orig.jpg",
             nasa.selectBestRenditionFromManifest(manifestJson)
         )
+    }
+
+    @Test
+    fun `NASA keeps only admitted centres and record families and drops headquarters ids whatever centre they carry`() {
+        val nasa = NasaLibrarySourceAdapter()
+        fun item(id: String, center: String) = """
+            {
+              "data": [{
+                "nasa_id": "$id", "title": "Title $id", "center": "$center",
+                "description": "Earth seen from orbit.", "keywords": ["Earth", "Cloud", "Galileo"]
+              }],
+              "links": [{ "href": "https://images-assets.nasa.gov/image/$id/$id~thumb.jpg" }]
+            }
+        """.trimIndent()
+        val json = """{"collection": {"items": [
+            ${item("KSC-20240103-PH-JBS01_0023", "KSC")},
+            ${item("NHQ20260821_admin_0001", "KSC")},
+            ${item("HQ_2025_01", "GSFC")},
+            ${item("AFRC2020-0001", "AFRC")},
+            ${item("iss073e0293986", "JSC")},
+            ${item("PIA12345", "JPL")},
+            ${item("GSFC_20240126_X_001", "GSFC")}
+        ]}}"""
+        val ids = nasa.parseResponse(json).map { it.id }
+        // GSFC archive products are a centre we admit but not a record family we admit.
+        assertEquals(listOf("nasa-iss073e0293986", "nasa-PIA12345"), ids)
+    }
+
+    @Test
+    fun `NASA uses the dimensions it lists to drop strips and small originals and records the real size`() {
+        val nasa = NasaLibrarySourceAdapter()
+        fun item(id: String, w: Int, h: Int, origDims: Boolean = true) = """
+            {
+              "data": [{
+                "nasa_id": "$id", "title": "Title $id", "center": "JPL",
+                "description": "A view.", "keywords": ["Galileo"]
+              }],
+              "links": [
+                { "href": "https://images-assets.nasa.gov/image/$id/$id~thumb.jpg", "width": 640, "height": ${640 * h / w} },
+                { "href": "https://images-assets.nasa.gov/image/$id/$id~orig.jpg"${if (origDims) ", \"width\": $w, \"height\": $h" else ""} }
+              ]
+            }
+        """.trimIndent()
+        val json = """{"collection": {"items": [
+            ${item("PIA06841", 1024, 4417)},
+            ${item("PIA04650", 540, 810)},
+            ${item("PIA19708", 1024, 1024)},
+            ${item("PIA00001", 4000, 3000, origDims = false)}
+        ]}}"""
+        val found = nasa.parseResponse(json).associateBy { it.id }
+        assertEquals(setOf("nasa-PIA19708", "nasa-PIA00001"), found.keys)
+        assertEquals(1024, found.getValue("nasa-PIA19708").provenance.originalWidth)
+        assertEquals(1024, found.getValue("nasa-PIA19708").provenance.originalHeight)
+        assertEquals(0, found.getValue("nasa-PIA00001").provenance.originalWidth)
+    }
+
+    @Test
+    fun `NASA reads the size of the jpg original, not of a tif or another link`() {
+        val nasa = NasaLibrarySourceAdapter()
+        val json = """{"collection": {"items": [{
+            "data": [{"nasa_id": "PIA19708", "title": "Pluto", "center": "JPL", "description": "A view.", "keywords": ["New Horizons"]}],
+            "links": [
+              {"href": "https://images-assets.nasa.gov/image/PIA19708/PIA19708~orig.jpg", "width": 1024, "height": 1024},
+              {"href": "https://images-assets.nasa.gov/image/PIA19708/PIA19708~orig.tif", "width": 300, "height": 300}
+            ]
+        }]}}"""
+        val asset = nasa.parseResponse(json).single()
+        assertEquals(1024, asset.provenance.originalWidth)
     }
 
     @Test

@@ -235,10 +235,12 @@ class MainViewModelTest {
         viewModel.toggleCategory(SafeCategory.SPACE_ASTRONOMY)
         assertTrue(viewModel.uiState.value.preferences.enabledCategories.contains(SafeCategory.SPACE_ASTRONOMY))
 
-        viewModel.toggleSource("nasa_library")
+        // NASA is opt-in: it starts off, switches on, and off again.
         assertFalse(viewModel.uiState.value.preferences.enabledSources.contains("nasa_library"))
         viewModel.toggleSource("nasa_library")
         assertTrue(viewModel.uiState.value.preferences.enabledSources.contains("nasa_library"))
+        viewModel.toggleSource("nasa_library")
+        assertFalse(viewModel.uiState.value.preferences.enabledSources.contains("nasa_library"))
 
         viewModel.applySpecificWallpaper("seed-2")
         assertEquals("seed-2", viewModel.uiState.value.currentWallpaper?.id)

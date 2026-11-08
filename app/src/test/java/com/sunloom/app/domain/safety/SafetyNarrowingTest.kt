@@ -91,6 +91,6 @@ class SafetyNarrowingTest {
 
     @Test
     fun `the denylist version records this narrowing`() {
-        assertEquals("2026.11.07-v5", SafetyDenylist.DENYLIST_VERSION)
+        assertEquals("2026.11.08-v9", SafetyDenylist.DENYLIST_VERSION)
     }
 }

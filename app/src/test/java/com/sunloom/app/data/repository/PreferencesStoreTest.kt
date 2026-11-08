@@ -98,6 +98,48 @@ class PreferencesStoreTest {
     }
 
     @Test
+    fun `the default sources come from the registry, and NASA is not among them`() {
+        val defaults = UserPreferences().enabledSources
+        assertFalse("NASA is opt-in", "nasa_library" in defaults)
+        assertEquals(SourceRegistry.defaultEnabledSourceIds(), defaults)
+        assertTrue("every default is an admitted source", defaults.all { SourceRegistry.isSourceAdmitted(it) })
+        assertTrue(defaults.containsAll(setOf("seed_reserve", "user_local", "wikimedia_featured", "artic_cc0", "met_museum_cc0")))
+    }
+
+    @Test
+    fun `someone who had NASA on by default has it switched off once, and can switch it back on`() {
+        raw.edit()
+            .putStringSet("enabled_sources", setOf("seed_reserve", "wikimedia_featured", "nasa_library", "user_local"))
+            .putStringSet("known_admitted_sources", SourceRegistry.admittedSources().map { it.sourceId }.toSet())
+            .commit()
+        val first = store.load()
+        assertFalse("nasa_library" in first.enabledSources)
+        assertTrue("wikimedia_featured" in first.enabledSources)
+
+        // The person turns NASA on again: that choice is kept, the reset does not run twice.
+        store.save(first.copy(enabledSources = first.enabledSources + "nasa_library"))
+        assertTrue("nasa_library" in store.load().enabledSources)
+        assertTrue("nasa_library" in PreferencesStore(raw).load().enabledSources)
+    }
+
+    @Test
+    fun `a source that is off by default is not switched on when it is newly admitted`() {
+        raw.edit().putStringSet("enabled_sources", setOf("wikimedia_featured")).remove("known_admitted_sources").commit()
+        val loaded = store.load()
+        assertFalse("an opt-in source stays off for existing users", "nasa_library" in loaded.enabledSources)
+        assertTrue("a default-on source admitted since is switched on", "smk_open" in loaded.enabledSources)
+    }
+
+    @Test
+    fun `a source that no longer exists is dropped without error`() {
+        raw.edit()
+            .putStringSet("enabled_sources", setOf("wikimedia_featured", "a_source_removed_later"))
+            .putStringSet("known_admitted_sources", SourceRegistry.admittedSources().map { it.sourceId }.toSet() + "a_source_removed_later")
+            .commit()
+        assertEquals(setOf("wikimedia_featured"), store.load().enabledSources)
+    }
+
+    @Test
     fun `the old 250 MB cache default moves to the new default once`() {
         raw.edit().putLong("max_cache_bytes", UserPreferences.LEGACY_MAX_CACHE_BYTES).commit()
         assertEquals(UserPreferences.DEFAULT_MAX_CACHE_BYTES, store.load().maxCacheBytes)

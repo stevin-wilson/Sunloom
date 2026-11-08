@@ -573,4 +573,146 @@ class SafetyGateTest {
         val verdictAerial = safetyGate.evaluateMetadata(aerialDelta)
         assertTrue("Expected aerial delta candidate to be Approved, got $verdictAerial", verdictAerial is SafetyVerdict.Approved)
     }
+
+    private fun nasaCandidate(
+        title: String,
+        description: String,
+        tags: List<String>,
+        nasaId: String = "PIA00001"
+    ): CandidateAsset {
+        val base = validCandidate(
+            title = title,
+            description = description,
+            tags = tags + "Galileo",
+            licenseType = LicenseType.PUBLIC_DOMAIN,
+            creatorName = "NASA",
+            sourceId = "nasa_library"
+        )
+        return base.copy(
+            id = "nasa-$nasaId",
+            downloadUrl = "https://images-assets.nasa.gov/image/x/x~orig.jpg",
+            provenance = base.provenance.copy(assetId = "nasa-$nasaId")
+        )
+    }
+
+    @Test
+    fun `NASA press briefings and media days are rejected even though their keywords look like scenery`() {
+        val briefing = nasaCandidate(
+            "PACE Science Briefing",
+            "A PACE mission and science briefing takes place at NASA's Kennedy Space Center in Florida. " +
+                "Participants, from left to right are: Katherine Rohloff, NASA Communications; Kate Calvin, Chief Scientist.",
+            listOf("Aerosol", "Cloud", "Earth", "Kennedy Space Center", "PACE")
+        )
+        val mediaDay = nasaCandidate(
+            "PACE Media Day",
+            "NASA invited members of the media to view NASA's PACE spacecraft inside a cleanroom.",
+            listOf("Aerosol", "Cloud", "Earth", "Kennedy Space Center", "PACE")
+        )
+        val interview = nasaCandidate(
+            "PACE Media Day",
+            "Media interview a member of NASA's PACE team beside the spacecraft during a NASA-hosted media day.",
+            listOf("Cloud", "Earth", "PACE")
+        )
+        for (candidate in listOf(briefing, mediaDay, interview)) {
+            val verdict = safetyGate.evaluateMetadata(candidate)
+            assertTrue("Expected Rejected for '${candidate.title}', got $verdict", verdict is SafetyVerdict.Rejected)
+            assertEquals("PROHIBITED_CONTENT_TERM", (verdict as SafetyVerdict.Rejected).reasonCode)
+        }
+    }
+
+    @Test
+    fun `NASA data maps and illustrations are rejected as not photographic`() {
+        val titledMap = nasaCandidate(
+            "Geologic Map of Titan Volcano",
+            "Surface units of a region of Titan.",
+            listOf("Titan", "Space")
+        )
+        val conceptInFirstSentence = nasaCandidate(
+            "Spacecraft Over Titan",
+            "Artist's concept of a spacecraft above the clouds of Titan.",
+            listOf("Titan", "Space")
+        )
+        for (candidate in listOf(titledMap, conceptInFirstSentence)) {
+            val verdict = safetyGate.evaluateMetadata(candidate)
+            assertTrue("Expected Rejected for '${candidate.title}', got $verdict", verdict is SafetyVerdict.Rejected)
+            assertEquals("NON_PHOTOGRAPHIC_CONTENT", (verdict as SafetyVerdict.Rejected).reasonCode)
+        }
+        val selfDescribedMap = nasaCandidate(
+            "COWVR's New Map",
+            "This map, made using the Compact Ocean Wind Vector Radiometer's observations, shows Earth's microwave emissions.",
+            listOf("COWVR", "Earth")
+        )
+        val mapVerdict = safetyGate.evaluateMetadata(selfDescribedMap)
+        assertEquals("NON_PHOTOGRAPHIC_CONTENT", (mapVerdict as SafetyVerdict.Rejected).reasonCode)
+    }
+
+    @Test
+    fun `NASA scenic photographs and ISS astronaut-taken descriptions still pass`() {
+        val iss = nasaCandidate(
+            "Aurora over Earth's horizon",
+            "An astronaut aboard the International Space Station took this photograph of an aurora streaming across Earth's horizon.",
+            listOf("Aurora", "Earth", "Horizon"),
+            nasaId = "iss073e0293986"
+        )
+        val galaxy = nasaCandidate(
+            "Spiral Galaxy NGC 1300",
+            "The Hubble Space Telescope captured this barred spiral galaxy. Dust lanes cross the bright core.",
+            listOf("Galaxy", "Hubble", "Space")
+        )
+        for (candidate in listOf(iss, galaxy)) {
+            val verdict = safetyGate.evaluateMetadata(candidate)
+            assertTrue("Expected Approved for '${candidate.title}', got $verdict", verdict is SafetyVerdict.Approved)
+        }
+    }
+
+    @Test
+    fun `NASA computer-modelled illustration PIA21074 is rejected`() {
+        val candidate = nasaCandidate(
+            "Hot Jupiters' Cloudy Skies",
+            "Hot Jupiters are exoplanets that orbit their stars so tightly that their temperatures are extremely high. " +
+                "Research suggests that the \"dayside\" is largely free of clouds. This illustration represents how hot " +
+                "Jupiters of different temperatures might appear to a person flying over the dayside, based on computer " +
+                "modeling. Figure 1 shows an approximation of what various hot Jupiters might look like.",
+            listOf("Hot Jupiters", "Exoplanets", "Kepler")
+        )
+        val verdict = safetyGate.evaluateMetadata(candidate)
+        assertTrue("Expected Rejected, got $verdict", verdict is SafetyVerdict.Rejected)
+    }
+
+    @Test
+    fun `NASA relief and radar products and records outside the admitted families are rejected`() {
+        val relief = nasaCandidate(
+            "Gulf Coast, Shaded Relief and Colored Height",
+            "The Gulf Coast as seen by the Shuttle Radar Topography Mission.",
+            listOf("Earth", "Coast")
+        )
+        val weather = nasaCandidate(
+            "Marine Layer Clouds off the California Coast", "NASA image acquired September 27, 2012.",
+            listOf("Earth", "clouds"), nasaId = "GSFC_20171208_Archive_e001627"
+        )
+        for (candidate in listOf(relief, weather)) {
+            val verdict = safetyGate.evaluateMetadata(candidate)
+            assertEquals("NASA_RECORD_NOT_ADMITTED", (verdict as SafetyVerdict.Rejected).reasonCode)
+        }
+    }
+
+    @Test
+    fun `computer modeling alone marks a NASA record as a rendering`() {
+        val verdict = safetyGate.evaluateMetadata(
+            nasaCandidate("Cloudy Worlds", "Planets as they might look, based on computer modeling.", listOf("Planet", "Space"))
+        )
+        assertEquals("NON_PHOTOGRAPHIC_CONTENT", (verdict as SafetyVerdict.Rejected).reasonCode)
+    }
+
+    @Test
+    fun `map and illustration wording does not reject other sources or panorama captions`() {
+        val panorama = validCandidate(
+            title = "Alpine panorama",
+            description = "Peaks from left to right: A, B and C. On this map you can follow the route of the hike.",
+            tags = listOf("landscape", "mountain")
+        )
+        assertTrue(safetyGate.evaluateMetadata(panorama) is SafetyVerdict.Approved)
+        val print = validCandidate(title = "Map of the Alps", tags = listOf("landscape", "mountain"))
+        assertTrue(safetyGate.evaluateMetadata(print) is SafetyVerdict.Approved)
+    }
 }
