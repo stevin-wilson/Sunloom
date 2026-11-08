@@ -15,7 +15,6 @@ import com.sunloom.app.data.sources.HttpClient
 import com.sunloom.app.data.sources.MetMuseumCc0SourceAdapter
 import com.sunloom.app.data.sources.NasaLibrarySourceAdapter
 import com.sunloom.app.data.sources.RateLimitException
-import com.sunloom.app.data.sources.SeedRenderer
 import com.sunloom.app.data.sources.SmkOpenSourceAdapter
 import com.sunloom.app.data.sources.SourceBudgetExceededException
 import com.sunloom.app.data.sources.SourceRegistry
@@ -27,12 +26,9 @@ import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.CandidateAsset
 import com.sunloom.app.domain.model.DisplayPolicy
 import com.sunloom.app.domain.model.DisplayProfile
-import com.sunloom.app.domain.model.LicenseType
 import com.sunloom.app.domain.model.LockWorkspacePolicy
-import com.sunloom.app.domain.model.ProvenanceRecord
 import com.sunloom.app.domain.model.RejectionRecord
 import com.sunloom.app.domain.model.SafeCategory
-import com.sunloom.app.domain.model.SafetyClassification
 import com.sunloom.app.domain.model.SafetyVerdict
 import com.sunloom.app.domain.model.ScheduleMode
 import com.sunloom.app.domain.model.SourceDiagnostics
@@ -48,7 +44,6 @@ import com.sunloom.app.domain.safety.SafetyGate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.ensureActive
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.coroutines.coroutineContext
@@ -103,35 +98,6 @@ class LocalLibraryRepository(
             SourceIds.USER_LOCAL
         )
 
-        private data class CachedSeedAsset(
-            val pngBytes: ByteArray,
-            val sha256: String,
-            val dHash: String,
-            val rgbGrid: IntArray,
-            val gridW: Int,
-            val gridH: Int,
-            val width: Int,
-            val height: Int
-        )
-
-        /** Rendered seed PNGs are large; keep a small byte-bounded LRU instead of an unbounded map. */
-        internal const val SEED_RENDER_CACHE_MAX_BYTES = 16 * 1024 * 1024
-
-        private val seedRenderCache = object : android.util.LruCache<String, CachedSeedAsset>(SEED_RENDER_CACHE_MAX_BYTES) {
-            override fun sizeOf(key: String, value: CachedSeedAsset): Int =
-                (value.pngBytes.size + value.rgbGrid.size * 4).coerceAtLeast(1)
-        }
-
-        internal fun seedRenderCacheSizeBytes(): Int = synchronized(seedRenderCache) { seedRenderCache.size() }
-
-        internal fun clearSeedRenderCache() = synchronized(seedRenderCache) { seedRenderCache.evictAll() }
-
-        private inline fun cachedSeedAsset(key: String, build: () -> CachedSeedAsset): CachedSeedAsset {
-            synchronized(seedRenderCache) { seedRenderCache.get(key) }?.let { return it }
-            val built = build()
-            synchronized(seedRenderCache) { seedRenderCache.put(key, built) }
-            return built
-        }
         private val SAFE_FILENAME_REGEX = Regex("[^a-zA-Z0-9._-]")
 
         @Volatile
@@ -186,6 +152,8 @@ class LocalLibraryRepository(
     private val prefs = appContext.getSharedPreferences("sunloom_preferences", Context.MODE_PRIVATE)
     private val sourceHealth = SourceHealthStore(prefs, random)
     val wallpaperDir: File = File(appContext.filesDir, "wallpapers").apply { mkdirs() }
+
+    private val seedReserve = SeedReserve(wallpaperDir, safetyGate, imageEvaluator, maxSeedRenderPixels)
     val quarantineDir: File = File(appContext.noBackupFilesDir, "quarantine").apply { mkdirs() }
     private val userImportPipeline = UserImportPipeline(
         repository = this,
@@ -833,191 +801,24 @@ class LocalLibraryRepository(
         }
     }
 
-    private fun seedTargetSizeForDisplay(display: DisplayProfile): Pair<Int, Int> {
-        val rawW = display.widthPx.coerceAtLeast(1)
-        val rawH = display.heightPx.coerceAtLeast(1)
-        val minEdge = minOf(rawW, rawH)
-        val (scaledUpW, scaledUpH) = if (minEdge < 400) {
-            val factor = 400.0 / minEdge.toDouble()
-            kotlin.math.round(rawW * factor).toInt().coerceAtLeast(400) to
-                kotlin.math.round(rawH * factor).toInt().coerceAtLeast(400)
-        } else {
-            rawW to rawH
-        }
-        return CropRenderer.budgetedSize(scaledUpW, scaledUpH)
-    }
-
     fun ensureSeedReserveLoadedForDisplays(
         displays: List<DisplayProfile>,
         displayPolicy: DisplayPolicy = DisplayPolicy.SAME_ON_ALL_DISPLAYS
     ): List<WallpaperRecord> {
-        val valid = displays.filter { it.widthPx > 0 && it.heightPx > 0 }
-        if (valid.isEmpty()) return getAllWallpapers()
-        val sharpest = valid.maxBy { it.widthPx.toLong() * it.heightPx.toLong() }
-        if (valid.size == 1 || displayPolicy == DisplayPolicy.OPTIMIZE_PRIMARY_SHARPEST) {
-            return ensureSeedReserveLoaded(sharpest)
-        }
-        val anchor = valid.firstOrNull { it.isPrimary } ?: sharpest
-        val compatible = valid.filter { d ->
-            val sameOrientation = (d.widthPx < d.heightPx) == (anchor.widthPx < anchor.heightPx) ||
-                d.widthPx == d.heightPx || anchor.widthPx == anchor.heightPx
-            val spread = maxOf(
-                d.aspectRatio / anchor.aspectRatio.coerceAtLeast(1e-4),
-                anchor.aspectRatio / d.aspectRatio.coerceAtLeast(1e-4)
-            )
-            sameOrientation && spread <= 2.2
-        }.ifEmpty { listOf(sharpest) }
-        val envW = compatible.maxOf { it.widthPx }
-        val envH = compatible.maxOf { it.heightPx }
-        val (budgetW, budgetH) = CropRenderer.budgetedSize(envW, envH)
-        val syntheticTarget = DisplayProfile(
-            displayId = anchor.displayId,
-            name = if (compatible.size > 1) "Multi-Display Envelope" else anchor.name,
-            widthPx = budgetW,
-            heightPx = budgetH,
-            densityDpi = compatible.minOf { it.densityDpi },
-            isPrimary = true,
-            physicalPpi = compatible.mapNotNull { it.physicalPpi }.minOrNull()
-        )
-        return ensureSeedReserveLoaded(syntheticTarget)
+        val target = SeedReserve.renderTarget(displays, displayPolicy) ?: return getAllWallpapers()
+        return ensureSeedReserveLoaded(target)
     }
 
     fun ensureSeedReserveLoaded(display: DisplayProfile): List<WallpaperRecord> {
         purgeRevokedSources()
-        val existing = getAllWallpapers()
-        val (targetW, targetH) = seedTargetSizeForDisplay(display)
-        val (renderW, renderH) = CropRenderer.budgetedSize(
-            targetW,
-            targetH,
-            maxPixels = maxSeedRenderPixels
+        seedReserve.ensureLoaded(
+            display = display,
+            existing = getAllWallpapers(),
+            blockedIds = getPermanentBlockedAssetIds(),
+            blockedPhashes = getPermanentBlockedPerceptualHashes(),
+            blockedSha256s = getPermanentBlockedSha256s(),
+            store = ::upsertWallpaper
         )
-        val blockedIds = getPermanentBlockedAssetIds()
-        val blockedPhashes = getPermanentBlockedPerceptualHashes()
-        val blockedSha256s = getPermanentBlockedSha256s()
-
-        for (spec in BundledSeedSourceAdapter.SEED_SPECS) {
-            val existingRecord = existing.firstOrNull { it.id == spec.id }
-            if (existingRecord != null && existingRecord.isRejected) {
-                continue
-            }
-            if (existingRecord != null &&
-                File(existingRecord.localFilePath).exists() &&
-                existingRecord.provenance.originalWidth == targetW &&
-                existingRecord.provenance.originalHeight == targetH &&
-                existingRecord.provenance.renditionWidth == display.widthPx &&
-                existingRecord.provenance.renditionHeight == display.heightPx &&
-                existingRecord.provenance.safetyGateVersion == SafetyGate.COMPOSITE_GATE_VERSION &&
-                existingRecord.evaluation.isEligible
-            ) {
-                continue
-            }
-
-            val cacheKey = "${spec.id}_${renderW}x${renderH}_${targetW}x${targetH}"
-            val cachedAsset = cachedSeedAsset(cacheKey) {
-                val gridW = 48
-                val gridH = 30
-                val grid = BundledSeedSourceAdapter.generateRgbGrid(spec, gridW, gridH)
-                val dHash = SafetyGate.computePerceptualDHashFromPixels(grid, gridW, gridH)
-                val bmp = SeedRenderer.render(spec, widthPx = renderW, heightPx = renderH)
-                val baos = ByteArrayOutputStream()
-                bmp.compress(Bitmap.CompressFormat.PNG, 100, baos)
-                bmp.recycle()
-                val pngBytes = baos.toByteArray()
-                val sha256 = SafetyGate.sha256Hex(pngBytes)
-                CachedSeedAsset(
-                    pngBytes = pngBytes,
-                    sha256 = sha256,
-                    dHash = dHash,
-                    rgbGrid = grid,
-                    gridW = gridW,
-                    gridH = gridH,
-                    width = targetW,
-                    height = targetH
-                )
-            }
-
-            val seedProvenance = ProvenanceRecord(
-                sourceId = SourceIds.SEED_RESERVE,
-                sourceName = "Sunloom On-Device Procedural Reserve",
-                assetId = spec.id,
-                originalPageUrl = "",
-                creatorName = "Generated on device by Sunloom",
-                creatorPageUrl = "",
-                licenseType = LicenseType.CC0,
-                licenseUrl = LicenseType.CC0.defaultUrl,
-                licenseVersion = "1.0",
-                attributionText = "${spec.title} — Generated on device by Sunloom under CC0 1.0 Public Domain Dedication",
-                retrievedAtEpochMs = existingRecord?.provenance?.retrievedAtEpochMs ?: System.currentTimeMillis(),
-                originalWidth = targetW,
-                originalHeight = targetH,
-                renditionWidth = display.widthPx,
-                renditionHeight = display.heightPx,
-                safetyClassification = SafetyClassification.SAFE,
-                safetyClassificationSource = "Sunloom On-Device Procedural CC0 Reserve",
-                sha256Checksum = cachedAsset.sha256,
-                perceptualHash = cachedAsset.dHash,
-                adapterVersion = SourceRegistry.get(SourceIds.SEED_RESERVE)?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
-                safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION,
-                gateLayerOutcomes = GateTrace.fullPass()
-            )
-            val seedCandidate = CandidateAsset(
-                id = spec.id,
-                title = spec.title,
-                description = spec.description,
-                category = spec.category,
-                rawCategoriesAndTags = spec.subjectTags,
-                downloadUrl = "",
-                provenance = seedProvenance
-            )
-            val seedVerdict = safetyGate.evaluatePayload(
-                candidate = seedCandidate,
-                bytes = cachedAsset.pngBytes,
-                blockedAssetIds = blockedIds,
-                blockedPerceptualHashes = blockedPhashes,
-                blockedSha256Checksums = blockedSha256s
-            )
-            if (seedVerdict !is SafetyVerdict.Approved) {
-                continue
-            }
-
-            val eval = imageEvaluator.evaluateRgbGrid(
-                imageWidth = targetW,
-                imageHeight = targetH,
-                rgbGrid = cachedAsset.rgbGrid,
-                gridWidth = cachedAsset.gridW,
-                gridHeight = cachedAsset.gridH,
-                display = display,
-                allowBlurredFrameFill = false
-            )
-            if (!eval.isEligible) {
-                continue
-            }
-
-            val file = File(wallpaperDir, "${spec.id}.png")
-            FileOutputStream(file).use { out ->
-                out.write(cachedAsset.pngBytes)
-            }
-
-            val record = WallpaperRecord(
-                id = spec.id,
-                title = spec.title,
-                description = spec.description,
-                rawCategoriesAndTags = spec.subjectTags,
-                category = spec.category,
-                localFilePath = file.absolutePath,
-                croppedFilePath = file.absolutePath,
-                fileSizeBytes = file.length(),
-                isFavorite = existingRecord?.isFavorite ?: false,
-                appliedCount = existingRecord?.appliedCount ?: 0,
-                lastAppliedEpochMs = existingRecord?.lastAppliedEpochMs ?: 0L,
-                provenance = seedProvenance,
-                evaluation = eval,
-                status = existingRecord?.status ?: WallpaperStatus.SAFETY_APPROVED,
-                decisionExplanation = "Bundled CC0 offline reserve verified for ${display.resolutionLabel}. ${eval.explanation}"
-            )
-            upsertWallpaper(record)
-        }
-
         revalidateGateVersionIfNeeded(display)
         return getAllWallpapers()
     }
