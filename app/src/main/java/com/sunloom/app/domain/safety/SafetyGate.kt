@@ -388,11 +388,6 @@ class SafetyGate {
 
         fun detectMagicFormat(bytes: ByteArray): ImageFormat = detectImageFormat(bytes)
 
-        /**
-         * Parses PNG IHDR, JPEG SOF0/SOF2, or WebP VP8/VP8L/VP8X header dimensions directly
-         * from the byte stream without allocating a Bitmap. Returns null if the byte stream
-         * is a synthetic test buffer without a full dimension header.
-         */
         /** SOF0..SOF15 carry the picture size; DHT (C4), JPG (C8) and DAC (CC) share the range but do not. */
         private fun isJpegFrameMarker(marker: Int): Boolean = marker in 0xC0..0xCF && marker !in NON_FRAME_MARKERS
 
@@ -422,6 +417,11 @@ class SafetyGate {
             return null
         }
 
+        /**
+         * Parses PNG IHDR, JPEG SOF0/SOF2, or WebP VP8/VP8L/VP8X header dimensions directly
+         * from the byte stream without allocating a Bitmap. Returns null if the byte stream
+         * is a synthetic test buffer without a full dimension header.
+         */
         fun inspectImageHeaderBounds(bytes: ByteArray): ImageHeaderBounds? {
             val format = detectImageFormat(bytes)
             when (format) {

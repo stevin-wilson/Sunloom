@@ -20,8 +20,19 @@ class SunloomScheduleReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
         if (action == ChangeAlarm.ACTION) {
-            // The delayed change job was held past its time (Doze, standby bucket): run it now.
-            SunloomWallpaperScheduler(context.applicationContext).runChangeNow()
+            // The delayed change job was held past its time (Doze, standby bucket): run it now. runChangeNow asks
+            // WorkManager's database, so keep it off the main thread.
+            val appContext = context.applicationContext
+            val pending = goAsync()
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    SunloomWallpaperScheduler(appContext).runChangeNow()
+                } catch (_: Exception) {
+                    // Nothing to recover here: the next arm of the schedule replaces this attempt.
+                } finally {
+                    pending?.finish()
+                }
+            }
             return
         }
         if (action != Intent.ACTION_TIME_CHANGED &&
