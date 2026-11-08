@@ -137,6 +137,7 @@ class LocalLibraryRepository(
     private val sourceHealth = SourceHealthStore(prefs, random)
     private val preferencesStore = PreferencesStore(prefs)
     private val displayReconciler = DisplayReconciler(envelopePlanner, cropRenderer)
+    private val blocklist = Blocklist(store)
     val wallpaperDir: File = File(appContext.filesDir, "wallpapers").apply { mkdirs() }
 
     private val seedReserve = SeedReserve(wallpaperDir, safetyGate, imageEvaluator, maxSeedRenderPixels)
@@ -351,48 +352,13 @@ class LocalLibraryRepository(
         sourceId: String,
         reasonCode: String,
         timestampEpochMs: Long = System.currentTimeMillis()
-    ) {
-        val cleanAsset = assetId?.trim().orEmpty()
-        val cleanSha = sha256?.trim().orEmpty()
-        val cleanPhash = perceptualHash?.trim().orEmpty()
-        store.addBlocklistEntry(
-            BlocklistEntry(
-                assetId = cleanAsset,
-                sha256 = cleanSha,
-                dHash = cleanPhash,
-                sourceId = sourceId,
-                reason = reasonCode,
-                createdAtEpochMs = timestampEpochMs
-            )
-        )
-    }
+    ) = blocklist.add(assetId, sha256, perceptualHash, sourceId, reasonCode, timestampEpochMs)
 
-    fun getPermanentBlockedAssetIds(): Set<String> {
-        val fromBlocklist = store.getAllBlocklistEntries()
-            .map { it.assetId }
-            .filter { it.isNotBlank() }
-            .toSet()
-        val fromPermanentRejections = store.getAllRejections()
-            .filter { it.isPermanent }
-            .map { it.assetId }
-            .filter { it.isNotBlank() }
-            .toSet()
-        return fromBlocklist + fromPermanentRejections
-    }
+    fun getPermanentBlockedAssetIds(): Set<String> = blocklist.assetIds()
 
-    fun getPermanentBlockedSha256s(): Set<String> {
-        return store.getAllBlocklistEntries()
-            .map { it.sha256 }
-            .filter { it.isNotBlank() }
-            .toSet()
-    }
+    fun getPermanentBlockedSha256s(): Set<String> = blocklist.sha256s()
 
-    fun getPermanentBlockedPerceptualHashes(): Set<String> {
-        return store.getAllBlocklistEntries()
-            .map { it.dHash }
-            .filter { it.isNotBlank() }
-            .toSet()
-    }
+    fun getPermanentBlockedPerceptualHashes(): Set<String> = blocklist.perceptualHashes()
 
     /**
      * Purges any cached wallpaper from a source that is no longer admitted in [SourceRegistry].
