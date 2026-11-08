@@ -59,6 +59,12 @@ class SunloomWallpaperScheduler(
     }
 
     fun cancelAllScheduledWork() {
+        cancelAutomationWork()
+        runCatching { WorkManager.getInstance(context) }.getOrNull()?.cancelUniqueWork(WORK_NAME_STORE_WATCH)
+    }
+
+    /** Cancels the change, refresh and alarm work, leaving any store watch as it is. */
+    private fun cancelAutomationWork() {
         val workManager = runCatching { WorkManager.getInstance(context) }.getOrNull() ?: return
         val schedulePrefs = context.applicationContext.getSharedPreferences("sunloom_preferences", Context.MODE_PRIVATE)
         workManager.cancelUniqueWork(WORK_NAME)
@@ -69,11 +75,37 @@ class SunloomWallpaperScheduler(
     }
 
     /**
+     * Automation is suspended because the library store will not open (Article VII §6). Rather than staying off until
+     * the app is next opened, a light job checks every few hours and resumes automation by itself once the store
+     * opens. It touches no data while the store is down.
+     */
+    fun suspendForUnavailableStore() {
+        cancelAutomationWork() // not the watch: cancelling and re-enqueueing it would restart its interval every time
+        val workManager = runCatching { WorkManager.getInstance(context) }.getOrNull() ?: return
+        workManager.enqueueUniquePeriodicWork(
+            WORK_NAME_STORE_WATCH,
+            ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<StoreWatchWorker>(RefreshSchedulePolicy.STORE_WATCH_INTERVAL_HOURS, TimeUnit.HOURS).build()
+        )
+    }
+
+    /**
      * Re-arms automation when nothing is pending, and leaves a pending request alone. Called when the app opens, so a
      * schedule lost to a store error, an Auto Backup restore (WorkManager's own database is not restored) or a
      * force-stop comes back without the person having to edit a setting.
      */
     fun ensureScheduled(preferences: UserPreferences) {
+        ensureAutomationScheduled(preferences)
+        // The preferences were read from an open store and automation is re-armed, so the watch has done its job.
+        // Last, so a watch running this very call is not cancelled halfway through the re-arm.
+        stopStoreWatch()
+    }
+
+    private fun stopStoreWatch() {
+        runCatching { WorkManager.getInstance(context) }.getOrNull()?.cancelUniqueWork(WORK_NAME_STORE_WATCH)
+    }
+
+    private fun ensureAutomationScheduled(preferences: UserPreferences) {
         val workManager = runCatching { WorkManager.getInstance(context) }.getOrNull() ?: return
         val plan = RefreshSchedulePolicy.plan(
             preferences.autoChangeEnabled,
@@ -132,11 +164,13 @@ class SunloomWallpaperScheduler(
         val effectivePrefs = preferences ?: try {
             context.appContainer().newRepository().loadPreferences()
         } catch (_: LibraryStoreUnavailableException) {
-            cancelAllScheduledWork()
+            suspendForUnavailableStore()
             return
         } catch (_: Exception) {
             null
         }
+        // Only a store that was read (or preferences the caller just read) shows it is open; an unknown state keeps the watch.
+        if (effectivePrefs != null) workManager.cancelUniqueWork(WORK_NAME_STORE_WATCH)
         val isManualMode = effectivePrefs?.scheduleMode == ScheduleMode.MANUAL_ONLY
 
         // Changing the wallpaper follows the schedule; fetching new images does not (Article X §1, v0.14).
@@ -218,6 +252,7 @@ class SunloomWallpaperScheduler(
         const val WORK_NAME = "sunloom_periodic_schedule_work"
         const val WORK_NAME_CHANGE = "sunloom_change_work"
         const val WORK_NAME_REFRESH = "sunloom_refresh_work"
+        const val WORK_NAME_STORE_WATCH = "sunloom_store_watch_work"
         private const val PREF_REFRESH_CONSTRAINTS_SIG = "scheduled_refresh_constraints_sig"
 
         /**
@@ -414,7 +449,18 @@ class ChangeWorker(
         runAttemptCount = runAttemptCount,
         execute = { SunloomWallpaperScheduler.executeScheduledWallpaperChange(applicationContext) },
         onGiveUp = { SunloomWallpaperScheduler.rearmAfterGivingUp(applicationContext) },
-        onStoreUnavailable = { SunloomWallpaperScheduler(applicationContext).cancelAllScheduledWork() }
+        onStoreUnavailable = { SunloomWallpaperScheduler(applicationContext).suspendForUnavailableStore() }
+    )
+}
+
+/** Checks whether the library store opens again after automation was suspended, and resumes automation if so. */
+class StoreWatchWorker(
+    appContext: Context,
+    params: WorkerParameters
+) : CoroutineWorker(appContext, params) {
+    override suspend fun doWork(): Result = mapStoreWatchResult(
+        opens = { applicationContext.appContainer().newRepository().loadPreferences() },
+        onRecovered = { prefs -> SunloomWallpaperScheduler(applicationContext).ensureScheduled(prefs) }
     )
 }
 
@@ -425,7 +471,7 @@ class RefreshWorker(
     override suspend fun doWork(): Result = mapRefreshWorkResult(
         runAttemptCount = runAttemptCount,
         execute = { SunloomWallpaperScheduler.executeScheduledCatalogRefresh(applicationContext) },
-        onStoreUnavailable = { SunloomWallpaperScheduler(applicationContext).cancelAllScheduledWork() }
+        onStoreUnavailable = { SunloomWallpaperScheduler(applicationContext).suspendForUnavailableStore() }
     )
 }
 
@@ -504,3 +550,33 @@ private fun retryThenSuspend(runAttemptCount: Int, onStoreUnavailable: () -> Uni
         onStoreUnavailable()
         ListenableWorker.Result.failure()
     }
+
+/**
+ * A store-watch run always succeeds so the periodic job keeps going: it either finds the store open (and resumes
+ * automation, which also removes the watch) or finds it still down and tries again at the next interval.
+ */
+internal suspend fun <T> mapStoreWatchResult(
+    opens: suspend () -> T,
+    onRecovered: (T) -> Unit
+): ListenableWorker.Result {
+    val opened = try {
+        opens()
+    } catch (cancel: CancellationException) {
+        throw cancel
+    } catch (_: LibraryStoreUnavailableException) {
+        return ListenableWorker.Result.success() // still down; the next interval checks again
+    } catch (_: Exception) {
+        return ListenableWorker.Result.success()
+    } catch (_: VirtualMachineError) {
+        return ListenableWorker.Result.success()
+    }
+    // The store is open. A failure re-arming is a different fault from "still down": log it and try at the next interval.
+    try {
+        onRecovered(opened)
+    } catch (cancel: CancellationException) {
+        throw cancel
+    } catch (err: Exception) {
+        android.util.Log.w("StoreWatch", "rearm_failed", err)
+    }
+    return ListenableWorker.Result.success()
+}

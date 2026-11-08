@@ -84,4 +84,9 @@ class RefreshSchedulePolicyTest {
         assertFalse(RefreshSchedulePolicy.shouldReplaceChangeOnAlarm(changeRunning = true))
         assertTrue(RefreshSchedulePolicy.shouldReplaceChangeOnAlarm(changeRunning = false))
     }
+
+    @Test
+    fun `the store watch checks every six hours`() {
+        assertEquals(6L, RefreshSchedulePolicy.STORE_WATCH_INTERVAL_HOURS)
+    }
 }

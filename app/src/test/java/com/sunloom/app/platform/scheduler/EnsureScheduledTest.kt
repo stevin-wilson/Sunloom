@@ -10,6 +10,8 @@ import androidx.work.WorkManager
 import androidx.work.testing.WorkManagerTestInitHelper
 import com.sunloom.app.NativeSqliteAssumption
 import com.sunloom.app.Requirement
+import com.sunloom.app.data.repository.LibraryStoreUnavailableException
+import com.sunloom.app.data.repository.LocalLibraryRepository
 import com.sunloom.app.domain.model.ScheduleMode
 import com.sunloom.app.domain.model.UserPreferences
 import org.junit.Assert.assertEquals
@@ -68,5 +70,51 @@ class EnsureScheduledTest {
     fun `does nothing when automation is paused`() {
         SunloomWallpaperScheduler(context).ensureScheduled(prefs.copy(isPaused = true))
         assertTrue(changeWork().isEmpty())
+    }
+
+    private fun watchWork() = workManager.getWorkInfosForUniqueWork(SunloomWallpaperScheduler.WORK_NAME_STORE_WATCH).get()
+
+    /**
+     * These tests are about an outage, so the store is made to fail to open. That keeps their outcome deterministic
+     * whether or not the test WorkManager runs the unconstrained watch straight away: if it does, the watch finds the
+     * store still down and stays enqueued. Recovery itself is covered by `mapStoreWatchResult` (WorkerResultMappingTest)
+     * and by "re-arming automation stops the store watch".
+     */
+    private fun storeIsDown() {
+        LocalLibraryRepository.testStoreFactoryOverride = { throw LibraryStoreUnavailableException("down") }
+        LocalLibraryRepository.clearCachedDefaultStoreForTests()
+    }
+
+    @Test
+    fun `suspending for an unavailable store cancels automation and starts the store watch`() {
+        storeIsDown()
+        val scheduler = SunloomWallpaperScheduler(context)
+        scheduler.ensureScheduled(prefs)
+        assertEquals(WorkInfo.State.ENQUEUED, changeWork().single().state)
+
+        scheduler.suspendForUnavailableStore()
+
+        assertTrue("automation is suspended", changeWork().all { it.state == WorkInfo.State.CANCELLED })
+        assertEquals(WorkInfo.State.ENQUEUED, watchWork().single().state)
+    }
+
+    @Test
+    fun `re-arming automation stops the store watch`() {
+        storeIsDown()
+        val scheduler = SunloomWallpaperScheduler(context)
+        scheduler.suspendForUnavailableStore()
+        scheduler.ensureScheduled(prefs)
+        assertTrue(watchWork().all { it.state == WorkInfo.State.CANCELLED })
+        assertEquals(WorkInfo.State.ENQUEUED, changeWork().last().state)
+    }
+
+    @Test
+    fun `suspending again does not restart the store watch's interval`() {
+        storeIsDown()
+        val scheduler = SunloomWallpaperScheduler(context)
+        scheduler.suspendForUnavailableStore()
+        val first = watchWork().single().id
+        scheduler.suspendForUnavailableStore()
+        assertEquals("the pending watch is kept, so repeated calls cannot postpone it forever", first, watchWork().single().id)
     }
 }

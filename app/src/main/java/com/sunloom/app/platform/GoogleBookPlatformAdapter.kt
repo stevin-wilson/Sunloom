@@ -645,6 +645,10 @@ class GoogleBookPlatformAdapter(
         scheduler.cancelAllScheduledWork()
     }
 
+    fun suspendForUnavailableStore() {
+        scheduler.suspendForUnavailableStore()
+    }
+
     fun ensureScheduled(preferences: UserPreferences) {
         scheduler.ensureScheduled(preferences)
     }

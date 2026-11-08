@@ -53,7 +53,7 @@ class AndroidSunloomGateway(
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (_: LibraryStoreUnavailableException) {
-                platformAdapter.cancelAllScheduledWork()
+                platformAdapter.suspendForUnavailableStore()
                 SunloomUiState(
                     isInitialLoading = false,
                     isStorageUnavailable = true,

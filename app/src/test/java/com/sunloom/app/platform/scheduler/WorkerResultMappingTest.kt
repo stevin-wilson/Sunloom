@@ -145,4 +145,39 @@ class WorkerResultMappingTest {
         run(3) { throw IllegalStateException("boom") }
         assertEquals(2, rearmed)
     }
+
+    private fun <T> watch(opens: suspend () -> T, onRecovered: (T) -> Unit = {}) =
+        runBlocking { mapStoreWatchResult(opens, onRecovered) }
+
+    @Test
+    fun storeWatch_resumesAutomationWithTheRecoveredPreferences() {
+        var got: String? = null
+        assertEquals(Result.success(), watch({ "prefs" }, { got = it }))
+        assertEquals("prefs", got)
+    }
+
+    @Test
+    fun storeWatch_staysQuietWhileTheStoreIsStillDown() {
+        var recovered = false
+        assertEquals(Result.success(), watch<String>({ throw LibraryStoreUnavailableException("down") }, { recovered = true }))
+        assertEquals(Result.success(), watch<String>({ throw IllegalStateException("boom") }, { recovered = true }))
+        assertFalse(recovered)
+    }
+
+    @Test
+    fun storeWatch_aFailedRearmIsNotMistakenForTheStoreBeingDown() {
+        // The store opened; if re-arming then fails it must still end as a normal run (and be retried at the next interval).
+        var attempts = 0
+        assertEquals(Result.success(), watch({ "prefs" }, { attempts++; throw IllegalStateException("alarm manager") }))
+        assertEquals(1, attempts)
+    }
+
+    @Test
+    fun storeWatch_cancellationPropagates() {
+        try {
+            watch<String>({ throw CancellationException("cancelled") })
+            fail("cancellation must propagate")
+        } catch (_: CancellationException) {
+        }
+    }
 }

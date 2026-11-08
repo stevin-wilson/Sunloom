@@ -43,6 +43,9 @@ internal object RefreshSchedulePolicy {
 
     const val FOLLOW_OS_POLL_MINUTES = 15L
 
+    /** How often a suspended automation checks whether the library store opens again (Article VII §6). */
+    const val STORE_WATCH_INTERVAL_HOURS = 6L
+
     /** The backstop alarm replaces the held change job, but never a change that is running right now. */
     fun shouldReplaceChangeOnAlarm(changeRunning: Boolean): Boolean = !changeRunning
 }
