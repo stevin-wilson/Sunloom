@@ -27,7 +27,14 @@ data class SourceRegistration(
     val minRequestSpacingMs: Long = 150L,
     val maxRenditionLongEdgePx: Int = Int.MAX_VALUE,
     val publishedRateLimitNote: String = "",
-    val safetySignalsSummary: String = ""
+    val safetySignalsSummary: String = "",
+    /** Whether a new install, and an upgrading install that has not seen this source yet, starts with it on. */
+    val enabledByDefault: Boolean = true,
+    /**
+     * Set when a source that used to be on by default becomes opt-in: installs that still have it on from the old
+     * default have it switched off once, and a later choice to switch it back on is kept (PreferencesStore).
+     */
+    val switchOffForExistingInstallsOnce: Boolean = false
 )
 
 object SourceRegistry {
@@ -96,7 +103,10 @@ object SourceRegistry {
             maxRequestsPerSync = 10,
             minRequestSpacingMs = 150L,
             publishedRateLimitNote = "1,000 req/hr anonymous limit; Sunloom <= 10 req/sync",
-            safetySignalsSummary = "Admitted photo families only, shape/size screen, no third-party credits + L2 denylist"
+            safetySignalsSummary = "Admitted photo families only, shape/size screen, no third-party credits + L2 denylist",
+            // Opt-in (2026-11-08): NASA records are archival documentation, and even screened, too many are unsuitable.
+            enabledByDefault = false,
+            switchOffForExistingInstallsOnce = true
         ),
         SourceRegistration(
             sourceId = "artic_cc0",
@@ -224,6 +234,14 @@ object SourceRegistry {
 
     fun admittedSources(): List<SourceRegistration> =
         REGISTRATIONS.values.filter { it.isAdmitted }
+
+    /** The sources a new install starts with: admitted and on by default. The one place this is decided. */
+    fun defaultEnabledSourceIds(): Set<String> =
+        REGISTRATIONS.values.filter { it.isAdmitted && it.enabledByDefault }.map { it.sourceId }.toSet()
+
+    /** Sources that moved from on-by-default to opt-in and must be switched off once on installs that had them on. */
+    fun switchedOffOnceSourceIds(): Set<String> =
+        REGISTRATIONS.values.filter { it.isAdmitted && it.switchOffForExistingInstallsOnce }.map { it.sourceId }.toSet()
 
     fun allAllowedHosts(): Set<String> =
         REGISTRATIONS.values

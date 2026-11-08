@@ -584,6 +584,7 @@ class LocalLibrarySyncTest {
             candidate("nasa-PIA0000$it", sourceId = "nasa_library", creator = "NASA", tags = listOf("landscape", "Galileo"))
         }
         val repo = repo(FixedAdapter("nasa_library", nasa))
+        repo.savePreferences(repo.loadPreferences().let { it.copy(enabledSources = it.enabledSources + "nasa_library") })
         val added = repo.refreshOnlineCatalog(display)
         assertEquals("rejections=${repo.getAllRejections()}", 5, added)
     }
