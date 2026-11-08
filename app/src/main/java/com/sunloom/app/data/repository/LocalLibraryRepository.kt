@@ -95,7 +95,6 @@ class LocalLibraryRepository(
             SourceIds.USER_LOCAL
         )
 
-
         @Volatile
         internal var testStoreFactoryOverride: ((Context) -> LibraryStore)? = null
 
@@ -1064,7 +1063,6 @@ class LocalLibraryRepository(
             .toMutableSet()
         val blockedSha256s = getPermanentBlockedSha256s().toMutableSet()
         val blockedPhashes = getPermanentBlockedPerceptualHashes().toMutableSet()
-
 
         val now = System.currentTimeMillis()
         val selectedAdapters = selectAdaptersForSync(

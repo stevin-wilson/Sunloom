@@ -247,8 +247,8 @@ internal class CandidateIngestor(
         }.filter { it.isNotBlank() }.distinct()
 
         run.downloadsTried++
-        for (attemptUrl in downloadChain) {
-            tryRendition(attemptUrl, isLast = attemptUrl == downloadChain.last(), run)?.let { return it }
+        for ((index, attemptUrl) in downloadChain.withIndex()) {
+            tryRendition(attemptUrl, isLast = index == downloadChain.lastIndex, run)?.let { return it }
         }
         return Download.Failed
     }
@@ -328,10 +328,13 @@ internal class CandidateIngestor(
         // Phase 0.1: Always use REAL decoded/header dimensions — NEVER maxOf(..., provenance.originalWidth)!
         val srcW = headerBounds?.width?.takeIf { it > 0 } ?: decoded.width
         val srcH = headerBounds?.height?.takeIf { it > 0 } ?: decoded.height
-        val rgbGrid = sampleBitmapToRgbGrid(decoded, GRID_W, GRID_H)
-        val evalGrid = sampleBitmapToEvaluationGrid(decoded, GRID_W, GRID_H)
-        decoded.recycle()
-        return Sampled(approved, srcW, srcH, rgbGrid, evalGrid)
+        try {
+            val rgbGrid = sampleBitmapToRgbGrid(decoded, GRID_W, GRID_H)
+            val evalGrid = sampleBitmapToEvaluationGrid(decoded, GRID_W, GRID_H)
+            return Sampled(approved, srcW, srcH, rgbGrid, evalGrid)
+        } finally {
+            decoded.recycle() // also when sampling throws, so a failing sync does not hold decoded bitmaps
+        }
     }
 
     /** Duplicate checks, the evaluator and the envelope planner; null means skip it (the reason is recorded). */
