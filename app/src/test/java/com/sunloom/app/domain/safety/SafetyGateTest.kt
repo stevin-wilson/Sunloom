@@ -573,4 +573,83 @@ class SafetyGateTest {
         val verdictAerial = safetyGate.evaluateMetadata(aerialDelta)
         assertTrue("Expected aerial delta candidate to be Approved, got $verdictAerial", verdictAerial is SafetyVerdict.Approved)
     }
+
+    private fun nasaCandidate(title: String, description: String, tags: List<String>): CandidateAsset {
+        val base = validCandidate(
+            title = title,
+            description = description,
+            tags = tags,
+            licenseType = LicenseType.PUBLIC_DOMAIN,
+            creatorName = "NASA",
+            sourceId = "nasa_library"
+        )
+        return base.copy(downloadUrl = "https://images-assets.nasa.gov/image/x/x~orig.jpg")
+    }
+
+    @Test
+    fun `NASA press briefings and media days are rejected even though their keywords look like scenery`() {
+        val briefing = nasaCandidate(
+            "PACE Science Briefing",
+            "A PACE mission and science briefing takes place at NASA's Kennedy Space Center in Florida. " +
+                "Participants, from left to right are: Katherine Rohloff, NASA Communications; Kate Calvin, Chief Scientist.",
+            listOf("Aerosol", "Cloud", "Earth", "Kennedy Space Center", "PACE")
+        )
+        val mediaDay = nasaCandidate(
+            "PACE Media Day",
+            "NASA invited members of the media to view NASA's PACE spacecraft inside a cleanroom.",
+            listOf("Aerosol", "Cloud", "Earth", "Kennedy Space Center", "PACE")
+        )
+        val interview = nasaCandidate(
+            "PACE Media Day",
+            "Media interview a member of NASA's PACE team beside the spacecraft during a NASA-hosted media day.",
+            listOf("Cloud", "Earth", "PACE")
+        )
+        for (candidate in listOf(briefing, mediaDay, interview)) {
+            val verdict = safetyGate.evaluateMetadata(candidate)
+            assertTrue("Expected Rejected for '${candidate.title}', got $verdict", verdict is SafetyVerdict.Rejected)
+            assertEquals("PROHIBITED_CONTENT_TERM", (verdict as SafetyVerdict.Rejected).reasonCode)
+        }
+    }
+
+    @Test
+    fun `NASA data maps and illustrations are rejected as not photographic`() {
+        val dataMap = nasaCandidate(
+            "COWVR's New Map",
+            "This map, made using the Compact Ocean Wind Vector Radiometer's observations, shows Earth's microwave emissions.",
+            listOf("COWVR", "Earth")
+        )
+        val concept = nasaCandidate(
+            "Spacecraft Over Titan",
+            "Artist's concept of a spacecraft above the clouds of Titan.",
+            listOf("Titan", "Space")
+        )
+        for (candidate in listOf(dataMap, concept)) {
+            val verdict = safetyGate.evaluateMetadata(candidate)
+            assertTrue("Expected Rejected for '${candidate.title}', got $verdict", verdict is SafetyVerdict.Rejected)
+            assertEquals("NON_PHOTOGRAPHIC_CONTENT", (verdict as SafetyVerdict.Rejected).reasonCode)
+        }
+    }
+
+    @Test
+    fun `NASA scenic photographs and ISS astronaut-taken descriptions still pass`() {
+        val iss = nasaCandidate(
+            "Aurora over Earth's horizon",
+            "An astronaut aboard the International Space Station took this photograph of an aurora streaming across Earth's horizon.",
+            listOf("Aurora", "Earth", "Horizon")
+        )
+        val galaxy = nasaCandidate(
+            "Spiral Galaxy NGC 1300",
+            "The Hubble Space Telescope captured this barred spiral galaxy. Dust lanes cross the bright core.",
+            listOf("Galaxy", "Hubble", "Space")
+        )
+        val shadedRelief = nasaCandidate(
+            "Gulf Coast, Shaded Relief and Colored Height",
+            "The Gulf Coast as seen by the Shuttle Radar Topography Mission.",
+            listOf("Earth", "Coast")
+        )
+        for (candidate in listOf(iss, galaxy, shadedRelief)) {
+            val verdict = safetyGate.evaluateMetadata(candidate)
+            assertTrue("Expected Approved for '${candidate.title}', got $verdict", verdict is SafetyVerdict.Approved)
+        }
+    }
 }

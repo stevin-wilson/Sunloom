@@ -15,7 +15,7 @@ import java.util.Locale
  * to retrieve bright daytime orbital Earth imagery and deep-space photography.
  *
  * Enforces:
- * - Rejection of NASA HQ (`center == "HQ"`) event/press photography.
+ * - Admission of only the JPL, JSC and GSFC centres, and rejection of headquarters (HQ/NHQ) ids.
  * - Strict third-party copyright and credit checks (©, copyright, Getty, AP, Reuters, non-NASA courtesy credits).
  * - Resolution upgrade via `collection.json` manifest or `~orig.jpg` (falling back to `~large.jpg`).
  * - Zero injected safety tags and zero fabricated dimensions.
@@ -101,8 +101,11 @@ class NasaLibrarySourceAdapter(
 
             val nasaId = data.str("nasa_id", "").trim().ifBlank { continue }
             val center = data.str("center", "NASA").trim()
-            // Reject NASA HQ event, portrait, and press-conference photography (Phase 0.3)
-            if (center.equals("HQ", ignoreCase = true)) {
+            // Only the centres that publish scenery are admitted. Kennedy (launch, ground-operations and visit
+            // photography) and the headquarters ids (which can carry another centre's label) are events, not scenes.
+            if (!center.uppercase(Locale.ROOT).let { it in ADMITTED_CENTERS } ||
+                nasaId.uppercase(Locale.ROOT).let { it.startsWith("HQ") || it.startsWith("NHQ") }
+            ) {
                 continue
             }
 
@@ -246,6 +249,8 @@ class NasaLibrarySourceAdapter(
     }
 
     companion object {
+        /** Centres whose records are mostly pictures of Earth and space (JPL, ISS photography, Goddard). */
+        private val ADMITTED_CENTERS = setOf("JPL", "JSC", "GSFC")
         private val NON_WORD_REGEX = Regex("[^a-z0-9]+")
         private val ALLOWED_US_GOV_PHRASES = listOf("geological survey", "public domain")
 

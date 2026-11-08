@@ -209,6 +209,20 @@ class SafetyGate {
             )
         }
 
+        // L2d. Not a scene: data maps, charts, diagrams and artist renderings (Constitution v0.25)
+        val nonPhotographicMatch = SafetyDenylist.findNonPhotographicMatch(
+            title = candidate.title,
+            description = candidate.description,
+            rawCategoriesAndTags = candidate.rawCategoriesAndTags
+        )
+        if (nonPhotographicMatch != null) {
+            return SafetyVerdict.Rejected(
+                reasonCode = "NON_PHOTOGRAPHIC_CONTENT",
+                explanation = "Asset is a map, chart, diagram or rendering rather than a photograph (matched '$nonPhotographicMatch').",
+                failedLayer = "L2"
+            )
+        }
+
         // L2b. Internet candidates must have non-empty source tags and match a recognized safe visual domain
         if (!candidate.isUserLocal) {
             if (candidate.rawCategoriesAndTags.isEmpty()) {

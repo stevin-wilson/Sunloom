@@ -535,6 +535,31 @@ class SourceAdaptersTest {
     }
 
     @Test
+    fun `NASA keeps only the JPL, JSC and GSFC centres and drops headquarters ids whatever centre they carry`() {
+        val nasa = NasaLibrarySourceAdapter()
+        fun item(id: String, center: String) = """
+            {
+              "data": [{
+                "nasa_id": "$id", "title": "Title $id", "center": "$center",
+                "description": "Earth seen from orbit.", "keywords": ["Earth", "Cloud"]
+              }],
+              "links": [{ "href": "https://images-assets.nasa.gov/image/$id/$id~thumb.jpg" }]
+            }
+        """.trimIndent()
+        val json = """{"collection": {"items": [
+            ${item("KSC-20240103-PH-JBS01_0023", "KSC")},
+            ${item("NHQ20260821_admin_0001", "KSC")},
+            ${item("HQ_2025_01", "GSFC")},
+            ${item("AFRC2020-0001", "AFRC")},
+            ${item("iss073e0293986", "JSC")},
+            ${item("PIA12345", "JPL")},
+            ${item("GSFC_20240126_X_001", "GSFC")}
+        ]}}"""
+        val ids = nasa.parseResponse(json).map { it.id }
+        assertEquals(listOf("nasa-iss073e0293986", "nasa-PIA12345", "nasa-GSFC_20240126_X_001"), ids)
+    }
+
+    @Test
     fun `testRedirectValidatorRejectsCrossDomainRedirect`() {
         // Admitted hosts succeed
         DefaultHttpsClient.validateHttpsAndHost("https://commons.wikimedia.org/w/api.php", "wikimedia_featured")
