@@ -37,7 +37,7 @@ import java.util.concurrent.TimeUnit
  * Articles IX §3, X §2 & XIII:
  * Dedicated background scheduler module managing split WorkManager scheduling:
  * - [ChangeWorker]: offline transition worker (never blocked on network or battery-not-low).
- * - [RefreshWorker]: periodic 12-hour online catalog replenishment worker honoring Wi-Fi / Battery Saver rules.
+ * - [RefreshWorker]: periodic (every 3 hours) online catalog replenishment worker honoring Wi-Fi / Battery Saver rules.
  */
 class SunloomWallpaperScheduler(
     private val context: Context,

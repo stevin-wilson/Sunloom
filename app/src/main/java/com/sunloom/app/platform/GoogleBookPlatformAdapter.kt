@@ -138,7 +138,7 @@ class DefaultSystemWallpaperGateway(private val context: Context) : SystemWallpa
             val beforeSysId = if (wantsSystem) getWallpaperId(WallpaperManager.FLAG_SYSTEM) else -1
             val beforeLockId = if (wantsLock) getWallpaperId(WallpaperManager.FLAG_LOCK) else -1
 
-            // Disable launcher parallax scrolling so system center-crop preserves our multi-display envelope
+            // Only the offsets this process reports are zeroed; a launcher's own parallax setting is not ours to change.
             runCatching { wallpaperManager.setWallpaperOffsetSteps(0f, 0f) }
             val result = wallpaperManager.setBitmap(bitmap, null, true, flags)
 
