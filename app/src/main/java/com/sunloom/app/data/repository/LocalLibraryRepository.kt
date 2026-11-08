@@ -644,12 +644,15 @@ class LocalLibraryRepository(
             }
             val approved = payloadVerdict as SafetyVerdict.Approved
 
-            val decoded = decodeSampledBitmapSafely(
+            val outcome = decodeSampledOutcome(
                 bytes = bytes,
                 headerW = headerBounds?.width ?: 0,
                 headerH = headerBounds?.height ?: 0,
                 maxEdgePx = 512
             )
+            // Out of memory says nothing about the picture: leave it cached and check it again next time.
+            if (outcome is DecodeOutcome.OutOfMemory) continue
+            val decoded = (outcome as? DecodeOutcome.Decoded)?.bitmap
             if (decoded == null) {
                 evictFailedRevalidationRecord(
                     record = record,
@@ -1493,11 +1496,14 @@ class LocalLibraryRepository(
                     }
                     val approved = payloadVerdict as SafetyVerdict.Approved
 
-                    val decoded = decodeSampledBitmapSafely(
+                    val outcome = decodeSampledOutcome(
                         payloadBytes,
                         headerBounds?.width ?: 0,
                         headerBounds?.height ?: 0
                     )
+                    // Out of memory says nothing about the picture: skip it now and see it again on a later sync.
+                    if (outcome is DecodeOutcome.OutOfMemory) continue
+                    val decoded = (outcome as? DecodeOutcome.Decoded)?.bitmap
                     if (decoded == null) {
                         recordRejection(
                             Rejections.permanent(

@@ -36,4 +36,20 @@ class ImageDecodeSupportTest {
         assertNotNull(decoded)
         assertTrue(decoded!!.width <= 512 && decoded.height <= 512)
     }
+
+    @Test
+    fun `running out of memory is reported apart from a corrupt picture`() {
+        val oom = decodeSampledOutcome(ByteArray(10), 100, 100, decoder = { _, _ -> throw OutOfMemoryError() })
+        assertTrue("OOM must not look corrupt", oom is DecodeOutcome.OutOfMemory)
+        val corrupt = decodeSampledOutcome(ByteArray(10), 100, 100, decoder = { _, _ -> null })
+        assertTrue(corrupt is DecodeOutcome.Corrupt)
+        val broken = decodeSampledOutcome(ByteArray(10), 100, 100, decoder = { _, _ -> throw IllegalArgumentException("bad") })
+        assertTrue(broken is DecodeOutcome.Corrupt)
+    }
+
+    @Test
+    fun `a decodable picture is returned`() {
+        val outcome = decodeSampledOutcome(jpeg(800, 600), 800, 600, maxEdgePx = 512)
+        assertTrue(outcome is DecodeOutcome.Decoded)
+    }
 }
