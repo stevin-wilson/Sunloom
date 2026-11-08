@@ -1,10 +1,9 @@
 package com.sunloom.app.data.repository
 
-import com.sunloom.app.domain.model.SourceIds
 import android.graphics.Bitmap
 import com.sunloom.app.data.sources.BundledSeedSourceAdapter
-import com.sunloom.app.data.sources.SeedWallpaperSpec
 import com.sunloom.app.data.sources.SeedRenderer
+import com.sunloom.app.data.sources.SeedWallpaperSpec
 import com.sunloom.app.data.sources.SourceRegistry
 import com.sunloom.app.domain.evaluator.ImageEvaluator
 import com.sunloom.app.domain.model.CandidateAsset
@@ -14,6 +13,7 @@ import com.sunloom.app.domain.model.LicenseType
 import com.sunloom.app.domain.model.ProvenanceRecord
 import com.sunloom.app.domain.model.SafetyClassification
 import com.sunloom.app.domain.model.SafetyVerdict
+import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.model.WallpaperStatus
 import com.sunloom.app.domain.renderer.CropRenderer
@@ -64,7 +64,11 @@ internal class SeedReserve(
         }
     }
 
-    /** The record to store for [spec], or null when it is rejected, already right, or fails the gate or the evaluator. */
+    /**
+     * The record to store for [spec], or null when it is rejected, already right, or fails the gate or the evaluator.
+     * It writes the seed's PNG to the wallpaper directory before returning, so the file is new when [ensureLoaded]'s
+     * `store` runs (the same order as before this was extracted).
+     */
     private fun buildRecord(
         spec: SeedWallpaperSpec,
         plan: Plan,
@@ -141,9 +145,7 @@ internal class SeedReserve(
                 dHash = dHash,
                 rgbGrid = grid,
                 gridW = gridW,
-                gridH = gridH,
-                width = plan.targetW,
-                height = plan.targetH
+                gridH = gridH
             )
         }
     }
@@ -210,9 +212,7 @@ internal class SeedReserve(
             val dHash: String,
             val rgbGrid: IntArray,
             val gridW: Int,
-            val gridH: Int,
-            val width: Int,
-            val height: Int
+            val gridH: Int
         )
 
         /** Rendered seed PNGs are large; keep a small byte-bounded LRU instead of an unbounded map. */
@@ -273,7 +273,7 @@ internal class SeedReserve(
             val envW = compatible.maxOf { it.widthPx }
             val envH = compatible.maxOf { it.heightPx }
             val (budgetW, budgetH) = CropRenderer.budgetedSize(envW, envH)
-            val syntheticTarget = DisplayProfile(
+            return DisplayProfile(
                 displayId = anchor.displayId,
                 name = if (compatible.size > 1) "Multi-Display Envelope" else anchor.name,
                 widthPx = budgetW,
@@ -282,7 +282,6 @@ internal class SeedReserve(
                 isPrimary = true,
                 physicalPpi = compatible.mapNotNull { it.physicalPpi }.minOrNull()
             )
-            return syntheticTarget
         }
     }
 }
