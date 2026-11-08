@@ -103,11 +103,7 @@ class NasaLibrarySourceAdapter(
             val center = data.str("center", "NASA").trim()
             // Only the centres that publish scenery are admitted. Kennedy (launch, ground-operations and visit
             // photography) and the headquarters ids (which can carry another centre's label) are events, not scenes.
-            if (!center.uppercase(Locale.ROOT).let { it in ADMITTED_CENTERS } ||
-                nasaId.uppercase(Locale.ROOT).let { it.startsWith("HQ") || it.startsWith("NHQ") }
-            ) {
-                continue
-            }
+            if (center.uppercase(Locale.ROOT) !in ADMITTED_CENTERS || isHeadquartersId(nasaId)) continue
 
             val title = data.str("title", "").trim().ifBlank { continue }
             val description = data.str("description", title).trim()
@@ -240,6 +236,11 @@ class NasaLibrarySourceAdapter(
             }
         }
         return false
+    }
+
+    private fun isHeadquartersId(nasaId: String): Boolean {
+        val id = nasaId.uppercase(Locale.ROOT)
+        return id.startsWith("HQ") || id.startsWith("NHQ")
     }
 
     /** Whole words only: "arc" must not match inside "Marcus", nor "jsc" inside a surname. */

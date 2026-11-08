@@ -633,7 +633,8 @@ class SafetyGateTest {
             "This map, made using the Compact Ocean Wind Vector Radiometer's observations, shows Earth's microwave emissions.",
             listOf("COWVR", "Earth")
         )
-        assertTrue(safetyGate.evaluateMetadata(selfDescribedMap) is SafetyVerdict.Rejected)
+        val mapVerdict = safetyGate.evaluateMetadata(selfDescribedMap)
+        assertEquals("NON_PHOTOGRAPHIC_CONTENT", (mapVerdict as SafetyVerdict.Rejected).reasonCode)
     }
 
     @Test
@@ -671,5 +672,25 @@ class SafetyGateTest {
         )
         val verdict = safetyGate.evaluateMetadata(candidate)
         assertTrue("Expected Rejected, got $verdict", verdict is SafetyVerdict.Rejected)
+    }
+
+    @Test
+    fun `computer modeling alone marks a NASA record as a rendering`() {
+        val verdict = safetyGate.evaluateMetadata(
+            nasaCandidate("Cloudy Worlds", "Planets as they might look, based on computer modeling.", listOf("Planet", "Space"))
+        )
+        assertEquals("NON_PHOTOGRAPHIC_CONTENT", (verdict as SafetyVerdict.Rejected).reasonCode)
+    }
+
+    @Test
+    fun `map and illustration wording does not reject other sources or panorama captions`() {
+        val panorama = validCandidate(
+            title = "Alpine panorama",
+            description = "Peaks from left to right: A, B and C. On this map you can follow the route of the hike.",
+            tags = listOf("landscape", "mountain")
+        )
+        assertTrue(safetyGate.evaluateMetadata(panorama) is SafetyVerdict.Approved)
+        val print = validCandidate(title = "Map of the Alps", tags = listOf("landscape", "mountain"))
+        assertTrue(safetyGate.evaluateMetadata(print) is SafetyVerdict.Approved)
     }
 }

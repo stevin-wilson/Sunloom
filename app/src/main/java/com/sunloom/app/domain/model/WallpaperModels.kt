@@ -396,4 +396,5 @@ data class UserPreferences(
 object SourceIds {
     const val SEED_RESERVE = "seed_reserve"
     const val USER_LOCAL = "user_local"
+    const val NASA_LIBRARY = "nasa_library"
 }

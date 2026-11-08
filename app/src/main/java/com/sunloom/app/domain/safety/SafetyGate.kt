@@ -210,11 +210,16 @@ class SafetyGate {
         }
 
         // L2d. Not a scene: data maps, charts, diagrams and artist renderings (Constitution v0.25)
-        val nonPhotographicMatch = SafetyDenylist.findNonPhotographicMatch(
-            title = candidate.title,
-            description = candidate.description,
-            rawCategoriesAndTags = candidate.rawCategoriesAndTags
-        )
+        // Only NASA's library mixes photographs with maps and renderings; museum prints and user files are not judged here.
+        val nonPhotographicMatch = if (srcId == SourceIds.NASA_LIBRARY) {
+            SafetyDenylist.findNonPhotographicMatch(
+                title = candidate.title,
+                description = candidate.description,
+                rawCategoriesAndTags = candidate.rawCategoriesAndTags
+            )
+        } else {
+            null
+        }
         if (nonPhotographicMatch != null) {
             return SafetyVerdict.Rejected(
                 reasonCode = "NON_PHOTOGRAPHIC_CONTENT",

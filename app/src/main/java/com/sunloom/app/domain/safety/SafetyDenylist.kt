@@ -23,7 +23,7 @@ import java.util.Locale
  */
 object SafetyDenylist {
 
-    const val DENYLIST_VERSION = "2026.11.08-v7"
+    const val DENYLIST_VERSION = "2026.11.08-v8"
 
     private val DIACRITICS_REGEX = Regex("\\p{M}+")
     private val NON_LETTER_DIGIT_REGEX = Regex("[^a-z0-9]+")
@@ -142,11 +142,6 @@ object SafetyDenylist {
         "press conference", "ribbon cutting", "award ceremony",
         // Press and staff events on agency photo sites, whose keywords still read as scenery (Earth, Cloud)
         "media day", "media interview", "media briefing", "science briefing", "news conference",
-        "from left to right",
-        // A description that says what it is: a rendering, not a photograph (Constitution v0.25)
-        "this illustration", "this animation", "this map", "this diagram", "this chart", "this graphic",
-        "this rendering", "this visualization", "this artist s concept", "this artist concept",
-        "computer model", "computer generated", "computer simulation",
         // Text-Dominated Images & Document Scans (Article VII §2)
         "document scan", "manuscript page", "newspaper page", "infographic",
         "motivational quote", "text heavy", "meme",
@@ -197,6 +192,13 @@ object SafetyDenylist {
      * renderings are not scenes. Matched against the title, the source-supplied categories and the first sentence
      * of the description only, so a later mention ("... compared with a map of the region") does not reject.
      */
+    /** Phrases a record uses to say what it is. Matched anywhere in the description, for NASA records only. */
+    val SELF_DESCRIBED_RENDERING_TERMS: Set<String> = listOf(
+        "this illustration", "this animation", "this map", "this diagram", "this chart", "this graphic",
+        "this rendering", "this visualization", "this artist s concept", "this artist concept",
+        "computer model", "computer modeling", "computer modelling", "computer generated", "computer simulation"
+    ).map { normalizePhrase(it) }.toSet()
+
     val NON_PHOTOGRAPHIC_TERMS: Set<String> = listOf(
         "map", "chart", "graph", "diagram", "illustration", "animation", "visualization",
         "simulation", "rendering", "artist concept", "artist s concept", "artist s impression"
@@ -217,7 +219,8 @@ object SafetyDenylist {
             }
             addAll(tokenizeAndStem(firstSentence))
         }
-        return findMatchInTokenStream(tokens, NON_PHOTOGRAPHIC_TERMS)
+        findMatchInTokenStream(tokens, NON_PHOTOGRAPHIC_TERMS)?.let { return it }
+        return findMatchInTokenStream(tokenizeAndStem(description), SELF_DESCRIBED_RENDERING_TERMS)
     }
 
     private val FIRST_SENTENCE_END_REGEX = Regex("""[.!?](?=\s)""")
