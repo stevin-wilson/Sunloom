@@ -8,7 +8,6 @@ import com.sunloom.app.domain.model.CandidateAsset
 import com.sunloom.app.domain.model.DisplayProfile
 import com.sunloom.app.domain.model.ImageEvaluationResult
 import com.sunloom.app.domain.model.ProvenanceRecord
-import com.sunloom.app.domain.model.RejectionRecord
 import com.sunloom.app.domain.model.SafetyVerdict
 import com.sunloom.app.domain.model.UserPreferences
 import com.sunloom.app.domain.model.WallpaperRecord
@@ -23,18 +22,7 @@ import java.io.FileOutputStream
 import kotlinx.coroutines.CancellationException
 
 /** What the repository lets the ingestor do; the ingestor never reaches into the repository itself. */
-internal interface IngestHost {
-    fun recordRejection(rejection: RejectionRecord)
-
-    fun blocklist(
-        assetId: String?,
-        sha256: String?,
-        perceptualHash: String?,
-        sourceId: String,
-        reasonCode: String,
-        timestampEpochMs: Long = System.currentTimeMillis()
-    )
-
+internal interface IngestHost : RejectionLog {
     /** Stores a new library row (under the library write lock). */
     fun store(record: WallpaperRecord)
 
