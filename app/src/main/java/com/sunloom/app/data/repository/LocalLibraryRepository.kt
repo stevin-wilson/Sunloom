@@ -716,19 +716,7 @@ class LocalLibraryRepository(
                 val effectiveEval = if (!eval.isEligible && isUserLocal) {
                     eval.copy(
                         isEligible = true,
-                        cropRect = eval.cropRect ?: com.sunloom.app.domain.model.CropRect(
-                            left = 0,
-                            top = 0,
-                            width = origW,
-                            height = origH,
-                            focalX = 0.5,
-                            focalY = 0.5,
-                            usesBlurredFrameFill = true,
-                            pixelCoverageRatio = minOf(
-                                origW.toDouble() / display.widthPx.coerceAtLeast(1),
-                                origH.toDouble() / display.heightPx.coerceAtLeast(1)
-                            )
-                        )
+                        cropRect = eval.cropRect ?: com.sunloom.app.domain.model.CropRect.wholePictureBlurred(origW, origH, display)
                     )
                 } else {
                     eval
@@ -1088,19 +1076,8 @@ class LocalLibraryRepository(
                     explanation = plan.disclosureNote
                 )
             } else if (isUserLocal) {
-                val localFallback = com.sunloom.app.domain.model.CropRect(
-                    left = 0,
-                    top = 0,
-                    width = srcW,
-                    height = srcH,
-                    focalX = focalX,
-                    focalY = focalY,
-                    usesBlurredFrameFill = true,
-                    pixelCoverageRatio = minOf(
-                        srcW.toDouble() / primaryOrSharpest.widthPx.coerceAtLeast(1),
-                        srcH.toDouble() / primaryOrSharpest.heightPx.coerceAtLeast(1)
-                    )
-                )
+                val localFallback = com.sunloom.app.domain.model.CropRect
+                    .wholePictureBlurred(srcW, srcH, primaryOrSharpest, focalX = focalX, focalY = focalY)
                 newRendW = primaryOrSharpest.widthPx
                 newRendH = primaryOrSharpest.heightPx
                 updatedEval = record.evaluation.copy(

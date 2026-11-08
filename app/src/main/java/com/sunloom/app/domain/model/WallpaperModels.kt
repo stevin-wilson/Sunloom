@@ -267,7 +267,30 @@ data class CropRect(
     val focalY: Double,
     val usesBlurredFrameFill: Boolean,
     val pixelCoverageRatio: Double
-)
+) {
+    companion object {
+        /** The whole picture, shown with a blurred fill (a user's own picture that is kept whole on purpose). */
+        fun wholePictureBlurred(
+            width: Int,
+            height: Int,
+            display: DisplayProfile,
+            focalX: Double = 0.5,
+            focalY: Double = 0.5
+        ) = CropRect(
+            left = 0,
+            top = 0,
+            width = width,
+            height = height,
+            focalX = focalX,
+            focalY = focalY,
+            usesBlurredFrameFill = true,
+            pixelCoverageRatio = minOf(
+                width.toDouble() / display.widthPx.coerceAtLeast(1),
+                height.toDouble() / display.heightPx.coerceAtLeast(1)
+            )
+        )
+    }
+}
 
 data class ImageEvaluationResult(
     val isEligible: Boolean,
