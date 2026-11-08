@@ -148,9 +148,8 @@ class DefaultSystemWallpaperGateway(private val context: Context) : SystemWallpa
             val sysChanged = wantsSystem && afterSysId > 0 && afterSysId != beforeSysId
             val lockChanged = wantsLock && afterLockId > 0 && afterLockId != beforeLockId
 
-            if (wantsLock) {
-                val lockVerified = afterLockId >= 0 && (lockChanged || result > 0)
-                prefs.edit { putBoolean(PREF_OBSERVED_LOCK_SUPPORT, lockVerified) }
+            LockSupportEvidence.observe(wantsSystem, wantsLock, afterLockId, lockChanged, result)?.let { independent ->
+                prefs.edit { putBoolean(PREF_OBSERVED_LOCK_SUPPORT, independent) }
             }
 
             when {
@@ -715,4 +714,14 @@ internal object ApplyLock {
             lock.unlock()
         }
     }
+}
+
+/**
+ * What an apply shows about independent lock-screen support. Only a lock-only apply is evidence: when both are set
+ * together the system may share one picture, so a "changed" lock id there proves nothing and must not overwrite what
+ * a lock-only apply observed.
+ */
+internal object LockSupportEvidence {
+    fun observe(wantsSystem: Boolean, wantsLock: Boolean, afterLockId: Int, lockChanged: Boolean, result: Int): Boolean? =
+        if (wantsLock && !wantsSystem) afterLockId >= 0 && (lockChanged || result > 0) else null
 }
