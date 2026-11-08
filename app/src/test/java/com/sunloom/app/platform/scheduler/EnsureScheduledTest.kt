@@ -92,4 +92,13 @@ class EnsureScheduledTest {
         assertTrue(watchWork().all { it.state == WorkInfo.State.CANCELLED })
         assertEquals(WorkInfo.State.ENQUEUED, changeWork().last().state)
     }
+
+    @Test
+    fun `suspending again does not restart the store watch's interval`() {
+        val scheduler = SunloomWallpaperScheduler(context)
+        scheduler.suspendForUnavailableStore()
+        val first = watchWork().single().id
+        scheduler.suspendForUnavailableStore()
+        assertEquals("the pending watch is kept, so repeated calls cannot postpone it forever", first, watchWork().single().id)
+    }
 }
