@@ -498,4 +498,45 @@ class GoogleBookPlatformAdapterTest {
         assertEquals("Scheduler should have walked past failed candidate #1 and succeeded on #2", 2, attempt)
         assertTrue(seeds.any { it.id == repo.getCurrentWallpaperId() })
     }
+
+    @Test
+    fun `a follow-OS poll that finds the wallpaper already suiting the theme applies nothing`() = kotlinx.coroutines.test.runTest {
+        val repo = LocalLibraryRepository(context, store = com.sunloom.app.data.repository.InMemoryLibraryStore())
+        val display = DisplayProfile(0, "GoogleBook", 2560, 1600)
+        val seeds = repo.ensureSeedReserveLoaded(display)
+        repo.savePreferences(
+            repo.loadPreferences().copy(
+                isSetupCompleted = true, autoChangeEnabled = true, isPaused = false,
+                scheduleMode = com.sunloom.app.domain.model.ScheduleMode.FOLLOW_OS_THEME
+            )
+        )
+        // The test environment is in light mode, so a Light wallpaper already suits the theme.
+        val light = seeds.first { it.evaluation.brightnessClass == com.sunloom.app.domain.model.BrightnessClass.LIGHT }
+        repo.recordWallpaperApplied(light.id)
+
+        // A different seed's file is gone: a poll that did the full library pass would re-render it. An early exit
+        // must not (that pass is what makes a 15-minute poll expensive on battery).
+        val other = seeds.first { it.id != light.id }
+        java.io.File(other.localFilePath).delete()
+
+        var applies = 0
+        val gateway = object : SystemWallpaperGateway {
+            override fun isWallpaperSupported(): Boolean = true
+            override fun isSetWallpaperAllowed(): Boolean = true
+            override fun getConnectedDisplays(): List<DisplayProfile> = listOf(display)
+            override fun applyBitmapToDestination(bitmap: Bitmap, flags: Int): Boolean {
+                applies++
+                return true
+            }
+            override fun isWifiConnected(): Boolean = true
+            override fun isBatterySaverActive(): Boolean = false
+        }
+        val status = com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler.executeScheduledWallpaperChange(
+            appContext = context, repo = repo, platform = GoogleBookPlatformAdapter(context, gateway)
+        )
+        assertEquals(null, status)
+        assertEquals("a redundant poll must not touch the wallpaper", 0, applies)
+        assertEquals(light.id, repo.getCurrentWallpaperId())
+        assertEquals("no library pass on a redundant poll", false, java.io.File(other.localFilePath).exists())
+    }
 }

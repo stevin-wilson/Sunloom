@@ -30,6 +30,7 @@ import com.sunloom.app.platform.GoogleBookPlatformAdapter
 import com.sunloom.app.platform.SystemWallpaperGateway
 import kotlinx.coroutines.CancellationException
 import java.time.ZoneId
+import java.io.File
 import java.time.ZonedDateTime
 import java.util.concurrent.TimeUnit
 
@@ -246,6 +247,18 @@ class SunloomWallpaperScheduler(
             val nowZoned = solarSnapshot.nowZoned
             val targetBrightness = solarSnapshot.targetBrightness
 
+            // Follow-OS mode polls every few minutes. When the wallpaper on screen already suits the theme there is
+            // nothing to do, and the library pass below (healing, revalidation, reconcile) would only cost battery.
+            if (prefs.scheduleMode == ScheduleMode.FOLLOW_OS_THEME) {
+                val current = repo.getCurrentWallpaperId()?.let { repo.getWallpaperById(it) }
+                val suits = current?.takeIf { it.localFilePath.isNotBlank() && File(it.localFilePath).exists() }
+                    ?.let { BrightnessFit.accepts(it.evaluation, targetBrightness) }
+                if (RefreshSchedulePolicy.isRedundantFollowOsChange(prefs.scheduleMode, suits)) {
+                    rearmChange(appContext, prefs, nowZoned)
+                    return null
+                }
+            }
+
             val connectedDisplays = platform.getConnectedDisplays()
             val display = platform.getPrimaryOrSharpestDisplayOrNull(connectedDisplays)
                 ?: return WallpaperStatus.FAILED_TEMPORARILY
@@ -259,11 +272,7 @@ class SunloomWallpaperScheduler(
             val matcher = WallpaperMatcher()
             val allWallpapers = repo.getAllWallpapers()
             val currentId = repo.getCurrentWallpaperId()
-            // Follow-OS mode polls; a poll that finds the wallpaper already suiting the theme must not rotate it.
-            val currentSuitsTarget = allWallpapers.firstOrNull { it.id == currentId }
-                ?.let { BrightnessFit.accepts(it.evaluation, targetBrightness) }
-            val redundantPoll = RefreshSchedulePolicy.isRedundantFollowOsChange(prefs.scheduleMode, currentSuitsTarget)
-            val rankedCandidates = if (redundantPoll) emptyList() else matcher.rankCandidatesForSelection(
+            val rankedCandidates = matcher.rankCandidatesForSelection(
                 candidates = allWallpapers,
                 targetBrightness = targetBrightness,
                 preferences = prefs,
@@ -323,17 +332,21 @@ class SunloomWallpaperScheduler(
             }
 
             if (RefreshSchedulePolicy.shouldRearmAfterChange(finalStatus)) {
-                SunloomWallpaperScheduler(appContext).syncPeriodicSchedule(
-                    autoEnabled = prefs.autoChangeEnabled,
-                    isPaused = prefs.isPaused,
-                    wifiOnly = prefs.wifiOnlyDownloads,
-                    deferBatterySaver = prefs.deferOnBatterySaver,
-                    preferences = prefs,
-                    nowZoned = nowZoned,
-                    rescheduleRefreshWork = false
-                )
+                rearmChange(appContext, prefs, nowZoned)
             }
             return finalStatus
+        }
+
+        private fun rearmChange(appContext: Context, prefs: UserPreferences, nowZoned: ZonedDateTime) {
+            SunloomWallpaperScheduler(appContext).syncPeriodicSchedule(
+                autoEnabled = prefs.autoChangeEnabled,
+                isPaused = prefs.isPaused,
+                wifiOnly = prefs.wifiOnlyDownloads,
+                deferBatterySaver = prefs.deferOnBatterySaver,
+                preferences = prefs,
+                nowZoned = nowZoned,
+                rescheduleRefreshWork = false
+            )
         }
 
         /** Re-enqueues the next transition after a change attempt exhausted its retries. */
