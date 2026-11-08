@@ -142,6 +142,7 @@
     <string name="msg_display_dimensions_unknown_connect_an">Display dimensions unknown — connect an active display before syncing.</string>
     <string name="msg_couldn_t_reach_the_online">Couldn\'t reach the online catalogs. Your saved reserve is still available; try again when you\'re connected.</string>
     <string name="msg_reserve_is_up_to_date">Reserve is up to date for %1$s</string>
+    <string name="msg_imports_exceed_cache_limit">Your imported photos now take more space than the reserve limit. They are never removed automatically, so delete some or raise the limit in Settings.</string>
     <string name="msg_could_not_import_selected_image">Could not import selected image (check format, bounds, or blocklist).</string>
     <string name="msg_saved_as_your_permanent_original">Saved \'%1$s\' as your permanent Original Wallpaper Restore Point.</string>
     <string name="msg_added_to_your_reserve">Added \'%1$s\' to your reserve.</string>
@@ -149,6 +150,7 @@
     <!-- Status messages built by the ViewModel (see UiStrings) -->
     <string name="msg_loading_library">Loading wallpaper library…</string>
     <string name="msg_manual_mode_enabled">Manual mode enabled — click Next Wallpaper whenever you\'d like a change</string>
+    <string name="msg_storage_problem">Couldn\'t finish that. Check free space and your connection, then try again.</string>
     <string name="msg_setting_not_saved">Couldn\'t save that setting. Your previous choice was kept.</string>
     <string name="msg_fetching_catalogs">Fetching high-resolution wallpapers from online catalogs…</string>
     <string name="msg_schedule_enabled">Automatic wallpaper schedule enabled (%1$s)</string>

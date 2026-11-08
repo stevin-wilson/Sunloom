@@ -1,5 +1,6 @@
 package com.sunloom.app.domain.matcher
 
+import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.RejectionRecord
 import com.sunloom.app.domain.model.SafeCategory
@@ -27,7 +28,7 @@ data class SourceRejectionGroup(val sourceId: String, val reasonCode: String, va
 /** Pure summaries for Diagnostics: where the reserve comes from, and why other candidates did not make it. */
 object ReserveBreakdown {
 
-    private val FALLBACK_SOURCES = setOf("seed_reserve", "user_local")
+    private val FALLBACK_SOURCES = setOf(SourceIds.SEED_RESERVE, SourceIds.USER_LOCAL)
 
     /**
      * Usable images per source, split by brightness class. [knownSources] (id to display name) adds a row of

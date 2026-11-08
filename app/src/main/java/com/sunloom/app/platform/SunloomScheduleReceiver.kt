@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import com.sunloom.app.appContainer
 import com.sunloom.app.data.repository.LibraryStoreUnavailableException
+import com.sunloom.app.platform.scheduler.ChangeAlarm
 import com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +19,22 @@ import kotlinx.coroutines.launch
 class SunloomScheduleReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
+        if (action == ChangeAlarm.ACTION) {
+            // The delayed change job was held past its time (Doze, standby bucket): run it now. runChangeNow asks
+            // WorkManager's database, so keep it off the main thread.
+            val appContext = context.applicationContext
+            val pending = goAsync()
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    SunloomWallpaperScheduler(appContext).runChangeNow()
+                } catch (_: Exception) {
+                    // Nothing to recover here: the next arm of the schedule replaces this attempt.
+                } finally {
+                    pending?.finish()
+                }
+            }
+            return
+        }
         if (action != Intent.ACTION_TIME_CHANGED &&
             action != Intent.ACTION_TIMEZONE_CHANGED &&
             action != "android.intent.action.TIME_SET"

@@ -60,29 +60,54 @@ internal fun applyExifOrientationIfNeeded(file: File, bitmap: Bitmap): Bitmap {
     }.getOrDefault(bitmap)
 }
 
+/** Why a decode did or did not produce a picture: a corrupt file is final, running out of memory is not. */
+internal sealed interface DecodeOutcome {
+    class Decoded(val bitmap: Bitmap) : DecodeOutcome
+    data object OutOfMemory : DecodeOutcome
+    data object Corrupt : DecodeOutcome
+}
+
+internal fun decodeSampledOutcome(
+    bytes: ByteArray,
+    headerW: Int,
+    headerH: Int,
+    maxEdgePx: Int = 2048,
+    decoder: (ByteArray, BitmapFactory.Options) -> Bitmap? = { b, o -> BitmapFactory.decodeByteArray(b, 0, b.size, o) }
+): DecodeOutcome {
+    return try {
+        val opts = BitmapFactory.Options()
+        val safeMaxEdge = maxEdgePx.coerceAtLeast(64)
+        var w = headerW
+        var h = headerH
+        if (w <= 0 || h <= 0) {
+            // The header parser could not size this file. Measure it with the decoder (no pixels are allocated) rather
+            // than decode at full size: a tiny file can describe a picture of hundreds of megapixels.
+            val probe = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            decoder(bytes, probe)
+            w = probe.outWidth
+            h = probe.outHeight
+        }
+        // Still no size: nothing says how big this is, so do not decode it at full size.
+        if (w <= 0 || h <= 0) return DecodeOutcome.Corrupt
+        var sampleSize = 1
+        while ((w / sampleSize) > safeMaxEdge || (h / sampleSize) > safeMaxEdge) {
+            sampleSize *= 2
+        }
+        opts.inSampleSize = sampleSize
+        decoder(bytes, opts)?.let { DecodeOutcome.Decoded(it) } ?: DecodeOutcome.Corrupt
+    } catch (_: OutOfMemoryError) {
+        DecodeOutcome.OutOfMemory
+    } catch (_: Exception) {
+        DecodeOutcome.Corrupt
+    }
+}
+
 internal fun decodeSampledBitmapSafely(
     bytes: ByteArray,
     headerW: Int,
     headerH: Int,
     maxEdgePx: Int = 2048
-): Bitmap? {
-    return try {
-        val opts = BitmapFactory.Options()
-        val safeMaxEdge = maxEdgePx.coerceAtLeast(64)
-        if (headerW > 0 && headerH > 0) {
-            var sampleSize = 1
-            while ((headerW / sampleSize) > safeMaxEdge || (headerH / sampleSize) > safeMaxEdge) {
-                sampleSize *= 2
-            }
-            opts.inSampleSize = sampleSize
-        }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
-    } catch (_: OutOfMemoryError) {
-        null
-    } catch (_: Exception) {
-        null
-    }
-}
+): Bitmap? = (decodeSampledOutcome(bytes, headerW, headerH, maxEdgePx) as? DecodeOutcome.Decoded)?.bitmap
 
 /**
  * The grid the evaluator judges: every cell is the average of all the pixels it covers (see [GridAverager]).

@@ -1,5 +1,6 @@
 package com.sunloom.app.domain.matcher
 
+import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.domain.model.DisplayProfile
 import com.sunloom.app.domain.model.UserPreferences
 import com.sunloom.app.domain.model.WallpaperRecord
@@ -43,7 +44,7 @@ class SubjectFit(private val fits: (WallpaperRecord) -> Boolean) {
             preferences: UserPreferences,
             planner: EnvelopePlanner
         ): Boolean {
-            val renderedPerDisplaySet = record.provenance.sourceId == "seed_reserve" || record.isBaselineRestore
+            val renderedPerDisplaySet = record.provenance.sourceId == SourceIds.SEED_RESERVE || record.isBaselineRestore
             if (renderedPerDisplaySet) return true
             val plan = planner.planForRecord(record, displays, preferences)
             return plan == null || plan.subjectClippedDisplays.isEmpty()

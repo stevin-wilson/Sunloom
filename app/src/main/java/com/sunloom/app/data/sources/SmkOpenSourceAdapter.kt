@@ -79,7 +79,7 @@ class SmkOpenSourceAdapter(
         targetWidthPx: Int = 2560
     ): List<CandidateAsset> {
         val out = ArrayList<CandidateAsset>()
-        val root = SimpleJson.parseObject(jsonText) ?: return emptyList()
+        val root = parseSourceObject("SMK", jsonText)
         val items = root.arr("items") ?: return emptyList()
 
         for (i in 0 until items.size) {

@@ -1,10 +1,12 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.domain.model.SourceIds
 import android.content.Context
 import android.content.res.Configuration
 import androidx.core.net.toUri
 import com.sunloom.app.R
 import com.sunloom.app.appContainer
+import com.sunloom.app.data.cache.BoundedCacheManager
 import com.sunloom.app.data.repository.LibraryStoreUnavailableException
 import com.sunloom.app.data.repository.LocalLibraryRepository
 import com.sunloom.app.domain.matcher.SubjectFit
@@ -77,6 +79,7 @@ class AndroidSunloomGateway(
             repo.revalidateGateVersionIfNeeded(display = null)
         }
         repo.syncSourceEnabledStates(prefs.enabledSources)
+        platformAdapter.ensureScheduled(prefs)
         if (display != null) {
             reconcileActiveWallpaperForDisplay(repo, display, connectedDisplays, prefs, activeBefore)
             promoteNonSeedOverSeedIfNeeded(repo, prefs, display, connectedDisplays)
@@ -184,10 +187,10 @@ class AndroidSunloomGateway(
                     targetDisplay = display,
                     dryRunPreviewOnly = prefs.dryRunPreviewOnly,
                     connectedDisplays = connectedDisplays,
-                    displayPolicy = prefs.displayPolicy
+                    displayPolicy = prefs.displayPolicy,
+                    onApplied = { repo.recordWallpaperApplied(replacement.id) }
                 )
                 if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) {
-                    repo.recordWallpaperApplied(replacement.id)
                     repo.setLastAppliedDisplayGeometryKey(currentGeometryKey)
                     return true
                 }
@@ -202,10 +205,10 @@ class AndroidSunloomGateway(
                         targetDisplay = display,
                         dryRunPreviewOnly = prefs.dryRunPreviewOnly,
                         connectedDisplays = connectedDisplays,
-                        displayPolicy = prefs.displayPolicy
+                        displayPolicy = prefs.displayPolicy,
+                    onApplied = { repo.recordWallpaperApplied(baseline.id) }
                     )
                     if (baseStatus == WallpaperStatus.APPLIED_SUCCESSFULLY) {
-                        repo.recordWallpaperApplied(baseline.id)
                         repo.setLastAppliedDisplayGeometryKey(currentGeometryKey)
                         return true
                     }
@@ -245,9 +248,9 @@ class AndroidSunloomGateway(
         val currentId = repo.getCurrentWallpaperId()
         val all = repo.getAllWallpapers()
         val currentRecord = all.firstOrNull { it.id == currentId }
-        if (currentRecord == null || currentRecord.provenance.sourceId == "seed_reserve") {
+        if (currentRecord == null || currentRecord.provenance.sourceId == SourceIds.SEED_RESERVE) {
             val nonSeedPool = matcher.filterEligiblePool(all, prefs)
-                .filter { it.provenance.sourceId != "seed_reserve" }
+                .filter { it.provenance.sourceId != SourceIds.SEED_RESERVE }
             if (nonSeedPool.isNotEmpty()) {
                 val targetBrightness = solarCalculator.resolveSolarSnapshot(
                     preferences = prefs,
@@ -267,10 +270,10 @@ class AndroidSunloomGateway(
                         targetDisplay = display,
                         dryRunPreviewOnly = prefs.dryRunPreviewOnly,
                         connectedDisplays = connectedDisplays,
-                        displayPolicy = prefs.displayPolicy
+                        displayPolicy = prefs.displayPolicy,
+                    onApplied = { repo.recordWallpaperApplied(nextNonSeed.id) }
                     )
                     if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) {
-                        repo.recordWallpaperApplied(nextNonSeed.id)
                         repo.setLastAppliedDisplayGeometryKey(
                             platformAdapter.computeDisplayGeometryKey(connectedDisplays, prefs.displayPolicy)
                         )
@@ -342,10 +345,10 @@ class AndroidSunloomGateway(
             targetDisplay = display,
             dryRunPreviewOnly = prefs.dryRunPreviewOnly,
             connectedDisplays = connectedDisplays,
-            displayPolicy = prefs.displayPolicy
+            displayPolicy = prefs.displayPolicy,
+                    onApplied = { repo.recordWallpaperApplied(record.id) }
         )
         return if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) {
-            repo.recordWallpaperApplied(record.id)
             repo.setLastAppliedDisplayGeometryKey(
                 platformAdapter.computeDisplayGeometryKey(connectedDisplays, prefs.displayPolicy)
             )
@@ -528,7 +531,12 @@ class AndroidSunloomGateway(
         if (asBaselineRestore) {
             buildSnapshot(repo, context.getString(R.string.msg_saved_as_your_permanent_original, record.title))
         } else if (!applyAfterImport) {
-            buildSnapshot(repo, context.getString(R.string.msg_added_to_your_reserve, record.title))
+            val added = context.getString(R.string.msg_added_to_your_reserve, record.title)
+            val over = BoundedCacheManager.importsExceedLimit(repo.getAllWallpapers(), repo.loadPreferences().maxCacheBytes)
+            buildSnapshot(
+                repo,
+                if (over) added + " " + context.getString(R.string.msg_imports_exceed_cache_limit) else added
+            )
         } else {
             applyWallpaperInternal(repo, record.id)
         }
@@ -550,7 +558,7 @@ class AndroidSunloomGateway(
                 it.status != WallpaperStatus.DISABLED_BY_USER &&
                 it.provenance.sourceId in prefs.enabledSources
         }.sortedWith(
-            compareBy<WallpaperRecord> { if (it.provenance.sourceId == "seed_reserve") 1 else 0 }
+            compareBy<WallpaperRecord> { if (it.provenance.sourceId == SourceIds.SEED_RESERVE) 1 else 0 }
                 .thenByDescending { it.provenance.retrievedAtEpochMs }
         )
     }
@@ -582,10 +590,10 @@ class AndroidSunloomGateway(
             it.id == currentId && (it.isBaselineRestore || it.evaluation.isEligible)
         }
         val hasNonSeedEligible = matcher.filterEligiblePool(activePool, prefs)
-            .any { it.provenance.sourceId != "seed_reserve" }
+            .any { it.provenance.sourceId != SourceIds.SEED_RESERVE }
 
         val current = if (appliedRecord != null &&
-            (appliedRecord.provenance.sourceId != "seed_reserve" || !hasNonSeedEligible)
+            (appliedRecord.provenance.sourceId != SourceIds.SEED_RESERVE || !hasNonSeedEligible)
         ) {
             appliedRecord
         } else {

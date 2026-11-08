@@ -1,5 +1,6 @@
 package com.sunloom.app.domain.matcher
 
+import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.domain.model.SafeCategory
 import com.sunloom.app.domain.model.WallpaperRecord
 
@@ -24,7 +25,7 @@ class TasteProfile(
         private const val STEP = 0.08
 
         fun from(records: List<WallpaperRecord>): TasteProfile {
-            val signals = records.filter { it.provenance.sourceId != "seed_reserve" && (it.isFavorite || it.isRejected) }
+            val signals = records.filter { it.provenance.sourceId != SourceIds.SEED_RESERVE && (it.isFavorite || it.isRejected) }
             if (signals.isEmpty()) return NEUTRAL
             fun weight(group: List<WallpaperRecord>) =
                 (1.0 + STEP * (group.count { it.isFavorite } - group.count { it.isRejected })).coerceIn(MIN, MAX)

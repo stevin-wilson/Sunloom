@@ -195,4 +195,38 @@ class BoundedCacheManagerTest {
 
         assertEquals(listOf("oldest"), report.evictedIds)
     }
+
+    @Test
+    fun `a user-provided photo is never evicted, because it cannot be fetched again`() {
+        val mine = record("mine", sizeMb = 10, retrievedAt = 1L).let {
+            it.copy(provenance = it.provenance.copy(sourceId = "user_local"))
+        }
+        val fetched = (1..6).map { record("f$it", sizeMb = 10, retrievedAt = 100L + it) }
+        val report = cacheManager.selectEvictions(
+            records = listOf(mine) + fetched,
+            activeWallpaperIds = emptySet(),
+            maxCacheBytes = 20L * 1024L * 1024L
+        )
+        assertFalse("user_local must be protected", "mine" in report.evictedIds)
+        assertTrue("mine" in report.protectedIds)
+    }
+
+    private fun userRecord(id: String, sizeMb: Int, rejected: Boolean = false) =
+        record(id, sizeMb).let {
+            it.copy(isRejected = rejected, provenance = it.provenance.copy(sourceId = "user_local"))
+        }
+
+    @Test
+    fun `imported photos over the cache limit are flagged, because they are never evicted`() {
+        val limit = 20L * 1024L * 1024L
+        assertFalse(BoundedCacheManager.importsExceedLimit(listOf(userRecord("a", 5), userRecord("b", 10)), limit))
+        assertTrue(BoundedCacheManager.importsExceedLimit(listOf(userRecord("a", 15), userRecord("b", 10)), limit))
+    }
+
+    @Test
+    fun `fetched and rejected pictures do not count toward the imports warning`() {
+        val limit = 20L * 1024L * 1024L
+        val records = listOf(record("fetched", 50), userRecord("gone", 50, rejected = true), userRecord("mine", 5))
+        assertFalse(BoundedCacheManager.importsExceedLimit(records, limit))
+    }
 }

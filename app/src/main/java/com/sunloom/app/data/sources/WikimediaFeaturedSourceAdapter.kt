@@ -81,7 +81,7 @@ class WikimediaFeaturedSourceAdapter(
         targetWidthPx: Int = 2560
     ): List<CandidateAsset> {
         val out = ArrayList<CandidateAsset>()
-        val root = SimpleJson.parseObject(jsonText) ?: return emptyList()
+        val root = parseSourceObject("Wikimedia", jsonText)
         val pages = root.obj("query")?.obj("pages") ?: return emptyList()
 
         for (key in pages.keys()) {

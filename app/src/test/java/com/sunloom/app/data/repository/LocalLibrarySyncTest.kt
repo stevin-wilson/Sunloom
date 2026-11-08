@@ -20,9 +20,11 @@ import com.sunloom.app.domain.model.UserPreferences
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
+import kotlinx.coroutines.async
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import com.sunloom.app.data.sources.SourceBudgetExceededException
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -385,6 +387,184 @@ class LocalLibrarySyncTest {
     fun `distinct pictures are all accepted`() = kotlinx.coroutines.test.runTest {
         val repo = repo(FixedAdapter("artic_cc0", (1..4).map { candidate("pic-$it") }))
         assertEquals(4, repo.refreshOnlineCatalog(display))
+    }
+
+    @Test
+    fun `one picture that cannot be stored does not abort the rest of the sync`() = kotlinx.coroutines.test.runTest {
+        // A disk-full write or a store error on one candidate used to leave refreshOnlineCatalog, skipping the other
+        // candidates, the sync summary and the cache cleanup.
+        val inner = InMemoryLibraryStore(java.io.File(context.filesDir, "sync_failing_store"))
+        val flaky = object : LibraryStore by inner {
+            override fun upsertWallpaper(record: com.sunloom.app.domain.model.WallpaperRecord) {
+                if (record.id == "pic-2") throw java.io.IOException("No space left on device")
+                inner.upsertWallpaper(record)
+            }
+        }
+        val repo = LocalLibraryRepository(
+            context = context,
+            store = flaky,
+            httpClient = okClient,
+            sourceAdapters = listOf(FixedAdapter("artic_cc0", (1..4).map { candidate("pic-$it") })),
+            random = kotlin.random.Random(1)
+        )
+        assertEquals(3, repo.refreshOnlineCatalog(display))
+        assertTrue(repo.getAllWallpapers().none { it.id == "pic-2" })
+    }
+
+    @Test
+    fun `two syncs never run at once, so the app and the background worker cannot double a source's request rate`() = kotlinx.coroutines.test.runTest {
+        var running = 0
+        var peak = 0
+        val slowFetch: suspend (HttpClient) -> Unit = {
+            running++
+            peak = maxOf(peak, running)
+            kotlinx.coroutines.delay(100)
+            running--
+        }
+        val a = repo(FixedAdapter("artic_cc0", listOf(candidate("a-1")), onFetch = slowFetch))
+        val b = repo(FixedAdapter("artic_cc0", listOf(candidate("b-1")), onFetch = slowFetch))
+        val first = async { a.refreshOnlineCatalog(display) }
+        val second = async { b.refreshOnlineCatalog(display) }
+        first.await()
+        second.await()
+        assertEquals("syncs overlapped", 1, peak)
+    }
+
+    @Test
+    fun `a rendition that is too large to decode falls back to the next one instead of banning the picture`() = kotlinx.coroutines.test.runTest {
+        // A PNG header that claims 20000 x 20000 pixels, padded past the 4 KB minimum.
+        val oversized = ByteArray(5000).also {
+            byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 0x0D, 0x0A, 0x1A, 0x0A,
+                0, 0, 0, 13, 'I'.code.toByte(), 'H'.code.toByte(), 'D'.code.toByte(), 'R'.code.toByte(),
+                0, 0, 0x4E, 0x20, 0, 0, 0x4E, 0x20).copyInto(it)
+        }
+        val client = object : HttpClient {
+            override suspend fun getText(url: String): String = "{}"
+            override suspend fun getBytes(url: String, maxBytes: Int): ByteArray =
+                if (url.contains("1686,")) oversized else jpegFor(imageKey(url))
+        }
+        val big = candidate("big-1").copy(
+            fallbackDownloadUrls = listOf("https://www.artic.edu/iiif/2/big-1/full/843,/0/default.jpg")
+        )
+        val repo = repo(FixedAdapter("artic_cc0", listOf(big)), client = client)
+        assertEquals(1, repo.refreshOnlineCatalog(display))
+        assertTrue("not permanently banned", repo.getAllWallpapers().any { it.id == "big-1" && !it.isRejected })
+    }
+
+    @Test
+    fun `a source whose images cannot be downloaded does not stay healthy`() = kotlinx.coroutines.test.runTest {
+        // Metadata answers, every image download fails (the image host is down): that is a failing source.
+        val client = object : HttpClient {
+            override suspend fun getText(url: String): String = "{}"
+            override suspend fun getBytes(url: String, maxBytes: Int): ByteArray = throw IOException("HTTP 503")
+        }
+        val repo = repo(FixedAdapter("artic_cc0", (1..3).map { candidate("dl-$it") }), client = client)
+        assertEquals(0, repo.refreshOnlineCatalog(display))
+        assertEquals(1, repo.lastSyncFailedSources)
+        assertEquals(1, repo.getSourceDiagnostics().single { it.sourceId == "artic_cc0" }.consecutiveFailures)
+        // Failures accumulate across syncs, so the backoff can start.
+        repo.refreshOnlineCatalog(display)
+        repo.refreshOnlineCatalog(display)
+        assertEquals(3, repo.getSourceDiagnostics().single { it.sourceId == "artic_cc0" }.consecutiveFailures)
+    }
+
+    @Test
+    fun `one failed download among successful ones keeps the source healthy`() = kotlinx.coroutines.test.runTest {
+        var n = 0
+        val client = object : HttpClient {
+            override suspend fun getText(url: String): String = "{}"
+            override suspend fun getBytes(url: String, maxBytes: Int): ByteArray {
+                if (n++ == 0) throw IOException("HTTP 500")
+                return jpegFor(imageKey(url))
+            }
+        }
+        val repo = repo(FixedAdapter("artic_cc0", (1..3).map { candidate("ok-$it") }), client = client)
+        assertEquals(2, repo.refreshOnlineCatalog(display))
+        assertEquals(0, repo.lastSyncFailedSources)
+    }
+
+    @Test
+    fun `a picture skipped by a storage error is listed in Diagnostics but never blocked`() = kotlinx.coroutines.test.runTest {
+        val inner = InMemoryLibraryStore(java.io.File(context.filesDir, "skip_visible_store"))
+        var failing = true
+        val flaky = object : LibraryStore by inner {
+            override fun upsertWallpaper(record: com.sunloom.app.domain.model.WallpaperRecord) {
+                if (failing && record.id == "pic-2") throw IOException("No space left on device")
+                inner.upsertWallpaper(record)
+            }
+        }
+        val repo = LocalLibraryRepository(
+            context = context, store = flaky, httpClient = okClient,
+            sourceAdapters = listOf(FixedAdapter("artic_cc0", (1..3).map { candidate("pic-$it") })),
+            random = kotlin.random.Random(1)
+        )
+        assertEquals(2, repo.refreshOnlineCatalog(display))
+        val skipped = repo.getAllRejections().single { it.assetId == "pic-2" }
+        assertEquals("STORAGE_ERROR", skipped.reasonCode)
+        assertEquals("not permanent", false, skipped.isPermanent)
+
+        failing = false
+        assertEquals("the same picture is fetched again once storage works", 1, repo.refreshOnlineCatalog(display))
+    }
+
+    @Test
+    fun `a store that becomes unavailable mid-sync is not swallowed as a skipped picture`() = kotlinx.coroutines.test.runTest {
+        val inner = InMemoryLibraryStore(java.io.File(context.filesDir, "sync_unavailable_store"))
+        val dead = object : LibraryStore by inner {
+            override fun upsertWallpaper(record: com.sunloom.app.domain.model.WallpaperRecord) {
+                throw LibraryStoreUnavailableException("down")
+            }
+        }
+        val repo = LocalLibraryRepository(
+            context = context, store = dead, httpClient = okClient,
+            sourceAdapters = listOf(FixedAdapter("artic_cc0", listOf(candidate("u-1")))), random = kotlin.random.Random(1)
+        )
+        try {
+            repo.refreshOnlineCatalog(display)
+            org.junit.Assert.fail("the worker must see the store failure so it can retry and suspend")
+        } catch (_: LibraryStoreUnavailableException) {
+        }
+    }
+
+    @Test
+    fun `running out of request budget before any download is not a failing source`() = kotlinx.coroutines.test.runTest {
+        val client = object : HttpClient {
+            override suspend fun getText(url: String): String = "{}"
+            override suspend fun getBytes(url: String, maxBytes: Int): ByteArray =
+                throw SourceBudgetExceededException("artic_cc0", 5)
+        }
+        val repo = repo(FixedAdapter("artic_cc0", listOf(candidate("b-1"))), client = client)
+        repo.refreshOnlineCatalog(display)
+        assertEquals(0, repo.lastSyncFailedSources)
+        assertEquals(0, repo.getSourceDiagnostics().single { it.sourceId == "artic_cc0" }.consecutiveFailures)
+    }
+
+    @Test
+    fun `rejecting a picture records the rejection before it deletes the file`() = kotlinx.coroutines.test.runTest {
+        // If the process dies between the two steps, the picture must still be refused rather than fetched again.
+        val inner = InMemoryLibraryStore(java.io.File(context.filesDir, "reject_order_store"))
+        var failRejectedWrites = false
+        val flaky = object : LibraryStore by inner {
+            override fun upsertWallpaper(record: com.sunloom.app.domain.model.WallpaperRecord) {
+                if (failRejectedWrites && record.isRejected) throw IOException("crash")
+                inner.upsertWallpaper(record)
+            }
+        }
+        val repo = LocalLibraryRepository(
+            context = context, store = flaky, httpClient = okClient,
+            sourceAdapters = listOf(FixedAdapter("artic_cc0", listOf(candidate("r-1")))), random = kotlin.random.Random(1)
+        )
+        assertEquals(1, repo.refreshOnlineCatalog(display))
+        val file = java.io.File(repo.getAllWallpapers().single { it.id == "r-1" }.localFilePath)
+        assertTrue(file.exists())
+
+        failRejectedWrites = true
+        try {
+            repo.rejectWallpaperForever("r-1")
+        } catch (_: IOException) {
+        }
+        assertTrue("file is deleted only after the rejection is stored", file.exists())
+        assertTrue("the permanent blocklist already refuses it", repo.getPermanentBlockedAssetIds().contains("r-1"))
     }
 
     @Test

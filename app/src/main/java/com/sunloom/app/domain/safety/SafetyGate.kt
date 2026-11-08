@@ -1,5 +1,6 @@
 package com.sunloom.app.domain.safety
 
+import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.data.sources.SourceRegistry
 import com.sunloom.app.domain.model.CandidateAsset
 import com.sunloom.app.domain.model.ImageFormat
@@ -122,7 +123,7 @@ class SafetyGate {
                 failedLayer = "L1"
             )
         }
-        if (enabledSources != null && srcId !in enabledSources && srcId != "seed_reserve") {
+        if (enabledSources != null && srcId !in enabledSources && srcId != SourceIds.SEED_RESERVE) {
             return SafetyVerdict.Rejected(
                 reasonCode = "DISABLED_SOURCE",
                 explanation = "Source '$srcId' is currently disabled.",
@@ -167,7 +168,7 @@ class SafetyGate {
         auditNotes.add("License verified: ${candidate.provenance.licenseType.label}")
 
         // L1e. Transport security check for internet assets (Article VI §4f & VIII)
-        if (!candidate.isUserLocal && srcId != "seed_reserve") {
+        if (!candidate.isUserLocal && srcId != SourceIds.SEED_RESERVE) {
             if (!candidate.downloadUrl.startsWith("https://")) {
                 return SafetyVerdict.Rejected(
                     reasonCode = "INSECURE_TRANSPORT",
@@ -295,10 +296,7 @@ class SafetyGate {
                 )
             }
             val totalPixels = effectiveBounds.width.toLong() * effectiveBounds.height.toLong()
-            if (effectiveBounds.width > MAX_DIMENSION_PX ||
-                effectiveBounds.height > MAX_DIMENSION_PX ||
-                totalPixels > MAX_TOTAL_PIXELS
-            ) {
+            if (exceedsDecodeBounds(effectiveBounds)) {
                 return SafetyVerdict.Rejected(
                     reasonCode = "IMAGE_DIMENSIONS_OUT_OF_BOUNDS",
                     explanation = "Image dimensions (${effectiveBounds.width}×${effectiveBounds.height}, $totalPixels px) exceed safe decode bounds (${MAX_DIMENSION_PX}px / ${MAX_TOTAL_PIXELS}px).",
@@ -361,6 +359,11 @@ class SafetyGate {
         const val MIN_PAYLOAD_BYTES = 4_096
         const val MIN_USER_LOCAL_PAYLOAD_BYTES = 64
         const val MAX_PAYLOAD_BYTES = 40 * 1024 * 1024
+        /** True when a picture is larger than the L3 decode bounds (per side or in total pixels). */
+        fun exceedsDecodeBounds(bounds: ImageHeaderBounds): Boolean =
+            bounds.width > MAX_DIMENSION_PX || bounds.height > MAX_DIMENSION_PX ||
+                bounds.width.toLong() * bounds.height.toLong() > MAX_TOTAL_PIXELS
+
         const val MAX_DIMENSION_PX = 16_384
         const val MAX_TOTAL_PIXELS = 100_000_000L
 
@@ -384,6 +387,35 @@ class SafetyGate {
         )
 
         fun detectMagicFormat(bytes: ByteArray): ImageFormat = detectImageFormat(bytes)
+
+        /** SOF0..SOF15 carry the picture size; DHT (C4), JPG (C8) and DAC (CC) share the range but do not. */
+        private fun isJpegFrameMarker(marker: Int): Boolean = marker in 0xC0..0xCF && marker !in NON_FRAME_MARKERS
+
+        private val NON_FRAME_MARKERS = setOf(0xC4, 0xC8, 0xCC)
+
+        /** Lossy `VP8 ` and lossless `VP8L` WebP, the common kinds; extended `VP8X` is read by the caller. */
+        private fun webpSimpleBounds(bytes: ByteArray): ImageHeaderBounds? {
+            if (bytes.size < 30 || String(bytes, 12, 3, Charsets.ISO_8859_1) != "VP8") return null
+            fun u8(i: Int) = bytes[i].toInt() and 0xFF
+            when (bytes[15]) {
+                ' '.code.toByte() -> {
+                    // Frame tag (3 bytes), start code 9D 01 2A, then two 14-bit little-endian sizes.
+                    if (u8(23) != 0x9D || u8(24) != 0x01 || u8(25) != 0x2A) return null
+                    val w = (u8(26) or (u8(27) shl 8)) and 0x3FFF
+                    val h = (u8(28) or (u8(29) shl 8)) and 0x3FFF
+                    if (w > 0 && h > 0) return ImageHeaderBounds(w, h, ImageFormat.WEBP.mimeType)
+                }
+                'L'.code.toByte() -> {
+                    // Signature 0x2F, then 14 bits of width-1 and 14 bits of height-1.
+                    if (u8(20) != 0x2F) return null
+                    val bits = u8(21) or (u8(22) shl 8) or (u8(23) shl 16) or (u8(24) shl 24)
+                    val w = (bits and 0x3FFF) + 1
+                    val h = ((bits ushr 14) and 0x3FFF) + 1
+                    return ImageHeaderBounds(w, h, ImageFormat.WEBP.mimeType)
+                }
+            }
+            return null
+        }
 
         /**
          * Parses PNG IHDR, JPEG SOF0/SOF2, or WebP VP8/VP8L/VP8X header dimensions directly
@@ -428,8 +460,8 @@ class SafetyGate {
                         val segLen = ((bytes[offset + 2].toInt() and 0xFF) shl 8) or
                             (bytes[offset + 3].toInt() and 0xFF)
                         if (segLen < 2) break
-                        // SOF0 (0xC0), SOF1 (0xC1), SOF2 (0xC2)
-                        if (marker == 0xC0 || marker == 0xC1 || marker == 0xC2) {
+                        // Every frame header (SOF0..SOF15) carries the size, except DHT (C4), JPG (C8) and DAC (CC).
+                        if (isJpegFrameMarker(marker)) {
                             if (offset + 9 < bytes.size) {
                                 val h = ((bytes[offset + 5].toInt() and 0xFF) shl 8) or
                                     (bytes[offset + 6].toInt() and 0xFF)
@@ -445,6 +477,7 @@ class SafetyGate {
                     }
                 }
                 ImageFormat.WEBP -> {
+                    webpSimpleBounds(bytes)?.let { return it }
                     if (bytes.size >= 30 &&
                         bytes[12] == 'V'.code.toByte() &&
                         bytes[13] == 'P'.code.toByte() &&

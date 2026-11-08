@@ -188,6 +188,35 @@ class WallpaperMatcherTest {
     }
 
     @Test
+    fun `an exact-brightness offline seed beats an online picture of the opposite brightness`() {
+        // At night with only Light online pictures, showing a Light one breaks "Light and Dark describe the image".
+        val onlineLight = sampleRecord("online-light", BrightnessClass.LIGHT)
+        val seedDark = sampleRecord("seed-dark", BrightnessClass.DARK).let {
+            it.copy(provenance = it.provenance.copy(sourceId = "seed_reserve"))
+        }
+        val selected = matcher.selectNextWallpaper(
+            candidates = listOf(onlineLight, seedDark),
+            targetBrightness = BrightnessClass.DARK,
+            preferences = UserPreferences()
+        )
+        assertEquals("seed-dark", selected?.id)
+    }
+
+    @Test
+    fun `an online picture that fits still beats a seed that fits`() {
+        val onlineDark = sampleRecord("online-dark", BrightnessClass.DARK)
+        val seedDark = sampleRecord("seed-dark", BrightnessClass.DARK).let {
+            it.copy(provenance = it.provenance.copy(sourceId = "seed_reserve"))
+        }
+        val selected = matcher.selectNextWallpaper(
+            candidates = listOf(seedDark, onlineDark),
+            targetBrightness = BrightnessClass.DARK,
+            preferences = UserPreferences()
+        )
+        assertEquals("online-dark", selected?.id)
+    }
+
+    @Test
     fun `selectNextWallpaper interleaves sources instead of repeating active source when unseen items tie`() {
         val cmaCurrent = sampleRecord("cma-1", BrightnessClass.LIGHT, SafeCategory.SCENIC_FINE_ART).let {
             it.copy(provenance = it.provenance.copy(sourceId = "cma_cc0"))

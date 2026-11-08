@@ -1,5 +1,6 @@
 package com.sunloom.app.data.cache
 
+import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.WallpaperRecord
 import java.io.File
@@ -37,12 +38,13 @@ class BoundedCacheManager(
         // 4. Up to minProtectedPerBrightness (default 3) Light and 3 Dark approved reserve wallpapers (Article IX §2)
         val protectedIds = LinkedHashSet<String>()
         protectedIds.addAll(activeWallpaperIds)
-        cachedRecords.filter { it.isFavorite || it.isBaselineRestore }.forEach {
+        // A user-provided photo cannot be fetched again, so evicting it would lose it for good.
+        cachedRecords.filter { it.isFavorite || it.isBaselineRestore || it.provenance.sourceId == SourceIds.USER_LOCAL }.forEach {
             protectedIds.add(it.id)
         }
 
         val protectionPriority = compareBy<WallpaperRecord> {
-            if (it.provenance.sourceId == "seed_reserve") 1 else 0
+            if (it.provenance.sourceId == SourceIds.SEED_RESERVE) 1 else 0
         }.thenByDescending { it.provenance.retrievedAtEpochMs }
 
         cachedRecords
@@ -61,7 +63,7 @@ class BoundedCacheManager(
         // so the global top-3 above must not leave a category without any seed.
         cachedRecords
             .filter {
-                it.provenance.sourceId == "seed_reserve" && !it.isBaselineRestore &&
+                it.provenance.sourceId == SourceIds.SEED_RESERVE && !it.isBaselineRestore &&
                     (it.evaluation.brightnessClass == BrightnessClass.LIGHT ||
                         it.evaluation.brightnessClass == BrightnessClass.DARK)
             }
@@ -73,7 +75,7 @@ class BoundedCacheManager(
             .filter {
                 it.evaluation.brightnessClass == BrightnessClass.NEUTRAL &&
                     !it.isBaselineRestore &&
-                    it.provenance.sourceId != "seed_reserve"
+                    it.provenance.sourceId != SourceIds.SEED_RESERVE
             }
             .sortedByDescending { it.provenance.retrievedAtEpochMs }
             .take(minProtectedPerBrightness)
@@ -145,6 +147,14 @@ class BoundedCacheManager(
     }
 
     companion object {
+        /**
+         * Imported photos are never evicted (they cannot be fetched again), so they alone can pass the cache limit.
+         * The reserve cannot shrink them, so the person is told.
+         */
+        fun importsExceedLimit(records: List<WallpaperRecord>, maxCacheBytes: Long): Boolean =
+            records.filter { !it.isRejected && it.provenance.sourceId == SourceIds.USER_LOCAL }
+                .sumOf { it.fileSizeBytes } > maxCacheBytes
+
         const val DEFAULT_PROTECTED_PER_BRIGHTNESS = 3
     }
 }

@@ -1,5 +1,6 @@
 package com.sunloom.app.data.repository
 
+import com.sunloom.app.domain.model.SourceIds
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
@@ -56,7 +57,7 @@ internal class UserImportPipeline(
                 repository.recordRejection(
                     RejectionRecord(
                         assetId = id,
-                        sourceId = "user_local",
+                        sourceId = SourceIds.USER_LOCAL,
                         reasonCode = "IMAGE_DIMENSIONS_OUT_OF_BOUNDS",
                         explanation = reason,
                         timestampEpochMs = System.currentTimeMillis(),
@@ -87,7 +88,7 @@ internal class UserImportPipeline(
                     repository.recordRejection(
                         RejectionRecord(
                             assetId = id,
-                            sourceId = "user_local",
+                            sourceId = SourceIds.USER_LOCAL,
                             reasonCode = "BLOCKLISTED_USER_IMPORT",
                             explanation = reason,
                             timestampEpochMs = System.currentTimeMillis(),
@@ -117,19 +118,7 @@ internal class UserImportPipeline(
             val userEval = if (!eval.isEligible) {
                 eval.copy(
                     isEligible = true,
-                    cropRect = eval.cropRect ?: com.sunloom.app.domain.model.CropRect(
-                        left = 0,
-                        top = 0,
-                        width = srcW,
-                        height = srcH,
-                        focalX = 0.5,
-                        focalY = 0.5,
-                        usesBlurredFrameFill = true,
-                        pixelCoverageRatio = minOf(
-                            srcW.toDouble() / display.widthPx.coerceAtLeast(1),
-                            srcH.toDouble() / display.heightPx.coerceAtLeast(1)
-                        )
-                    )
+                    cropRect = eval.cropRect ?: com.sunloom.app.domain.model.CropRect.wholePictureBlurred(srcW, srcH, display)
                 )
             } else {
                 eval
@@ -144,7 +133,7 @@ internal class UserImportPipeline(
                 fileSizeBytes = file.length(),
                 isBaselineRestore = asBaselineRestore,
                 provenance = ProvenanceRecord(
-                    sourceId = "user_local",
+                    sourceId = SourceIds.USER_LOCAL,
                     sourceName = "User Local File",
                     assetId = id,
                     originalPageUrl = "",
@@ -201,7 +190,7 @@ internal class UserImportPipeline(
             fileSizeBytes = 0L,
             isRejected = true,
             provenance = ProvenanceRecord(
-                sourceId = "user_local",
+                sourceId = SourceIds.USER_LOCAL,
                 sourceName = "User Local File",
                 assetId = id,
                 originalPageUrl = "",
@@ -281,7 +270,7 @@ internal class UserImportPipeline(
                 downloadUrl = "",
                 isUserLocal = true,
                 provenance = ProvenanceRecord(
-                    sourceId = "user_local",
+                    sourceId = SourceIds.USER_LOCAL,
                     sourceName = "User Local File",
                     assetId = id,
                     originalPageUrl = "",
@@ -313,7 +302,7 @@ internal class UserImportPipeline(
                     repository.recordRejection(
                         RejectionRecord(
                             assetId = id,
-                            sourceId = "user_local",
+                            sourceId = SourceIds.USER_LOCAL,
                             reasonCode = payloadVerdict.reasonCode,
                             explanation = payloadVerdict.explanation,
                             timestampEpochMs = System.currentTimeMillis(),
@@ -344,7 +333,7 @@ internal class UserImportPipeline(
                     repository.recordRejection(
                         RejectionRecord(
                             assetId = id,
-                            sourceId = "user_local",
+                            sourceId = SourceIds.USER_LOCAL,
                             reasonCode = "BLOCKLISTED_USER_IMPORT",
                             explanation = "Imported image matches a permanently rejected wallpaper in your blocklist.",
                             timestampEpochMs = System.currentTimeMillis(),
@@ -367,19 +356,7 @@ internal class UserImportPipeline(
             val userEval = if (!eval.isEligible) {
                 eval.copy(
                     isEligible = true,
-                    cropRect = eval.cropRect ?: com.sunloom.app.domain.model.CropRect(
-                        left = 0,
-                        top = 0,
-                        width = origW,
-                        height = origH,
-                        focalX = 0.5,
-                        focalY = 0.5,
-                        usesBlurredFrameFill = true,
-                        pixelCoverageRatio = minOf(
-                            origW.toDouble() / display.widthPx.coerceAtLeast(1),
-                            origH.toDouble() / display.heightPx.coerceAtLeast(1)
-                        )
-                    )
+                    cropRect = eval.cropRect ?: com.sunloom.app.domain.model.CropRect.wholePictureBlurred(origW, origH, display)
                 )
             } else {
                 eval

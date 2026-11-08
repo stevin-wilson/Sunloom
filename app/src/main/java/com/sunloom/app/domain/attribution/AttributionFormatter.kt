@@ -1,5 +1,6 @@
 package com.sunloom.app.domain.attribution
 
+import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.domain.model.LicenseType
 import com.sunloom.app.domain.model.WallpaperRecord
 
@@ -22,7 +23,7 @@ object AttributionFormatter {
                 lines += if (creator.isBlank()) "\"${record.title}\"" else "\"${record.title}\" by $creator"
             }
         }
-        if (p.sourceId == "seed_reserve") {
+        if (p.sourceId == SourceIds.SEED_RESERVE) {
             lines += "Generated on-device by Sunloom."
         } else if (p.licenseType != LicenseType.USER_OWNED) {
             val source = if (p.originalPageUrl.isBlank()) p.sourceName else "${p.sourceName} — ${p.originalPageUrl}"

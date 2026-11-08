@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.domain.matcher.BrightnessFit
 import com.sunloom.app.domain.matcher.ReserveBreakdown
 import com.sunloom.app.domain.matcher.ReserveBuffer
@@ -112,7 +113,7 @@ data class SunloomUiState(
     val unseenCurrentBrightnessCount: Int
         get() = libraryWallpapers.count {
             it.isReserveImage &&
-                it.provenance.sourceId != "seed_reserve" &&
+                it.provenance.sourceId != SourceIds.SEED_RESERVE &&
                 BrightnessFit.accepts(it.evaluation, targetBrightnessNow) &&
                 it.appliedCount == 0
         }

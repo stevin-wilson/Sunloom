@@ -11,11 +11,13 @@ import androidx.work.ListenableWorker
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.sunloom.app.appContainer
 import com.sunloom.app.data.repository.LibraryStoreUnavailableException
 import com.sunloom.app.data.repository.LocalLibraryRepository
+import com.sunloom.app.domain.matcher.BrightnessFit
 import com.sunloom.app.domain.matcher.SubjectFit
 import com.sunloom.app.domain.matcher.TasteProfile
 import com.sunloom.app.domain.matcher.WallpaperMatcher
@@ -28,6 +30,7 @@ import com.sunloom.app.platform.GoogleBookPlatformAdapter
 import com.sunloom.app.platform.SystemWallpaperGateway
 import kotlinx.coroutines.CancellationException
 import java.time.ZoneId
+import java.io.File
 import java.time.ZonedDateTime
 import java.util.concurrent.TimeUnit
 
@@ -35,7 +38,7 @@ import java.util.concurrent.TimeUnit
  * Articles IX §3, X §2 & XIII:
  * Dedicated background scheduler module managing split WorkManager scheduling:
  * - [ChangeWorker]: offline transition worker (never blocked on network or battery-not-low).
- * - [RefreshWorker]: periodic 12-hour online catalog replenishment worker honoring Wi-Fi / Battery Saver rules.
+ * - [RefreshWorker]: periodic (every 3 hours) online catalog replenishment worker honoring Wi-Fi / Battery Saver rules.
  */
 class SunloomWallpaperScheduler(
     private val context: Context,
@@ -61,7 +64,58 @@ class SunloomWallpaperScheduler(
         workManager.cancelUniqueWork(WORK_NAME)
         workManager.cancelUniqueWork(WORK_NAME_CHANGE)
         workManager.cancelUniqueWork(WORK_NAME_REFRESH)
+        ChangeAlarm.cancel(context)
         schedulePrefs.edit { remove(PREF_REFRESH_CONSTRAINTS_SIG) }
+    }
+
+    /**
+     * Re-arms automation when nothing is pending, and leaves a pending request alone. Called when the app opens, so a
+     * schedule lost to a store error, an Auto Backup restore (WorkManager's own database is not restored) or a
+     * force-stop comes back without the person having to edit a setting.
+     */
+    fun ensureScheduled(preferences: UserPreferences) {
+        val workManager = runCatching { WorkManager.getInstance(context) }.getOrNull() ?: return
+        val plan = RefreshSchedulePolicy.plan(
+            preferences.autoChangeEnabled,
+            preferences.isPaused,
+            preferences.scheduleMode == ScheduleMode.MANUAL_ONLY
+        )
+        // If WorkManager cannot be queried, assume something is pending: replacing a valid request is worse than waiting.
+        val pending = runCatching {
+            workManager.getWorkInfosForUniqueWork(WORK_NAME_CHANGE).get().any { !it.state.isFinished }
+        }.getOrDefault(true)
+        if (plan.scheduleChanges && pending && ChangeAlarm.isScheduled(context)) {
+            // The change is armed; the periodic refresh uses KEEP, so re-syncing it is harmless and restores it too.
+            syncRefreshOnly(preferences)
+            return
+        }
+        syncPeriodicSchedule(
+            autoEnabled = preferences.autoChangeEnabled,
+            isPaused = preferences.isPaused,
+            wifiOnly = preferences.wifiOnlyDownloads,
+            deferBatterySaver = preferences.deferOnBatterySaver,
+            preferences = preferences
+        )
+    }
+
+    private fun syncRefreshOnly(preferences: UserPreferences) {
+        val workManager = runCatching { WorkManager.getInstance(context) }.getOrNull() ?: return
+        val schedulePrefs = context.applicationContext.getSharedPreferences("sunloom_preferences", Context.MODE_PRIVATE)
+        scheduleRefreshWork(workManager, schedulePrefs, preferences.wifiOnlyDownloads, preferences.deferOnBatterySaver, true)
+    }
+
+    /** Runs the change now in place of the delayed job that the system is holding (see [ChangeAlarm]). */
+    fun runChangeNow() {
+        val workManager = runCatching { WorkManager.getInstance(context) }.getOrNull() ?: return
+        val running = runCatching {
+            workManager.getWorkInfosForUniqueWork(WORK_NAME_CHANGE).get().any { it.state == WorkInfo.State.RUNNING }
+        }.getOrDefault(false)
+        if (!RefreshSchedulePolicy.shouldReplaceChangeOnAlarm(running)) return
+        workManager.enqueueUniqueWork(
+            WORK_NAME_CHANGE,
+            ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<ChangeWorker>().setConstraints(buildChangeConstraints()).build()
+        )
     }
 
     fun syncPeriodicSchedule(
@@ -94,6 +148,7 @@ class SunloomWallpaperScheduler(
         if (!plan.scheduleChanges) {
             workManager.cancelUniqueWork(WORK_NAME)
             workManager.cancelUniqueWork(WORK_NAME_CHANGE)
+            ChangeAlarm.cancel(context)
             scheduleRefreshWork(workManager, schedulePrefs, wifiOnly, deferBatterySaver, rescheduleRefreshWork)
             return
         }
@@ -105,9 +160,10 @@ class SunloomWallpaperScheduler(
         }
         val currentZoned = nowZoned ?: ZonedDateTime.now(zoneId)
         val delayMs = if (effectivePrefs != null) {
-            solarCalculator.computeNextTransitionDelayMs(effectivePrefs, currentZoned) ?: TimeUnit.HOURS.toMillis(6)
+            solarCalculator.computeNextTransitionDelayMs(effectivePrefs, currentZoned)
+                ?: RefreshSchedulePolicy.fallbackChangeDelayMs(effectivePrefs.scheduleMode)
         } else {
-            TimeUnit.HOURS.toMillis(6)
+            RefreshSchedulePolicy.fallbackChangeDelayMs(null)
         }
 
         // 1. ChangeWorker: OneTimeWorkRequest targeted to exact transition delay (offline, no battery-not-low gate)
@@ -121,6 +177,7 @@ class SunloomWallpaperScheduler(
             ExistingWorkPolicy.REPLACE,
             changeRequest
         )
+        ChangeAlarm.schedule(context, delayMs = delayMs)
 
         scheduleRefreshWork(workManager, schedulePrefs, wifiOnly, deferBatterySaver, rescheduleRefreshWork)
     }
@@ -190,6 +247,18 @@ class SunloomWallpaperScheduler(
             val nowZoned = solarSnapshot.nowZoned
             val targetBrightness = solarSnapshot.targetBrightness
 
+            // Follow-OS mode polls every few minutes. When the wallpaper on screen already suits the theme there is
+            // nothing to do, and the library pass below (healing, revalidation, reconcile) would only cost battery.
+            if (prefs.scheduleMode == ScheduleMode.FOLLOW_OS_THEME) {
+                val current = repo.getCurrentWallpaperId()?.let { repo.getWallpaperById(it) }
+                val suits = current?.takeIf { it.localFilePath.isNotBlank() && File(it.localFilePath).exists() }
+                    ?.let { BrightnessFit.accepts(it.evaluation, targetBrightness) }
+                if (RefreshSchedulePolicy.isRedundantFollowOsChange(prefs.scheduleMode, suits)) {
+                    rearmChange(appContext, prefs, nowZoned)
+                    return null
+                }
+            }
+
             val connectedDisplays = platform.getConnectedDisplays()
             val display = platform.getPrimaryOrSharpestDisplayOrNull(connectedDisplays)
                 ?: return WallpaperStatus.FAILED_TEMPORARILY
@@ -223,11 +292,11 @@ class SunloomWallpaperScheduler(
                     targetDisplay = display,
                     dryRunPreviewOnly = prefs.dryRunPreviewOnly,
                     connectedDisplays = connectedDisplays,
-                    displayPolicy = prefs.displayPolicy
+                    displayPolicy = prefs.displayPolicy,
+                    onApplied = { repo.recordWallpaperApplied(candidate.id) }
                 )
                 finalStatus = status
                 if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) {
-                    repo.recordWallpaperApplied(candidate.id)
                     repo.setLastAppliedDisplayGeometryKey(currentGeometryKey)
                     break
                 }
@@ -249,10 +318,10 @@ class SunloomWallpaperScheduler(
                         targetDisplay = display,
                         dryRunPreviewOnly = prefs.dryRunPreviewOnly,
                         connectedDisplays = connectedDisplays,
-                        displayPolicy = prefs.displayPolicy
+                        displayPolicy = prefs.displayPolicy,
+                    onApplied = { repo.recordWallpaperApplied(baseline.id) }
                     )
                     if (baseStatus == WallpaperStatus.APPLIED_SUCCESSFULLY) {
-                        repo.recordWallpaperApplied(baseline.id)
                         repo.setLastAppliedDisplayGeometryKey(currentGeometryKey)
                     } else {
                         platform.restoreSystemDefaultWallpaper(prefs.dryRunPreviewOnly)
@@ -262,6 +331,13 @@ class SunloomWallpaperScheduler(
                 }
             }
 
+            if (RefreshSchedulePolicy.shouldRearmAfterChange(finalStatus)) {
+                rearmChange(appContext, prefs, nowZoned)
+            }
+            return finalStatus
+        }
+
+        private fun rearmChange(appContext: Context, prefs: UserPreferences, nowZoned: ZonedDateTime) {
             SunloomWallpaperScheduler(appContext).syncPeriodicSchedule(
                 autoEnabled = prefs.autoChangeEnabled,
                 isPaused = prefs.isPaused,
@@ -271,7 +347,6 @@ class SunloomWallpaperScheduler(
                 nowZoned = nowZoned,
                 rescheduleRefreshWork = false
             )
-            return finalStatus
         }
 
         /** Re-enqueues the next transition after a change attempt exhausted its retries. */
@@ -377,8 +452,7 @@ internal suspend fun mapChangeWorkResult(
     } catch (cancel: CancellationException) {
         throw cancel
     } catch (_: LibraryStoreUnavailableException) {
-        onStoreUnavailable()
-        ListenableWorker.Result.failure()
+        retryThenSuspend(runAttemptCount, onStoreUnavailable)
     } catch (_: Exception) {
         retryOrGiveUp(runAttemptCount, onGiveUp)
     } catch (_: VirtualMachineError) {
@@ -400,8 +474,7 @@ internal suspend fun mapRefreshWorkResult(
     } catch (cancel: CancellationException) {
         throw cancel
     } catch (_: LibraryStoreUnavailableException) {
-        onStoreUnavailable()
-        ListenableWorker.Result.failure()
+        retryThenSuspend(runAttemptCount, onStoreUnavailable)
     } catch (_: Exception) {
         retryOrSettle(runAttemptCount)
     } catch (_: VirtualMachineError) {
@@ -419,3 +492,15 @@ private fun retryOrGiveUp(runAttemptCount: Int, onGiveUp: () -> Unit): Listenabl
 
 private fun retryOrSettle(runAttemptCount: Int): ListenableWorker.Result =
     if (runAttemptCount < 2) ListenableWorker.Result.retry() else ListenableWorker.Result.success()
+
+/**
+ * A store that will not open is often transient (a full disk, a locked database), so retry before suspending
+ * automation (Article VII §6). Opening the app re-arms it once the store works again ([SunloomWallpaperScheduler.ensureScheduled]).
+ */
+private fun retryThenSuspend(runAttemptCount: Int, onStoreUnavailable: () -> Unit): ListenableWorker.Result =
+    if (runAttemptCount < 3) {
+        ListenableWorker.Result.retry()
+    } else {
+        onStoreUnavailable()
+        ListenableWorker.Result.failure()
+    }

@@ -175,7 +175,16 @@ class MainViewModel(
         return viewModelScope.launch(workDispatcher) {
             try {
                 stateMutex.withLock {
-                    val next = block(_uiState.value)
+                    val next = try {
+                        block(_uiState.value)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // Nothing above this scope handles exceptions, so a storage error (disk full, SQLite) would
+                        // end the process. Keep the screen as it was and say so.
+                        android.util.Log.w("MainViewModel", "action_failed", e)
+                        _uiState.value.copy(statusBannerMessage = strings.storageProblem)
+                    }
                     publish(next, preserveNavigation, ownPreferenceEdit = preferenceEdit)
                 }
             } finally {
@@ -192,9 +201,12 @@ class MainViewModel(
                 stateMutex.withLock {
                     val next = try {
                         block(_uiState.value)
-                    } catch (e: Throwable) {
+                    } catch (e: CancellationException) {
                         _uiState.update { s -> s.copy(isApplyingWallpaper = false) }
                         throw e
+                    } catch (e: Exception) {
+                        android.util.Log.w("MainViewModel", "apply_failed", e)
+                        _uiState.value.copy(statusBannerMessage = strings.storageProblem)
                     }
                     publish(next) { it.copy(isApplyingWallpaper = false) }
                 }

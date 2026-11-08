@@ -1,5 +1,6 @@
 package com.sunloom.app.data.sources
 
+import com.sunloom.app.domain.model.SourceIds
 import android.graphics.Bitmap
 import androidx.core.graphics.createBitmap
 import com.sunloom.app.domain.model.BrightnessClass
@@ -152,7 +153,7 @@ object SeedRenderer {
  */
 class BundledSeedSourceAdapter : WallpaperSourceAdapter {
 
-    override val sourceId: String = "seed_reserve"
+    override val sourceId: String = SourceIds.SEED_RESERVE
     override val sourceName: String = "Sunloom On-Device Procedural Reserve"
     override val licenseSummary: String = "CC0 1.0 Public Domain (Generated on device by Sunloom)"
     override val isBuiltInOffline: Boolean = true

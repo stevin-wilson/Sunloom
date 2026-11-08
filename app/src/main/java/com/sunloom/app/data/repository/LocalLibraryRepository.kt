@@ -1,5 +1,6 @@
 package com.sunloom.app.data.repository
 
+import com.sunloom.app.domain.model.SourceIds
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
@@ -45,6 +46,7 @@ import com.sunloom.app.domain.safety.GateTrace
 import com.sunloom.app.domain.safety.SafetyDenylist
 import com.sunloom.app.domain.safety.SafetyGate
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.ensureActive
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -88,15 +90,17 @@ class LocalLibraryRepository(
          */
         internal val SOFT_SAFETY_REASONS = setOf("UNRECOGNIZED_SAFE_DOMAIN", "MISSING_SAFETY_TAGS")
         private const val KEY_SOFT_SWEEP_VERSION = "soft_rejections_denylist_version"
+        private const val TAG = "LocalLibraryRepository"
         private val LIBRARY_WRITE_LOCK = Any()
-        private val HEAL_EXEMPT_SOURCES = setOf("seed_reserve", "user_local")
+        private val SYNC_MUTEX = kotlinx.coroutines.sync.Mutex()
+        private val HEAL_EXEMPT_SOURCES = setOf(SourceIds.SEED_RESERVE, SourceIds.USER_LOCAL)
         private val LEGACY_V1_3_SOURCES = setOf(
-            "seed_reserve",
+            SourceIds.SEED_RESERVE,
             "wikimedia_featured",
             "nasa_library",
             "artic_cc0",
             "met_museum_cc0",
-            "user_local"
+            SourceIds.USER_LOCAL
         )
 
         private data class CachedSeedAsset(
@@ -425,21 +429,10 @@ class LocalLibraryRepository(
 
     fun rejectWallpaperForever(wallpaperId: String, reason: String = "User clicked Reject Forever") {
         val existing = getWallpaperById(wallpaperId) ?: return
-        if (existing.localFilePath.isNotBlank()) runCatching { File(existing.localFilePath).delete() }
-        if (existing.croppedFilePath.isNotBlank()) runCatching { File(existing.croppedFilePath).delete() }
 
+        // Record the rejection first and delete the files last: if the process dies in between, the picture is still
+        // refused (an orphan file is harmless), instead of being deleted but not refused and then fetched again.
         val now = System.currentTimeMillis()
-        upsertWallpaper(
-            existing.copy(
-                isRejected = true,
-                isFavorite = false,
-                localFilePath = "",
-                croppedFilePath = "",
-                fileSizeBytes = 0L,
-                status = WallpaperStatus.REJECTED_SAFETY_OR_QUALITY,
-                decisionExplanation = reason
-            )
-        )
         addPermanentBlocklistEntry(
             assetId = existing.id,
             sha256 = existing.provenance.sha256Checksum,
@@ -451,6 +444,19 @@ class LocalLibraryRepository(
         recordRejection(
             Rejections.permanent(existing.id, existing.provenance.sourceId, "USER_REJECTED", reason, nowMs = now)
         )
+        upsertWallpaper(
+            existing.copy(
+                isRejected = true,
+                isFavorite = false,
+                localFilePath = "",
+                croppedFilePath = "",
+                fileSizeBytes = 0L,
+                status = WallpaperStatus.REJECTED_SAFETY_OR_QUALITY,
+                decisionExplanation = reason
+            )
+        )
+        if (existing.localFilePath.isNotBlank()) runCatching { File(existing.localFilePath).delete() }
+        if (existing.croppedFilePath.isNotBlank()) runCatching { File(existing.croppedFilePath).delete() }
         clearInvalidatedActiveWallpaper(existing.id)
     }
 
@@ -556,7 +562,7 @@ class LocalLibraryRepository(
             if (record.isRejected || record.isBaselineRestore) continue
             if (record.provenance.safetyGateVersion == SafetyGate.COMPOSITE_GATE_VERSION) continue
 
-            val isUserLocal = record.provenance.sourceId == "user_local"
+            val isUserLocal = record.provenance.sourceId == SourceIds.USER_LOCAL
             val effectiveTags = record.rawCategoriesAndTags.ifEmpty {
                 listOf(record.category.displayName.lowercase())
             }
@@ -568,7 +574,7 @@ class LocalLibraryRepository(
                 category = record.category,
                 rawCategoriesAndTags = effectiveTags,
                 downloadUrl = when {
-                    isUserLocal || record.provenance.sourceId == "seed_reserve" -> ""
+                    isUserLocal || record.provenance.sourceId == SourceIds.SEED_RESERVE -> ""
                     record.provenance.originalPageUrl.startsWith("https://") -> record.provenance.originalPageUrl
                     !admittedHost.isNullOrBlank() -> "https://$admittedHost/${record.id}"
                     else -> ""
@@ -641,12 +647,15 @@ class LocalLibraryRepository(
             }
             val approved = payloadVerdict as SafetyVerdict.Approved
 
-            val decoded = decodeSampledBitmapSafely(
+            val outcome = decodeSampledOutcome(
                 bytes = bytes,
                 headerW = headerBounds?.width ?: 0,
                 headerH = headerBounds?.height ?: 0,
                 maxEdgePx = 512
             )
+            // Out of memory says nothing about the picture: leave it cached and check it again next time.
+            if (outcome is DecodeOutcome.OutOfMemory) continue
+            val decoded = (outcome as? DecodeOutcome.Decoded)?.bitmap
             if (decoded == null) {
                 evictFailedRevalidationRecord(
                     record = record,
@@ -707,19 +716,7 @@ class LocalLibraryRepository(
                 val effectiveEval = if (!eval.isEligible && isUserLocal) {
                     eval.copy(
                         isEligible = true,
-                        cropRect = eval.cropRect ?: com.sunloom.app.domain.model.CropRect(
-                            left = 0,
-                            top = 0,
-                            width = origW,
-                            height = origH,
-                            focalX = 0.5,
-                            focalY = 0.5,
-                            usesBlurredFrameFill = true,
-                            pixelCoverageRatio = minOf(
-                                origW.toDouble() / display.widthPx.coerceAtLeast(1),
-                                origH.toDouble() / display.heightPx.coerceAtLeast(1)
-                            )
-                        )
+                        cropRect = eval.cropRect ?: com.sunloom.app.domain.model.CropRect.wholePictureBlurred(origW, origH, display)
                     )
                 } else {
                     eval
@@ -779,8 +776,6 @@ class LocalLibraryRepository(
         dHashOverride: String? = null,
         addToPermanentBlocklist: Boolean = true
     ) {
-        if (record.localFilePath.isNotBlank()) runCatching { File(record.localFilePath).delete() }
-        if (record.croppedFilePath.isNotBlank()) runCatching { File(record.croppedFilePath).delete() }
         val now = System.currentTimeMillis()
         val effectiveSha = sha256Override ?: record.provenance.sha256Checksum
         val effectiveDHash = dHashOverride ?: record.provenance.perceptualHash
@@ -821,6 +816,9 @@ class LocalLibraryRepository(
                 isPermanent = addToPermanentBlocklist
             )
         )
+        // Files last: a crash before this leaves an orphan file, not a deleted picture with no record of why.
+        if (record.localFilePath.isNotBlank()) runCatching { File(record.localFilePath).delete() }
+        if (record.croppedFilePath.isNotBlank()) runCatching { File(record.croppedFilePath).delete() }
         clearInvalidatedActiveWallpaper(record.id)
     }
 
@@ -939,7 +937,7 @@ class LocalLibraryRepository(
             }
 
             val seedProvenance = ProvenanceRecord(
-                sourceId = "seed_reserve",
+                sourceId = SourceIds.SEED_RESERVE,
                 sourceName = "Sunloom On-Device Procedural Reserve",
                 assetId = spec.id,
                 originalPageUrl = "",
@@ -958,7 +956,7 @@ class LocalLibraryRepository(
                 safetyClassificationSource = "Sunloom On-Device Procedural CC0 Reserve",
                 sha256Checksum = cachedAsset.sha256,
                 perceptualHash = cachedAsset.dHash,
-                adapterVersion = SourceRegistry.get("seed_reserve")?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
+                adapterVersion = SourceRegistry.get(SourceIds.SEED_RESERVE)?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
                 safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION,
                 gateLayerOutcomes = GateTrace.fullPass()
             )
@@ -1051,7 +1049,7 @@ class LocalLibraryRepository(
 
         var changedAny = false
         for (record in getAllWallpapers()) {
-            if (record.isRejected || record.isBaselineRestore || record.provenance.sourceId == "seed_reserve") {
+            if (record.isRejected || record.isBaselineRestore || record.provenance.sourceId == SourceIds.SEED_RESERVE) {
                 continue
             }
             val srcW = record.provenance.originalWidth
@@ -1060,7 +1058,7 @@ class LocalLibraryRepository(
 
             val focalX = record.evaluation.cropRect?.focalX ?: 0.5
             val focalY = record.evaluation.cropRect?.focalY ?: 0.5
-            val isUserLocal = record.provenance.sourceId == "user_local"
+            val isUserLocal = record.provenance.sourceId == SourceIds.USER_LOCAL
 
             val plan = envelopePlanner.planForRecord(record, validDisplays, preferences)
 
@@ -1078,19 +1076,8 @@ class LocalLibraryRepository(
                     explanation = plan.disclosureNote
                 )
             } else if (isUserLocal) {
-                val localFallback = com.sunloom.app.domain.model.CropRect(
-                    left = 0,
-                    top = 0,
-                    width = srcW,
-                    height = srcH,
-                    focalX = focalX,
-                    focalY = focalY,
-                    usesBlurredFrameFill = true,
-                    pixelCoverageRatio = minOf(
-                        srcW.toDouble() / primaryOrSharpest.widthPx.coerceAtLeast(1),
-                        srcH.toDouble() / primaryOrSharpest.heightPx.coerceAtLeast(1)
-                    )
-                )
+                val localFallback = com.sunloom.app.domain.model.CropRect
+                    .wholePictureBlurred(srcW, srcH, primaryOrSharpest, focalX = focalX, focalY = focalY)
                 newRendW = primaryOrSharpest.widthPx
                 newRendH = primaryOrSharpest.heightPx
                 updatedEval = record.evaluation.copy(
@@ -1197,10 +1184,21 @@ class LocalLibraryRepository(
     var lastSyncFailedSources: Int = 0
         private set
 
+    /**
+     * One sync at a time per process. The app and the background worker each build their own repository, so without
+     * this they can poll the same sources together (doubling the request rate the register budgets) and race on the
+     * fetch cursors. A second caller waits, then finds the first one's images already in the library.
+     */
     suspend fun refreshOnlineCatalog(
         display: DisplayProfile,
         maxSourcesPerSync: Int = DEFAULT_MAX_SOURCES_PER_SYNC,
         connectedDisplays: List<DisplayProfile> = listOf(display)
+    ): Int = SYNC_MUTEX.withLock { refreshOnlineCatalogLocked(display, maxSourcesPerSync, connectedDisplays) }
+
+    private suspend fun refreshOnlineCatalogLocked(
+        display: DisplayProfile,
+        maxSourcesPerSync: Int,
+        connectedDisplays: List<DisplayProfile>
     ): Int {
         val activeDisplaySet = connectedDisplays.filter { it.widthPx > 0 && it.heightPx > 0 }
             .ifEmpty { listOf(display) }
@@ -1235,7 +1233,7 @@ class LocalLibraryRepository(
         val unseenDarkCount = allActiveWallpapers.count {
             it.id !in ghostRows &&
                 !it.isBaselineRestore &&
-                it.provenance.sourceId != "seed_reserve" &&
+                it.provenance.sourceId != SourceIds.SEED_RESERVE &&
                 it.evaluation.isEligible &&
                 it.evaluation.brightnessClass == BrightnessClass.DARK &&
                 it.appliedCount == 0
@@ -1327,9 +1325,13 @@ class LocalLibraryRepository(
                 continue
             }
             sourceHealth.advanceCursor(adapter.sourceId, cursor)
-            sourceHealth.recordSuccess(adapter.sourceId)
+            // Success is recorded after the downloads: metadata answering while every image fails is a failing source.
             val addedBefore = newlyAdded
             var alreadyHad = 0
+            var downloadsTried = 0
+            var downloadsOk = 0
+            var failureRecorded = false
+            var budgetStopped = false
 
             candidateLoop@ for (candidate in candidates) {
                 coroutineContext.ensureActive()
@@ -1422,16 +1424,24 @@ class LocalLibraryRepository(
                     }.filter { it.isNotBlank() }.distinct()
 
                     var payloadBytes: ByteArray? = null
+                    downloadsTried++
                     for (attemptUrl in downloadChain) {
                         try {
-                            payloadBytes = budgetedClient.getBytes(attemptUrl)
+                            val fetched = budgetedClient.getBytes(attemptUrl)
+                            // A rendition too large to decode is not the picture's fault: try the next, smaller one.
+                            val tooLarge = SafetyGate.inspectImageHeaderBounds(fetched)?.let(SafetyGate::exceedsDecodeBounds) == true
+                            if (tooLarge && attemptUrl != downloadChain.last()) continue
+                            payloadBytes = fetched
                             break
                         } catch (cancel: CancellationException) {
                             throw cancel
                         } catch (rateLimit: RateLimitException) {
                             sourceHealth.recordFailure(adapter.sourceId, rateLimit)
+                            failureRecorded = true
                             break@candidateLoop
                         } catch (_: SourceBudgetExceededException) {
+                            // Our own request budget ran out; that says nothing about the source's health.
+                            budgetStopped = true
                             break@candidateLoop
                         } catch (err: Exception) {
                             if (SourceHealthStore.isCancellation(err)) {
@@ -1443,6 +1453,7 @@ class LocalLibraryRepository(
                         }
                     }
                     if (payloadBytes == null) continue
+                    downloadsOk++
 
                     // Stage raw bytes in quarantine before any decoding
                     FileOutputStream(quarantineFile).use { it.write(payloadBytes) }
@@ -1475,11 +1486,14 @@ class LocalLibraryRepository(
                     }
                     val approved = payloadVerdict as SafetyVerdict.Approved
 
-                    val decoded = decodeSampledBitmapSafely(
+                    val outcome = decodeSampledOutcome(
                         payloadBytes,
                         headerBounds?.width ?: 0,
                         headerBounds?.height ?: 0
                     )
+                    // Out of memory says nothing about the picture: skip it now and see it again on a later sync.
+                    if (outcome is DecodeOutcome.OutOfMemory) continue
+                    val decoded = (outcome as? DecodeOutcome.Decoded)?.bitmap
                     if (decoded == null) {
                         recordRejection(
                             Rejections.permanent(
@@ -1635,8 +1649,37 @@ class LocalLibraryRepository(
                     existingIds.add(candidate.id)
                     diversityGuard.noteAdded(adapter.sourceId, candidate.provenance.creatorName, dHash)
                     newlyAdded++
+                } catch (cancel: CancellationException) {
+                    throw cancel
+                } catch (unavailable: LibraryStoreUnavailableException) {
+                    // The store itself is gone: the worker must see it to retry and suspend, not skip every picture.
+                    throw unavailable
+                } catch (err: Exception) {
+                    if (SourceHealthStore.isCancellation(err)) {
+                        throw CancellationException(err.message).apply { initCause(err) }
+                    }
+                    // One picture that cannot be staged, evaluated or stored (a full disk, a store error) is skipped;
+                    // the other candidates, the sync summary and the cache cleanup still run.
+                    android.util.Log.w(TAG, "candidate_skipped", err)
+                    // Make the skip visible in Diagnostics. The store may be what is failing, so this must not throw.
+                    runCatching {
+                        recordRejection(
+                            Rejections.transient(
+                                candidate.id, adapter.sourceId, "STORAGE_ERROR",
+                                "Skipped after an error while staging or storing it: ${err.message ?: err.javaClass.simpleName}"
+                            )
+                        )
+                    }
                 } finally {
                     runCatching { quarantineFile.delete() }
+                }
+            }
+            if (!failureRecorded) {
+                if (downloadsTried > 0 && downloadsOk == 0 && !budgetStopped) {
+                    lastSyncFailedSources++
+                    sourceHealth.recordFailure(adapter.sourceId, budgetedClient.lastHttpError)
+                } else {
+                    sourceHealth.recordSuccess(adapter.sourceId)
                 }
             }
             sourceHealth.recordSyncSummary(
@@ -1676,8 +1719,8 @@ class LocalLibraryRepository(
     private fun isPausedForResolution(record: WallpaperRecord): Boolean =
         !record.isRejected &&
             !record.isBaselineRestore &&
-            record.provenance.sourceId != "seed_reserve" &&
-            record.provenance.sourceId != "user_local" &&
+            record.provenance.sourceId != SourceIds.SEED_RESERVE &&
+            record.provenance.sourceId != SourceIds.USER_LOCAL &&
             !record.evaluation.isEligible &&
             record.evaluation.rejectionReasonCode == "RESOLUTION_BELOW_DISPLAY_TARGET" &&
             hasUsableFile(record)

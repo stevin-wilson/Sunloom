@@ -1,5 +1,6 @@
 package com.sunloom.app.platform
 
+import com.sunloom.app.domain.model.SourceIds
 import android.annotation.SuppressLint
 import android.app.WallpaperManager
 import android.content.Context
@@ -138,7 +139,7 @@ class DefaultSystemWallpaperGateway(private val context: Context) : SystemWallpa
             val beforeSysId = if (wantsSystem) getWallpaperId(WallpaperManager.FLAG_SYSTEM) else -1
             val beforeLockId = if (wantsLock) getWallpaperId(WallpaperManager.FLAG_LOCK) else -1
 
-            // Disable launcher parallax scrolling so system center-crop preserves our multi-display envelope
+            // Only the offsets this process reports are zeroed; a launcher's own parallax setting is not ours to change.
             runCatching { wallpaperManager.setWallpaperOffsetSteps(0f, 0f) }
             val result = wallpaperManager.setBitmap(bitmap, null, true, flags)
 
@@ -148,9 +149,8 @@ class DefaultSystemWallpaperGateway(private val context: Context) : SystemWallpa
             val sysChanged = wantsSystem && afterSysId > 0 && afterSysId != beforeSysId
             val lockChanged = wantsLock && afterLockId > 0 && afterLockId != beforeLockId
 
-            if (wantsLock) {
-                val lockVerified = afterLockId >= 0 && (lockChanged || result > 0)
-                prefs.edit { putBoolean(PREF_OBSERVED_LOCK_SUPPORT, lockVerified) }
+            LockSupportEvidence.observe(wantsSystem, wantsLock, afterLockId, lockChanged, result)?.let { independent ->
+                prefs.edit { putBoolean(PREF_OBSERVED_LOCK_SUPPORT, independent) }
             }
 
             when {
@@ -313,7 +313,22 @@ class GoogleBookPlatformAdapter(
         targetDisplay: DisplayProfile? = getPrimaryOrSharpestDisplayOrNull(),
         dryRunPreviewOnly: Boolean = false,
         connectedDisplays: List<DisplayProfile>? = null,
-        displayPolicy: DisplayPolicy = DisplayPolicy.SAME_ON_ALL_DISPLAYS
+        displayPolicy: DisplayPolicy = DisplayPolicy.SAME_ON_ALL_DISPLAYS,
+        onApplied: () -> Unit = {}
+    ): WallpaperStatus = ApplyLock.run {
+        // [onApplied] runs inside the lock, so the app and the background worker cannot interleave an apply with the
+        // record of it and leave the wallpaper on screen different from the one recorded as active (Article V §2).
+        applyWallpaperLocked(record, policy, targetDisplay, dryRunPreviewOnly, connectedDisplays, displayPolicy)
+            .also { if (it == WallpaperStatus.APPLIED_SUCCESSFULLY) onApplied() }
+    }
+
+    private fun applyWallpaperLocked(
+        record: WallpaperRecord,
+        policy: LockWorkspacePolicy,
+        targetDisplay: DisplayProfile?,
+        dryRunPreviewOnly: Boolean,
+        connectedDisplays: List<DisplayProfile>?,
+        displayPolicy: DisplayPolicy
     ): WallpaperStatus {
         if (!gateway.isWallpaperSupported() || !gateway.isSetWallpaperAllowed()) {
             return WallpaperStatus.UNSUPPORTED_BY_SYSTEM
@@ -331,7 +346,7 @@ class GoogleBookPlatformAdapter(
             return WallpaperStatus.FAILED_TEMPORARILY
         }
 
-        val allowBlurred = record.provenance.sourceId == "user_local" ||
+        val allowBlurred = record.provenance.sourceId == SourceIds.USER_LOCAL ||
             record.evaluation.cropRect?.usesBlurredFrameFill == true
 
         val envelopePlan: EnvelopePlan? = if (canPlanEnvelope(record)) {
@@ -343,7 +358,7 @@ class GoogleBookPlatformAdapter(
                 connectedDisplays = effectiveDisplays,
                 policy = displayPolicy,
                 allowBlurredFrameFill = allowBlurred
-            ) ?: if (record.provenance.sourceId == "user_local") {
+            ) ?: if (record.provenance.sourceId == SourceIds.USER_LOCAL) {
                 null
             } else {
                 return WallpaperStatus.FAILED_TEMPORARILY
@@ -386,6 +401,10 @@ class GoogleBookPlatformAdapter(
                 )
             }
 
+            // The prepared bitmap is all that setBitmap needs, and handing it over allocates a lot (it is encoded):
+            // release the decoded source first so the two are never held together at that peak.
+            if (preparedBitmap !== sourceBitmap) sourceBitmap.recycle()
+
             val flags = when (policy) {
                 LockWorkspacePolicy.SAME_ON_BOTH -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
                 LockWorkspacePolicy.WORKSPACE_ONLY -> WallpaperManager.FLAG_SYSTEM
@@ -410,15 +429,15 @@ class GoogleBookPlatformAdapter(
 
     /** Fetched and imported pictures are planned per display set; seeds and the baseline copy are not. */
     private fun canPlanEnvelope(record: WallpaperRecord): Boolean {
-        val rendered = record.isBaselineRestore || record.provenance.sourceId == "seed_reserve"
+        val rendered = record.isBaselineRestore || record.provenance.sourceId == SourceIds.SEED_RESERVE
         return !rendered && record.provenance.originalWidth > 0 && record.provenance.originalHeight > 0
     }
 
     private fun keepsStoredBlurredFill(record: WallpaperRecord): Boolean =
-        record.provenance.sourceId == "user_local" && record.evaluation.cropRect?.usesBlurredFrameFill == true
+        record.provenance.sourceId == SourceIds.USER_LOCAL && record.evaluation.cropRect?.usesBlurredFrameFill == true
 
     private fun isSharedSeed(record: WallpaperRecord, displays: List<DisplayProfile>): Boolean =
-        record.provenance.sourceId == "seed_reserve" && displays.size > 1
+        record.provenance.sourceId == SourceIds.SEED_RESERVE && displays.size > 1
 
     @SuppressLint("ExifInterface")
     private fun decodeBitmapBounded(file: File, targetWidthPx: Int, targetHeightPx: Int): Bitmap? {
@@ -626,6 +645,10 @@ class GoogleBookPlatformAdapter(
         scheduler.cancelAllScheduledWork()
     }
 
+    fun ensureScheduled(preferences: UserPreferences) {
+        scheduler.ensureScheduled(preferences)
+    }
+
     fun syncPeriodicSchedule(
         autoEnabled: Boolean,
         isPaused: Boolean,
@@ -679,4 +702,27 @@ class GoogleBookPlatformAdapter(
             )
         }
     }
+}
+
+/** One apply-and-record step at a time in the process (the app and the background worker both apply). */
+internal object ApplyLock {
+    private val lock = java.util.concurrent.locks.ReentrantLock()
+    fun <T> run(block: () -> T): T {
+        lock.lock()
+        try {
+            return block()
+        } finally {
+            lock.unlock()
+        }
+    }
+}
+
+/**
+ * What an apply shows about independent lock-screen support. Only a lock-only apply is evidence: when both are set
+ * together the system may share one picture, so a "changed" lock id there proves nothing and must not overwrite what
+ * a lock-only apply observed.
+ */
+internal object LockSupportEvidence {
+    fun observe(wantsSystem: Boolean, wantsLock: Boolean, afterLockId: Int, lockChanged: Boolean, result: Int): Boolean? =
+        if (wantsLock && !wantsSystem) afterLockId >= 0 && (lockChanged || result > 0) else null
 }
