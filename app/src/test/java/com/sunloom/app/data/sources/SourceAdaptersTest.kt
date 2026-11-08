@@ -589,6 +589,20 @@ class SourceAdaptersTest {
     }
 
     @Test
+    fun `NASA reads the size of the jpg original, not of a tif or another link`() {
+        val nasa = NasaLibrarySourceAdapter()
+        val json = """{"collection": {"items": [{
+            "data": [{"nasa_id": "PIA19708", "title": "Pluto", "center": "JPL", "description": "A view.", "keywords": ["New Horizons"]}],
+            "links": [
+              {"href": "https://images-assets.nasa.gov/image/PIA19708/PIA19708~orig.jpg", "width": 1024, "height": 1024},
+              {"href": "https://images-assets.nasa.gov/image/PIA19708/PIA19708~orig.tif", "width": 300, "height": 300}
+            ]
+        }]}}"""
+        val asset = nasa.parseResponse(json).single()
+        assertEquals(1024, asset.provenance.originalWidth)
+    }
+
+    @Test
     fun `testRedirectValidatorRejectsCrossDomainRedirect`() {
         // Admitted hosts succeed
         DefaultHttpsClient.validateHttpsAndHost("https://commons.wikimedia.org/w/api.php", "wikimedia_featured")

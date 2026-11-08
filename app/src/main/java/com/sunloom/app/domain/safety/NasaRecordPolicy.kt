@@ -17,6 +17,7 @@ import java.util.Locale
 object NasaRecordPolicy {
     private enum class Family { HUBBLE_WEBB, ISS, JSC_ARCHIVE, JPL_PHOTOJOURNAL, NOT_ADMITTED }
 
+    private val NON_WORD_REGEX = Regex("[^a-z0-9]+")
     private val HTML_TAG_REGEX = Regex("<[^>]*>")
     private val ISS_ID_REGEX = Regex("""^iss\d""")
     private val JSC_ARCHIVE_ID_REGEX = Regex("""^(sts\d|s\d\d-|as\d|art\d)""")
@@ -25,20 +26,21 @@ object NasaRecordPolicy {
     private val JPL_IMAGING_MISSIONS = listOf(
         "hubble", "webb", "chandra", "spitzer", "cassini", "galileo", "voyager", "juno", "mariner", "messenger", "new horizons",
         "mars reconnaissance", "mars global surveyor", "mars exploration rover", "mars science laboratory",
-        "galaxy evolution explorer", "wide-field infrared", "terra", "earth observing"
+        "galaxy evolution explorer", "wide field infrared", "terra", "earth observing"
     )
 
     /** Product types, annotations and people: matched in the title, description and keywords of every family. */
     private val ANYWHERE_REGEX = Regex(
         "overlay|\\btracks?\\b|\\bradar\\b|synthetic aperture|shaded relief|\\belevation\\b|perspective view|\\bsrtm\\b|" +
             "\\b(labeled|labelled|annotated)\\b|\\blegend\\b|" +
-            "technicians?|\\bworkers?\\b|\\bengineers?\\b|clean ?room|processing facility|\\binspect(s|ed|ion)?\\b|" +
+            "technicians?|\\bworkers?\\b|clean ?room|processing facility|" +
             "team members|tweeted photo|social media|" +
-            "\\binsets?\\b|\\bpanels?\\b|side[- ]by[- ]side|time series|\\bsequence\\b"
+            "\\binsets?\\b|\\b(left|right|top|bottom|upper|lower|middle|center|each|two|three|four) panels?\\b|" +
+            "side[- ]by[- ]side|time series|\\bsequence\\b"
     )
 
     /** Multi-panel products: matched in the title and keywords only, since Hubble prose says "color composite". */
-    private val TITLE_AND_KEYWORDS_REGEX = Regex("\\b(composite|mosaic)\\b")
+    private val TITLE_AND_KEYWORDS_REGEX = Regex("\\b(composite|mosaic|engineers?|inspect(s|ed|ion)?)\\b")
 
     /** Dark handheld frames from the station: matched for ISS photographs only. */
     private val ISS_NIGHT_REGEX = Regex("night (pass|view|earth)|city lights|night earth")
@@ -87,7 +89,7 @@ object NasaRecordPolicy {
     }
 
     private fun namesImagingMission(keywords: List<String>): Boolean {
-        val text = keywords.joinToString(" ").lowercase(Locale.ROOT)
-        return JPL_IMAGING_MISSIONS.any { it in text }
+        val text = " " + keywords.joinToString(" ").lowercase(Locale.ROOT).replace(NON_WORD_REGEX, " ") + " "
+        return JPL_IMAGING_MISSIONS.any { " $it " in text }
     }
 }

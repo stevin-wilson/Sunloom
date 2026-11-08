@@ -151,7 +151,8 @@ class NasaLibrarySourceAdapter(
                         largestWidth = linkWidth
                         largestHeight = linkHeight
                     }
-                    if (href.contains("~orig.") && linkWidth > 0 && linkHeight > 0) {
+                    val isSizedOrig = href.contains("~orig.") && isHttpsImage(href) && linkWidth > 0 && linkHeight > 0
+                    if (origWidth == 0 && isSizedOrig) {
                         origWidth = linkWidth
                         origHeight = linkHeight
                     }

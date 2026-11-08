@@ -119,4 +119,31 @@ class NasaRecordPolicyTest {
             verdict("PIA00605", "Aurora", "The left panel is the clear filter and the right panel is red.", listOf("Galileo"))
         )
     }
+
+    @Test
+    fun `credits and everyday prose do not reject a genuine photograph`() {
+        assertNull(
+            verdict(
+                "PIA23791", "Venus from Mariner 10",
+                "The image was processed from archived Mariner 10 data by JPL engineer Kevin M. Gill.", listOf("Mariner 10", "Venus")
+            )
+        )
+        assertNull(
+            verdict(
+                "sts054-152-189", "Murzuk sand sea, Libya",
+                "Close inspection of this photograph shows the agricultural fields. The open panels of the vehicle are visible.",
+                listOf("LIBYA", "DESERTS")
+            )
+        )
+        // Still rejected when the word is a label of the picture itself.
+        assertNotNull(verdict("PIA21937", "Signal", "See the inverted V in the lower panel.", listOf("Hubble")))
+        assertNotNull(verdict("PIA00001", "Technicians inspect the camera", "A view.", listOf("Galileo")))
+    }
+
+    @Test
+    fun `an imaging mission must be a whole keyword word, not part of another word`() {
+        assertNotNull(verdict("PIA12345", "Terrain model", "A view.", listOf("Terrain", "topography")))
+        assertNotNull(verdict("PIA12346", "Alien worlds", "A view.", listOf("extraterrestrial")))
+        assertNull(verdict("PIA12347", "A view of Earth", "A view.", listOf("Terra", "Earth")))
+    }
 }
