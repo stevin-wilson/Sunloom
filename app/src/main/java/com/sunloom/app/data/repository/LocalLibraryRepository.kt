@@ -1344,9 +1344,12 @@ class LocalLibraryRepository(
                 continue
             }
             sourceHealth.advanceCursor(adapter.sourceId, cursor)
-            sourceHealth.recordSuccess(adapter.sourceId)
+            // Success is recorded after the downloads: metadata answering while every image fails is a failing source.
             val addedBefore = newlyAdded
             var alreadyHad = 0
+            var downloadsTried = 0
+            var downloadsOk = 0
+            var failureRecorded = false
 
             candidateLoop@ for (candidate in candidates) {
                 coroutineContext.ensureActive()
@@ -1439,6 +1442,7 @@ class LocalLibraryRepository(
                     }.filter { it.isNotBlank() }.distinct()
 
                     var payloadBytes: ByteArray? = null
+                    downloadsTried++
                     for (attemptUrl in downloadChain) {
                         try {
                             val fetched = budgetedClient.getBytes(attemptUrl)
@@ -1451,6 +1455,7 @@ class LocalLibraryRepository(
                             throw cancel
                         } catch (rateLimit: RateLimitException) {
                             sourceHealth.recordFailure(adapter.sourceId, rateLimit)
+                            failureRecorded = true
                             break@candidateLoop
                         } catch (_: SourceBudgetExceededException) {
                             break@candidateLoop
@@ -1464,6 +1469,7 @@ class LocalLibraryRepository(
                         }
                     }
                     if (payloadBytes == null) continue
+                    downloadsOk++
 
                     // Stage raw bytes in quarantine before any decoding
                     FileOutputStream(quarantineFile).use { it.write(payloadBytes) }
@@ -1670,6 +1676,14 @@ class LocalLibraryRepository(
                     android.util.Log.w(TAG, "candidate_skipped", err)
                 } finally {
                     runCatching { quarantineFile.delete() }
+                }
+            }
+            if (!failureRecorded) {
+                if (downloadsTried > 0 && downloadsOk == 0) {
+                    lastSyncFailedSources++
+                    sourceHealth.recordFailure(adapter.sourceId, budgetedClient.lastHttpError)
+                } else {
+                    sourceHealth.recordSuccess(adapter.sourceId)
                 }
             }
             sourceHealth.recordSyncSummary(

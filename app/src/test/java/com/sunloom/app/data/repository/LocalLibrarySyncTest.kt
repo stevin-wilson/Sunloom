@@ -451,6 +451,38 @@ class LocalLibrarySyncTest {
     }
 
     @Test
+    fun `a source whose images cannot be downloaded does not stay healthy`() = kotlinx.coroutines.test.runTest {
+        // Metadata answers, every image download fails (the image host is down): that is a failing source.
+        val client = object : HttpClient {
+            override suspend fun getText(url: String): String = "{}"
+            override suspend fun getBytes(url: String, maxBytes: Int): ByteArray = throw IOException("HTTP 503")
+        }
+        val repo = repo(FixedAdapter("artic_cc0", (1..3).map { candidate("dl-$it") }), client = client)
+        assertEquals(0, repo.refreshOnlineCatalog(display))
+        assertEquals(1, repo.lastSyncFailedSources)
+        assertEquals(1, repo.getSourceDiagnostics().single { it.sourceId == "artic_cc0" }.consecutiveFailures)
+        // Failures accumulate across syncs, so the backoff can start.
+        repo.refreshOnlineCatalog(display)
+        repo.refreshOnlineCatalog(display)
+        assertEquals(3, repo.getSourceDiagnostics().single { it.sourceId == "artic_cc0" }.consecutiveFailures)
+    }
+
+    @Test
+    fun `one failed download among successful ones keeps the source healthy`() = kotlinx.coroutines.test.runTest {
+        var n = 0
+        val client = object : HttpClient {
+            override suspend fun getText(url: String): String = "{}"
+            override suspend fun getBytes(url: String, maxBytes: Int): ByteArray {
+                if (n++ == 0) throw IOException("HTTP 500")
+                return jpegFor(imageKey(url))
+            }
+        }
+        val repo = repo(FixedAdapter("artic_cc0", (1..3).map { candidate("ok-$it") }), client = client)
+        assertEquals(2, repo.refreshOnlineCatalog(display))
+        assertEquals(0, repo.lastSyncFailedSources)
+    }
+
+    @Test
     fun `no more than three unseen images from one creator are kept`() = kotlinx.coroutines.test.runTest {
         val monet = (1..5).map { candidate("monet-$it", creator = "Claude Monet") }
         val repo = repo(FixedAdapter("artic_cc0", monet))
