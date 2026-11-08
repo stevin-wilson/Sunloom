@@ -33,6 +33,7 @@ import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.model.WallpaperStatus
 import com.sunloom.app.domain.model.displaySetSignature
 import com.sunloom.app.domain.renderer.CropRenderer
+import com.sunloom.app.domain.renderer.DisplayReconciler
 import com.sunloom.app.domain.renderer.EnvelopePlanner
 import com.sunloom.app.domain.safety.GateTrace
 import com.sunloom.app.domain.safety.SafetyDenylist
@@ -135,6 +136,7 @@ class LocalLibraryRepository(
     private val prefs = appContext.getSharedPreferences("sunloom_preferences", Context.MODE_PRIVATE)
     private val sourceHealth = SourceHealthStore(prefs, random)
     private val preferencesStore = PreferencesStore(prefs)
+    private val displayReconciler = DisplayReconciler(envelopePlanner, cropRenderer)
     val wallpaperDir: File = File(appContext.filesDir, "wallpapers").apply { mkdirs() }
 
     private val seedReserve = SeedReserve(wallpaperDir, safetyGate, imageEvaluator, maxSeedRenderPixels)
@@ -752,91 +754,18 @@ class LocalLibraryRepository(
     ): Boolean {
         val validDisplays = displays.filter { it.widthPx > 0 && it.heightPx > 0 }
         if (validDisplays.isEmpty()) return false
-        val primaryOrSharpest = validDisplays.maxBy { it.widthPx.toLong() * it.heightPx.toLong() }
 
         var changedAny = false
-        for (record in getAllWallpapers()) {
-            if (record.isRejected || record.isBaselineRestore || record.provenance.sourceId == SourceIds.SEED_RESERVE) {
-                continue
+        for (snapshot in getAllWallpapers()) {
+            // Re-read under the write lock: a rejection or a sync that landed since the snapshot must not be
+            // overwritten with the stale copy.
+            val changed = synchronized(LIBRARY_WRITE_LOCK) {
+                val current = getWallpaperById(snapshot.id) ?: return@synchronized false
+                val updated = displayReconciler.reconcile(current, validDisplays, preferences) ?: return@synchronized false
+                upsertWallpaper(updated)
+                true
             }
-            val srcW = record.provenance.originalWidth
-            val srcH = record.provenance.originalHeight
-            if (srcW <= 0 || srcH <= 0) continue
-
-            val focalX = record.evaluation.cropRect?.focalX ?: 0.5
-            val focalY = record.evaluation.cropRect?.focalY ?: 0.5
-            val isUserLocal = record.provenance.sourceId == SourceIds.USER_LOCAL
-
-            val plan = envelopePlanner.planForRecord(record, validDisplays, preferences)
-
-            val updatedEval: com.sunloom.app.domain.model.ImageEvaluationResult
-            val newRendW: Int
-            val newRendH: Int
-
-            if (plan != null) {
-                newRendW = plan.outputWidthPx
-                newRendH = plan.outputHeightPx
-                updatedEval = record.evaluation.copy(
-                    isEligible = true,
-                    rejectionReasonCode = null,
-                    cropRect = plan.envelopeCrop,
-                    explanation = plan.disclosureNote
-                )
-            } else if (isUserLocal) {
-                val localFallback = com.sunloom.app.domain.model.CropRect
-                    .wholePictureBlurred(srcW, srcH, primaryOrSharpest, focalX = focalX, focalY = focalY)
-                newRendW = primaryOrSharpest.widthPx
-                newRendH = primaryOrSharpest.heightPx
-                updatedEval = record.evaluation.copy(
-                    isEligible = true,
-                    rejectionReasonCode = null,
-                    cropRect = localFallback
-                )
-            } else {
-                // Preserve focalX/focalY in a non-null crop bounds object while marking ineligible for this display set
-                val preservedBounds = cropRenderer.computeAspectCropBounds(
-                    sourceWidth = srcW,
-                    sourceHeight = srcH,
-                    focalX = focalX,
-                    focalY = focalY,
-                    targetAspect = primaryOrSharpest.aspectRatio
-                )
-                val coverage = minOf(
-                    preservedBounds.width.toDouble() / primaryOrSharpest.widthPx.coerceAtLeast(1),
-                    preservedBounds.height.toDouble() / primaryOrSharpest.heightPx.coerceAtLeast(1)
-                )
-                newRendW = preservedBounds.width
-                newRendH = preservedBounds.height
-                val targetLabel = if (validDisplays.size > 1) {
-                    validDisplays.joinToString(" + ") { it.resolutionLabel }
-                } else {
-                    primaryOrSharpest.resolutionLabel
-                }
-                updatedEval = record.evaluation.copy(
-                    isEligible = false,
-                    rejectionReasonCode = "RESOLUTION_BELOW_DISPLAY_TARGET",
-                    cropRect = preservedBounds.copy(pixelCoverageRatio = coverage),
-                    explanation = "Temporarily paused for $targetLabel: source (${srcW}×${srcH}) is below native sharpness floor."
-                )
-            }
-
-            if (record.evaluation.isEligible != updatedEval.isEligible ||
-                record.evaluation.rejectionReasonCode != updatedEval.rejectionReasonCode ||
-                record.evaluation.cropRect != updatedEval.cropRect ||
-                record.provenance.renditionWidth != newRendW ||
-                record.provenance.renditionHeight != newRendH
-            ) {
-                upsertWallpaper(
-                    record.copy(
-                        provenance = record.provenance.copy(
-                            renditionWidth = newRendW,
-                            renditionHeight = newRendH
-                        ),
-                        evaluation = updatedEval
-                    )
-                )
-                changedAny = true
-            }
+            if (changed) changedAny = true
         }
         return changedAny
     }
