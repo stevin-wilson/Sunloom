@@ -1,6 +1,5 @@
 package com.sunloom.app.data.repository
 
-import com.sunloom.app.domain.model.SourceIds
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
@@ -14,7 +13,6 @@ import com.sunloom.app.data.sources.DefaultHttpsClient
 import com.sunloom.app.data.sources.HttpClient
 import com.sunloom.app.data.sources.MetMuseumCc0SourceAdapter
 import com.sunloom.app.data.sources.NasaLibrarySourceAdapter
-import com.sunloom.app.data.sources.RateLimitException
 import com.sunloom.app.data.sources.SmkOpenSourceAdapter
 import com.sunloom.app.data.sources.SourceBudgetExceededException
 import com.sunloom.app.data.sources.SourceRegistry
@@ -32,6 +30,7 @@ import com.sunloom.app.domain.model.SafeCategory
 import com.sunloom.app.domain.model.SafetyVerdict
 import com.sunloom.app.domain.model.ScheduleMode
 import com.sunloom.app.domain.model.SourceDiagnostics
+import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.domain.model.UserPreferences
 import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.model.WallpaperStatus
@@ -41,12 +40,11 @@ import com.sunloom.app.domain.renderer.EnvelopePlanner
 import com.sunloom.app.domain.safety.GateTrace
 import com.sunloom.app.domain.safety.SafetyDenylist
 import com.sunloom.app.domain.safety.SafetyGate
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.ensureActive
 import java.io.File
-import java.io.FileOutputStream
 import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Articles VII, VIII, IX, X, XI, XII:
@@ -85,7 +83,6 @@ class LocalLibraryRepository(
          */
         internal val SOFT_SAFETY_REASONS = setOf("UNRECOGNIZED_SAFE_DOMAIN", "MISSING_SAFETY_TAGS")
         private const val KEY_SOFT_SWEEP_VERSION = "soft_rejections_denylist_version"
-        private const val TAG = "LocalLibraryRepository"
         private val LIBRARY_WRITE_LOCK = Any()
         private val SYNC_MUTEX = kotlinx.coroutines.sync.Mutex()
         private val HEAL_EXEMPT_SOURCES = setOf(SourceIds.SEED_RESERVE, SourceIds.USER_LOCAL)
@@ -98,7 +95,6 @@ class LocalLibraryRepository(
             SourceIds.USER_LOCAL
         )
 
-        private val SAFE_FILENAME_REGEX = Regex("[^a-zA-Z0-9._-]")
 
         @Volatile
         internal var testStoreFactoryOverride: ((Context) -> LibraryStore)? = null
@@ -154,7 +150,29 @@ class LocalLibraryRepository(
     val wallpaperDir: File = File(appContext.filesDir, "wallpapers").apply { mkdirs() }
 
     private val seedReserve = SeedReserve(wallpaperDir, safetyGate, imageEvaluator, maxSeedRenderPixels)
+
     val quarantineDir: File = File(appContext.noBackupFilesDir, "quarantine").apply { mkdirs() }
+
+    private val ingestHost = object : IngestHost {
+        override fun recordRejection(rejection: RejectionRecord) = this@LocalLibraryRepository.recordRejection(rejection)
+
+        override fun blocklist(
+            assetId: String?,
+            sha256: String?,
+            perceptualHash: String?,
+            sourceId: String,
+            reasonCode: String,
+            timestampEpochMs: Long
+        ) = addPermanentBlocklistEntry(assetId, sha256, perceptualHash, sourceId, reasonCode, timestampEpochMs)
+
+        override fun store(record: WallpaperRecord) {
+            synchronized(LIBRARY_WRITE_LOCK) { upsertWallpaper(record) }
+        }
+
+        override fun recordSourceFailure(sourceId: String, error: Throwable) = sourceHealth.recordFailure(sourceId, error)
+    }
+
+    private val ingestor = CandidateIngestor(safetyGate, imageEvaluator, envelopePlanner, wallpaperDir, quarantineDir, ingestHost)
     private val userImportPipeline = UserImportPipeline(
         repository = this,
         appContext = appContext,
@@ -1065,435 +1083,127 @@ class LocalLibraryRepository(
             }
         }
 
+        val state = SyncState(
+            display = display,
+            activeDisplaySet = activeDisplaySet,
+            currentSetSignature = currentSetSignature,
+            preferences = preferences,
+            existingIds = existingIds,
+            permanentlyBlockedIds = permanentlyBlockedIds,
+            displayScopedRejectedIds = displayScopedRejectedIds,
+            blockedSha256s = blockedSha256s,
+            blockedPhashes = blockedPhashes,
+            diversityGuard = diversityGuard,
+            pausedRows = pausedRows,
+            redownloadRows = redownloadRows
+        )
+
         lastSyncAttemptedSources = selectedAdapters.size
         lastSyncFailedSources = 0
         for (adapter in selectedAdapters) {
             coroutineContext.ensureActive()
-            val reg = SourceRegistry.get(adapter.sourceId)
-            val budgetedClient = BudgetedSourceHttpClient(
-                delegate = httpClient,
-                sourceId = adapter.sourceId,
-                maxRequests = reg?.maxRequestsPerSync ?: 6,
-                minSpacingMs = reg?.minRequestSpacingMs ?: 150L
-            )
-            val scopedAdapter = adapter.withHttpClient(budgetedClient)
-
-            val cursor = sourceHealth.fetchCursor(adapter.sourceId)
-            var fetchFailure: Throwable? = null
-            val candidates = try {
-                scopedAdapter.fetchCandidates(
-                    enabledCategories = preferences.enabledCategories,
-                    limit = 8,
-                    offset = cursor,
-                    targetWidthPx = effectiveTargetWidthPx
-                )
-            } catch (cancel: CancellationException) {
-                throw cancel
-            } catch (_: SourceBudgetExceededException) {
-                sourceHealth.advanceCursor(adapter.sourceId, cursor)
-                continue
-            } catch (err: Exception) {
-                fetchFailure = err
-                emptyList()
-            } catch (err: VirtualMachineError) {
-                // One source dying, even with a stack overflow on hostile JSON, must not stop the others.
-                fetchFailure = err
-                emptyList()
-            }
-            fetchFailure?.let { err ->
-                if (SourceHealthStore.isCancellation(err)) {
-                    throw CancellationException(err.message).apply { initCause(err) }
-                }
-                lastSyncFailedSources++
-                sourceHealth.recordFailure(adapter.sourceId, err)
-                sourceHealth.moveOnIfStuck(adapter.sourceId, cursor)
-                sourceHealth.recordSyncSummary(
-                    adapter.sourceId, fetched = 0, alreadyHad = 0, added = 0,
-                    httpErrors = budgetedClient.httpErrorCount, failure = err
-                )
-                continue
-            }
-            // Adapters swallow HTTP errors and return an empty list. When no request of the source got an answer,
-            // that is a failed source, not an "up to date" one. Individual 404s among answered requests (a Met
-            // object without an image, say) are normal and do not make a source unhealthy.
-            if (candidates.isEmpty() && budgetedClient.successfulRequestCount == 0 && budgetedClient.httpErrorCount > 0) {
-                lastSyncFailedSources++
-                sourceHealth.recordFailure(adapter.sourceId, budgetedClient.lastHttpError)
-                sourceHealth.moveOnIfStuck(adapter.sourceId, cursor)
-                sourceHealth.recordSyncSummary(
-                    adapter.sourceId, fetched = 0, alreadyHad = 0, added = 0, httpErrors = budgetedClient.httpErrorCount
-                )
-                continue
-            }
-            sourceHealth.advanceCursor(adapter.sourceId, cursor)
-            // Success is recorded after the downloads: metadata answering while every image fails is a failing source.
-            val addedBefore = newlyAdded
-            var alreadyHad = 0
-            var downloadsTried = 0
-            var downloadsOk = 0
-            var failureRecorded = false
-            var budgetStopped = false
-
-            candidateLoop@ for (candidate in candidates) {
-                coroutineContext.ensureActive()
-                pausedRows[candidate.id]?.let { previous ->
-                    if (!offersLargerRendition(candidate, previous)) {
-                        alreadyHad++
-                        continue@candidateLoop
-                    }
-                }
-                if (candidate.id in existingIds ||
-                    candidate.id in permanentlyBlockedIds ||
-                    candidate.id in displayScopedRejectedIds
-                ) {
-                    if (candidate.id in existingIds) alreadyHad++
-                    continue
-                }
-
-                val metaVerdict = safetyGate.evaluateMetadata(
-                    candidate = candidate,
-                    blockedAssetIds = permanentlyBlockedIds,
-                    blockedPerceptualHashes = blockedPhashes,
-                    blockedSha256Checksums = blockedSha256s
-                )
-                if (metaVerdict is SafetyVerdict.Rejected && metaVerdict.reasonCode in SOFT_SAFETY_REASONS) {
-                    recordRejection(
-                        Rejections.displayScoped(
-                            candidate.id, adapter.sourceId, metaVerdict.reasonCode,
-                            metaVerdict.explanation,
-                            currentSetSignature
-                        )
-                    )
-                    displayScopedRejectedIds.add(candidate.id)
-                    continue
-                }
-                if (metaVerdict is SafetyVerdict.Rejected) {
-                    val ts = System.currentTimeMillis()
-                    addPermanentBlocklistEntry(
-                        assetId = candidate.id,
-                        sha256 = candidate.provenance.sha256Checksum,
-                        perceptualHash = candidate.provenance.perceptualHash,
-                        sourceId = adapter.sourceId,
-                        reasonCode = metaVerdict.reasonCode,
-                        timestampEpochMs = ts
-                    )
-                    recordRejection(
-                        Rejections.permanent(
-                            candidate.id, adapter.sourceId, metaVerdict.reasonCode,
-                            metaVerdict.explanation, nowMs = ts
-                        )
-                    )
-                    permanentlyBlockedIds.add(candidate.id)
-                    continue
-                }
-
-                // Cheap checks first: they cost no download budget (Article X §3–4).
-                if (diversityGuard.creatorCapReached(adapter.sourceId, candidate.provenance.creatorName)) {
-                    continue
-                }
-                val advertisedW = candidate.provenance.originalWidth
-                val advertisedH = candidate.provenance.originalHeight
-                val sizeRejection = CropRenderer.advertisedSizeRejection(
-                    advertisedW, advertisedH, display, preferences.allowBlurredFrameFill
-                )
-                if (sizeRejection != null) {
-                    recordRejection(
-                        Rejections.displayScoped(
-                            candidate.id, adapter.sourceId, sizeRejection,
-                            if (sizeRejection == "COMPOSITION_CROPS_TOO_MUCH") {
-                                "A ${display.resolutionLabel} crop would keep under half of the ${advertisedW}×${advertisedH} picture; not downloaded."
-                            } else {
-                                "Source advertises ${advertisedW}×${advertisedH}, too small for ${display.resolutionLabel}; not downloaded."
-                            },
-                            currentSetSignature
-                        )
-                    )
-                    displayScopedRejectedIds.add(candidate.id)
-                    continue
-                }
-
-                val quarantineFile = File(
-                    quarantineDir,
-                    "stage_${candidate.id.replace(SAFE_FILENAME_REGEX, "_")}_${System.nanoTime()}.tmp"
-                )
-                try {
-                    val downloadChain = buildList {
-                        add(candidate.downloadUrl)
-                        addAll(candidate.fallbackDownloadUrls)
-                        val legacyLarge = candidate.downloadUrl.replace("~orig.jpg", "~large.jpg")
-                        if (legacyLarge != candidate.downloadUrl) add(legacyLarge)
-                    }.filter { it.isNotBlank() }.distinct()
-
-                    var payloadBytes: ByteArray? = null
-                    downloadsTried++
-                    for (attemptUrl in downloadChain) {
-                        try {
-                            val fetched = budgetedClient.getBytes(attemptUrl)
-                            // A rendition too large to decode is not the picture's fault: try the next, smaller one.
-                            val tooLarge = SafetyGate.inspectImageHeaderBounds(fetched)?.let(SafetyGate::exceedsDecodeBounds) == true
-                            if (tooLarge && attemptUrl != downloadChain.last()) continue
-                            payloadBytes = fetched
-                            break
-                        } catch (cancel: CancellationException) {
-                            throw cancel
-                        } catch (rateLimit: RateLimitException) {
-                            sourceHealth.recordFailure(adapter.sourceId, rateLimit)
-                            failureRecorded = true
-                            break@candidateLoop
-                        } catch (_: SourceBudgetExceededException) {
-                            // Our own request budget ran out; that says nothing about the source's health.
-                            budgetStopped = true
-                            break@candidateLoop
-                        } catch (err: Exception) {
-                            if (SourceHealthStore.isCancellation(err)) {
-                                throw CancellationException(err.message).apply { initCause(err) }
-                            }
-                            // Try next rendition URL in downloadChain
-                        } catch (_: OutOfMemoryError) {
-                            // A payload too large to hold in memory: treat like a failed rendition and try the next.
-                        }
-                    }
-                    if (payloadBytes == null) continue
-                    downloadsOk++
-
-                    // Stage raw bytes in quarantine before any decoding
-                    FileOutputStream(quarantineFile).use { it.write(payloadBytes) }
-
-                    val headerBounds = SafetyGate.inspectImageHeaderBounds(payloadBytes)
-                    val payloadVerdict = safetyGate.evaluatePayload(
-                        candidate = candidate,
-                        bytes = payloadBytes,
-                        blockedSha256Checksums = blockedSha256s,
-                        headerBounds = headerBounds
-                    )
-                    if (payloadVerdict is SafetyVerdict.Rejected) {
-                        val ts = System.currentTimeMillis()
-                        addPermanentBlocklistEntry(
-                            assetId = candidate.id,
-                            sha256 = SafetyGate.sha256Hex(payloadBytes),
-                            perceptualHash = null,
-                            sourceId = adapter.sourceId,
-                            reasonCode = payloadVerdict.reasonCode,
-                            timestampEpochMs = ts
-                        )
-                        recordRejection(
-                            Rejections.permanent(
-                                candidate.id, adapter.sourceId, payloadVerdict.reasonCode,
-                                payloadVerdict.explanation, nowMs = ts
-                            )
-                        )
-                        permanentlyBlockedIds.add(candidate.id)
-                        continue
-                    }
-                    val approved = payloadVerdict as SafetyVerdict.Approved
-
-                    val outcome = decodeSampledOutcome(
-                        payloadBytes,
-                        headerBounds?.width ?: 0,
-                        headerBounds?.height ?: 0
-                    )
-                    // Out of memory says nothing about the picture: skip it now and see it again on a later sync.
-                    if (outcome is DecodeOutcome.OutOfMemory) continue
-                    val decoded = (outcome as? DecodeOutcome.Decoded)?.bitmap
-                    if (decoded == null) {
-                        recordRejection(
-                            Rejections.permanent(
-                                candidate.id, adapter.sourceId, "CORRUPT_BITMAP",
-                                "BitmapFactory could not safely decode image payload."
-                            )
-                        )
-                        permanentlyBlockedIds.add(candidate.id)
-                        continue
-                    }
-
-                    // Phase 0.1: Always use REAL decoded/header dimensions — NEVER maxOf(..., provenance.originalWidth)!
-                    val srcW = headerBounds?.width?.takeIf { it > 0 } ?: decoded.width
-                    val srcH = headerBounds?.height?.takeIf { it > 0 } ?: decoded.height
-
-                    val gridW = 32
-                    val gridH = 20
-                    val rgbGrid = sampleBitmapToRgbGrid(decoded, gridW, gridH)
-                    val evalGrid = sampleBitmapToEvaluationGrid(decoded, gridW, gridH)
-                    decoded.recycle()
-
-                    val dHash = SafetyGate.computePerceptualDHashFromPixels(rgbGrid, gridW, gridH)
-                    if (dHash.isNotBlank() && blockedPhashes.any { SafetyGate.isNearDuplicateDHash(dHash, it) }) {
-                        val ts = System.currentTimeMillis()
-                        addPermanentBlocklistEntry(
-                            assetId = candidate.id,
-                            sha256 = approved.sha256Checksum,
-                            perceptualHash = dHash,
-                            sourceId = adapter.sourceId,
-                            reasonCode = "BLOCKLISTED_PERCEPTUAL_HASH",
-                            timestampEpochMs = ts
-                        )
-                        recordRejection(
-                            Rejections.permanent(
-                                candidate.id, adapter.sourceId, "BLOCKLISTED_PERCEPTUAL_HASH",
-                                "Perceptual dHash ($dHash) matches a permanently rejected wallpaper.", nowMs = ts
-                            )
-                        )
-                        permanentlyBlockedIds.add(candidate.id)
-                        blockedPhashes.add(dHash)
-                        continue
-                    }
-
-                    if (diversityGuard.isNearDuplicate(dHash)) {
-                        recordRejection(
-                            Rejections.displayScoped(
-                                candidate.id, adapter.sourceId, "NEAR_DUPLICATE_OF_LIBRARY",
-                                "Perceptual hash ($dHash) is almost identical to a wallpaper already in the library.",
-                                currentSetSignature
-                            )
-                        )
-                        displayScopedRejectedIds.add(candidate.id)
-                        continue
-                    }
-
-                    val eval = imageEvaluator.evaluateRgbGrid(
-                        imageWidth = srcW,
-                        imageHeight = srcH,
-                        rgbGrid = evalGrid,
-                        gridWidth = gridW,
-                        gridHeight = gridH,
-                        display = display,
-                        allowBlurredFrameFill = preferences.allowBlurredFrameFill
-                    )
-
-                    if (!eval.isEligible) {
-                        val reason = eval.rejectionReasonCode ?: "QUALITY_THRESHOLD_NOT_MET"
-                        // Quality/resolution rejections are display-scoped (isPermanent = false)
-                        recordRejection(
-                            Rejections.displayScoped(
-                                candidate.id, adapter.sourceId, reason,
-                                eval.explanation,
-                                currentSetSignature
-                            )
-                        )
-                        displayScopedRejectedIds.add(candidate.id)
-                        continue
-                    }
-
-                    val envelopePlan = envelopePlanner.planEnvelope(
-                        sourceWidth = srcW,
-                        sourceHeight = srcH,
-                        focalX = eval.cropRect?.focalX ?: 0.5,
-                        focalY = eval.cropRect?.focalY ?: 0.5,
-                        connectedDisplays = activeDisplaySet,
-                        policy = preferences.displayPolicy,
-                        allowBlurredFrameFill = preferences.allowBlurredFrameFill
-                    )
-                    if (envelopePlan == null) {
-                        recordRejection(
-                            Rejections.displayScoped(
-                                candidate.id, adapter.sourceId, "INSUFFICIENT_ENVELOPE_RESOLUTION",
-                                "Source (${srcW}×${srcH}) cannot satisfy the connected multi-display envelope without upscaling.",
-                                currentSetSignature
-                            )
-                        )
-                        displayScopedRejectedIds.add(candidate.id)
-                        continue
-                    }
-
-                    val finalEval = eval.copy(cropRect = envelopePlan.envelopeCrop)
-
-                    val ext = approved.detectedFormat.fileExtension
-                    val outFile = File(wallpaperDir, "${candidate.id}.$ext")
-                    // The bytes are already on disk in quarantine and have passed every check: move them into place
-                    // instead of writing the (possibly tens of MB) payload a second time. A move across file systems
-                    // can fail, so fall back to a plain write.
-                    if (!quarantineFile.renameTo(outFile)) {
-                        FileOutputStream(outFile).use { it.write(payloadBytes) }
-                    }
-
-                    val record = WallpaperRecord(
-                        id = candidate.id,
-                        title = candidate.title,
-                        description = candidate.description,
-                        rawCategoriesAndTags = candidate.rawCategoriesAndTags,
-                        category = candidate.category,
-                        localFilePath = outFile.absolutePath,
-                        croppedFilePath = outFile.absolutePath,
-                        fileSizeBytes = outFile.length(),
-                        provenance = candidate.provenance.copy(
-                            sha256Checksum = approved.sha256Checksum,
-                            originalWidth = srcW,
-                            originalHeight = srcH,
-                            renditionWidth = envelopePlan.outputWidthPx,
-                            renditionHeight = envelopePlan.outputHeightPx,
-                            perceptualHash = dHash,
-                            safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION,
-                            gateLayerOutcomes = GateTrace.fullPass()
-                        ),
-                        evaluation = finalEval,
-                        status = WallpaperStatus.PREPARED,
-                        decisionExplanation = "Safety Gate: ${approved.auditNotes.joinToString("; ")}. Evaluator: ${finalEval.explanation}"
-                    ).let { fresh ->
-                        redownloadRows[candidate.id]?.let { previous ->
-                            fresh.copy(
-                                isFavorite = previous.isFavorite,
-                                appliedCount = previous.appliedCount,
-                                lastAppliedEpochMs = previous.lastAppliedEpochMs
-                            )
-                        } ?: fresh
-                    }
-                    try {
-                        synchronized(LIBRARY_WRITE_LOCK) { upsertWallpaper(record) }
-                    } catch (e: Exception) {
-                        runCatching { outFile.delete() } // do not leave an image no row refers to
-                        throw e
-                    }
-                    // A larger rendition may use another file type; the old copy is no longer referenced.
-                    pausedRows[candidate.id]?.localFilePath
-                        ?.takeIf { it.isNotBlank() && it != outFile.absolutePath }
-                        ?.let { runCatching { File(it).delete() } }
-                    existingIds.add(candidate.id)
-                    diversityGuard.noteAdded(adapter.sourceId, candidate.provenance.creatorName, dHash)
-                    newlyAdded++
-                } catch (cancel: CancellationException) {
-                    throw cancel
-                } catch (unavailable: LibraryStoreUnavailableException) {
-                    // The store itself is gone: the worker must see it to retry and suspend, not skip every picture.
-                    throw unavailable
-                } catch (err: Exception) {
-                    if (SourceHealthStore.isCancellation(err)) {
-                        throw CancellationException(err.message).apply { initCause(err) }
-                    }
-                    // One picture that cannot be staged, evaluated or stored (a full disk, a store error) is skipped;
-                    // the other candidates, the sync summary and the cache cleanup still run.
-                    android.util.Log.w(TAG, "candidate_skipped", err)
-                    // Make the skip visible in Diagnostics. The store may be what is failing, so this must not throw.
-                    runCatching {
-                        recordRejection(
-                            Rejections.transient(
-                                candidate.id, adapter.sourceId, "STORAGE_ERROR",
-                                "Skipped after an error while staging or storing it: ${err.message ?: err.javaClass.simpleName}"
-                            )
-                        )
-                    }
-                } finally {
-                    runCatching { quarantineFile.delete() }
-                }
-            }
-            if (!failureRecorded) {
-                if (downloadsTried > 0 && downloadsOk == 0 && !budgetStopped) {
-                    lastSyncFailedSources++
-                    sourceHealth.recordFailure(adapter.sourceId, budgetedClient.lastHttpError)
-                } else {
-                    sourceHealth.recordSuccess(adapter.sourceId)
-                }
-            }
-            sourceHealth.recordSyncSummary(
-                adapter.sourceId,
-                fetched = candidates.size,
-                alreadyHad = alreadyHad,
-                added = newlyAdded - addedBefore,
-                httpErrors = budgetedClient.httpErrorCount
-            )
+            newlyAdded += syncSource(adapter, state, effectiveTargetWidthPx)
         }
 
         enforceCacheLimit()
         return newlyAdded
+    }
+
+    /** Fetches one page from [adapter], vets each candidate and records the source's health; returns how many were added. */
+    private suspend fun syncSource(adapter: WallpaperSourceAdapter, state: SyncState, targetWidthPx: Int): Int {
+        val reg = SourceRegistry.get(adapter.sourceId)
+        val budgetedClient = BudgetedSourceHttpClient(
+            delegate = httpClient,
+            sourceId = adapter.sourceId,
+            maxRequests = reg?.maxRequestsPerSync ?: 6,
+            minSpacingMs = reg?.minRequestSpacingMs ?: 150L
+        )
+        val cursor = sourceHealth.fetchCursor(adapter.sourceId)
+        val candidates = fetchPage(adapter, budgetedClient, state.preferences, cursor, targetWidthPx) ?: return 0
+        sourceHealth.advanceCursor(adapter.sourceId, cursor)
+        // Success is recorded after the downloads: metadata answering while every image fails is a failing source.
+        val run = SourceRun(adapter.sourceId, budgetedClient)
+
+        for (candidate in candidates) {
+            coroutineContext.ensureActive()
+            if (!ingestor.ingest(candidate, state, run)) break
+        }
+        if (!run.failureRecorded) {
+            if (run.downloadsTried > 0 && run.downloadsOk == 0 && !run.budgetStopped) {
+                lastSyncFailedSources++
+                sourceHealth.recordFailure(adapter.sourceId, budgetedClient.lastHttpError)
+            } else {
+                sourceHealth.recordSuccess(adapter.sourceId)
+            }
+        }
+        sourceHealth.recordSyncSummary(
+            adapter.sourceId,
+            fetched = candidates.size,
+            alreadyHad = run.alreadyHad,
+            added = run.added,
+            httpErrors = budgetedClient.httpErrorCount
+        )
+        return run.added
+    }
+
+    /**
+     * One page of candidates, or null when the source is skipped this sync (its request budget ran out, or it failed;
+     * the failure is recorded here).
+     */
+    private suspend fun fetchPage(
+        adapter: WallpaperSourceAdapter,
+        budgetedClient: BudgetedSourceHttpClient,
+        preferences: UserPreferences,
+        cursor: Int,
+        targetWidthPx: Int
+    ): List<CandidateAsset>? {
+        var fetchFailure: Throwable? = null
+        val candidates = try {
+            adapter.withHttpClient(budgetedClient).fetchCandidates(
+                enabledCategories = preferences.enabledCategories,
+                limit = 8,
+                offset = cursor,
+                targetWidthPx = targetWidthPx
+            )
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: SourceBudgetExceededException) {
+            sourceHealth.advanceCursor(adapter.sourceId, cursor)
+            return null
+        } catch (err: Exception) {
+            fetchFailure = err
+            emptyList()
+        } catch (err: VirtualMachineError) {
+            // One source dying, even with a stack overflow on hostile JSON, must not stop the others.
+            fetchFailure = err
+            emptyList()
+        }
+        fetchFailure?.let { err ->
+            if (SourceHealthStore.isCancellation(err)) {
+                throw CancellationException(err.message).apply { initCause(err) }
+            }
+            lastSyncFailedSources++
+            sourceHealth.recordFailure(adapter.sourceId, err)
+            sourceHealth.moveOnIfStuck(adapter.sourceId, cursor)
+            sourceHealth.recordSyncSummary(
+                adapter.sourceId, fetched = 0, alreadyHad = 0, added = 0,
+                httpErrors = budgetedClient.httpErrorCount, failure = err
+            )
+            return null
+        }
+        // Adapters swallow HTTP errors and return an empty list. When no request of the source got an answer,
+        // that is a failed source, not an "up to date" one. Individual 404s among answered requests (a Met
+        // object without an image, say) are normal and do not make a source unhealthy.
+        if (candidates.isEmpty() && budgetedClient.successfulRequestCount == 0 && budgetedClient.httpErrorCount > 0) {
+            lastSyncFailedSources++
+            sourceHealth.recordFailure(adapter.sourceId, budgetedClient.lastHttpError)
+            sourceHealth.moveOnIfStuck(adapter.sourceId, cursor)
+            sourceHealth.recordSyncSummary(
+                adapter.sourceId, fetched = 0, alreadyHad = 0, added = 0, httpErrors = budgetedClient.httpErrorCount
+            )
+            return null
+        }
+        return candidates
     }
 
     fun importUserLocalBitmap(
@@ -1525,13 +1235,6 @@ class LocalLibraryRepository(
             !record.evaluation.isEligible &&
             record.evaluation.rejectionReasonCode == "RESOLUTION_BELOW_DISPLAY_TARGET" &&
             hasUsableFile(record)
-
-    /** Whether the source now advertises more pixels than the copy we hold, so fetching it again can help. */
-    private fun offersLargerRendition(candidate: CandidateAsset, held: WallpaperRecord): Boolean {
-        val advertised = candidate.provenance.originalWidth.toLong() * candidate.provenance.originalHeight
-        val heldPixels = held.provenance.originalWidth.toLong() * held.provenance.originalHeight
-        return advertised > 0L && advertised > heldPixels
-    }
 
     /** True when the record still has a readable, non-empty image file on disk. */
     internal fun hasUsableFile(record: WallpaperRecord): Boolean =
