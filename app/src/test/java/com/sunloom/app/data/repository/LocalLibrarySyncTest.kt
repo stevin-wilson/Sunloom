@@ -430,6 +430,27 @@ class LocalLibrarySyncTest {
     }
 
     @Test
+    fun `a rendition that is too large to decode falls back to the next one instead of banning the picture`() = kotlinx.coroutines.test.runTest {
+        // A PNG header that claims 20000 x 20000 pixels, padded past the 4 KB minimum.
+        val oversized = ByteArray(5000).also {
+            byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 0x0D, 0x0A, 0x1A, 0x0A,
+                0, 0, 0, 13, 'I'.code.toByte(), 'H'.code.toByte(), 'D'.code.toByte(), 'R'.code.toByte(),
+                0, 0, 0x4E, 0x20, 0, 0, 0x4E, 0x20).copyInto(it)
+        }
+        val client = object : HttpClient {
+            override suspend fun getText(url: String): String = "{}"
+            override suspend fun getBytes(url: String, maxBytes: Int): ByteArray =
+                if (url.contains("1686,")) oversized else jpegFor(imageKey(url))
+        }
+        val big = candidate("big-1").copy(
+            fallbackDownloadUrls = listOf("https://www.artic.edu/iiif/2/big-1/full/843,/0/default.jpg")
+        )
+        val repo = repo(FixedAdapter("artic_cc0", listOf(big)), client = client)
+        assertEquals(1, repo.refreshOnlineCatalog(display))
+        assertTrue("not permanently banned", repo.getAllWallpapers().any { it.id == "big-1" && !it.isRejected })
+    }
+
+    @Test
     fun `no more than three unseen images from one creator are kept`() = kotlinx.coroutines.test.runTest {
         val monet = (1..5).map { candidate("monet-$it", creator = "Claude Monet") }
         val repo = repo(FixedAdapter("artic_cc0", monet))

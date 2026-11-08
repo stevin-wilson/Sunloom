@@ -295,10 +295,7 @@ class SafetyGate {
                 )
             }
             val totalPixels = effectiveBounds.width.toLong() * effectiveBounds.height.toLong()
-            if (effectiveBounds.width > MAX_DIMENSION_PX ||
-                effectiveBounds.height > MAX_DIMENSION_PX ||
-                totalPixels > MAX_TOTAL_PIXELS
-            ) {
+            if (exceedsDecodeBounds(effectiveBounds)) {
                 return SafetyVerdict.Rejected(
                     reasonCode = "IMAGE_DIMENSIONS_OUT_OF_BOUNDS",
                     explanation = "Image dimensions (${effectiveBounds.width}×${effectiveBounds.height}, $totalPixels px) exceed safe decode bounds (${MAX_DIMENSION_PX}px / ${MAX_TOTAL_PIXELS}px).",
@@ -361,6 +358,11 @@ class SafetyGate {
         const val MIN_PAYLOAD_BYTES = 4_096
         const val MIN_USER_LOCAL_PAYLOAD_BYTES = 64
         const val MAX_PAYLOAD_BYTES = 40 * 1024 * 1024
+        /** True when a picture is larger than the L3 decode bounds (per side or in total pixels). */
+        fun exceedsDecodeBounds(bounds: ImageHeaderBounds): Boolean =
+            bounds.width > MAX_DIMENSION_PX || bounds.height > MAX_DIMENSION_PX ||
+                bounds.width.toLong() * bounds.height.toLong() > MAX_TOTAL_PIXELS
+
         const val MAX_DIMENSION_PX = 16_384
         const val MAX_TOTAL_PIXELS = 100_000_000L
 

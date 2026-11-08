@@ -1438,7 +1438,11 @@ class LocalLibraryRepository(
                     var payloadBytes: ByteArray? = null
                     for (attemptUrl in downloadChain) {
                         try {
-                            payloadBytes = budgetedClient.getBytes(attemptUrl)
+                            val fetched = budgetedClient.getBytes(attemptUrl)
+                            // A rendition too large to decode is not the picture's fault: try the next, smaller one.
+                            val tooLarge = SafetyGate.inspectImageHeaderBounds(fetched)?.let(SafetyGate::exceedsDecodeBounds) == true
+                            if (tooLarge && attemptUrl != downloadChain.last()) continue
+                            payloadBytes = fetched
                             break
                         } catch (cancel: CancellationException) {
                             throw cancel
