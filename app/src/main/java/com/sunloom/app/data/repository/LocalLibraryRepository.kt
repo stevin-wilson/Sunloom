@@ -25,7 +25,6 @@ import com.sunloom.app.domain.model.CandidateAsset
 import com.sunloom.app.domain.model.DisplayPolicy
 import com.sunloom.app.domain.model.DisplayProfile
 import com.sunloom.app.domain.model.RejectionRecord
-import com.sunloom.app.domain.model.SafetyVerdict
 import com.sunloom.app.domain.model.SourceDiagnostics
 import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.domain.model.UserPreferences
@@ -35,7 +34,6 @@ import com.sunloom.app.domain.model.displaySetSignature
 import com.sunloom.app.domain.renderer.CropRenderer
 import com.sunloom.app.domain.renderer.DisplayReconciler
 import com.sunloom.app.domain.renderer.EnvelopePlanner
-import com.sunloom.app.domain.safety.GateTrace
 import com.sunloom.app.domain.safety.SafetyDenylist
 import com.sunloom.app.domain.safety.SafetyGate
 import java.io.File
@@ -137,13 +135,14 @@ class LocalLibraryRepository(
     private val sourceHealth = SourceHealthStore(prefs, random)
     private val preferencesStore = PreferencesStore(prefs)
     private val displayReconciler = DisplayReconciler(envelopePlanner, cropRenderer)
+    private val blocklist = Blocklist(store)
     val wallpaperDir: File = File(appContext.filesDir, "wallpapers").apply { mkdirs() }
 
     private val seedReserve = SeedReserve(wallpaperDir, safetyGate, imageEvaluator, maxSeedRenderPixels)
 
     val quarantineDir: File = File(appContext.noBackupFilesDir, "quarantine").apply { mkdirs() }
 
-    private val ingestHost = object : IngestHost {
+    private val libraryHost = object : IngestHost, RevalidationHost {
         override fun recordRejection(rejection: RejectionRecord) = this@LocalLibraryRepository.recordRejection(rejection)
 
         override fun blocklist(
@@ -155,6 +154,14 @@ class LocalLibraryRepository(
             timestampEpochMs: Long
         ) = addPermanentBlocklistEntry(assetId, sha256, perceptualHash, sourceId, reasonCode, timestampEpochMs)
 
+        override fun upsert(record: WallpaperRecord) = synchronized(LIBRARY_WRITE_LOCK) { upsertWallpaper(record) }
+
+        override fun <T> withCurrent(id: String, block: (WallpaperRecord) -> T): T? = synchronized(LIBRARY_WRITE_LOCK) {
+            getWallpaperById(id)?.let(block)
+        }
+
+        override fun invalidateActive(wallpaperId: String) = clearInvalidatedActiveWallpaper(wallpaperId)
+
         override fun store(record: WallpaperRecord) {
             synchronized(LIBRARY_WRITE_LOCK) { upsertWallpaper(record) }
         }
@@ -162,7 +169,8 @@ class LocalLibraryRepository(
         override fun recordSourceFailure(sourceId: String, error: Throwable) = sourceHealth.recordFailure(sourceId, error)
     }
 
-    private val ingestor = CandidateIngestor(safetyGate, imageEvaluator, envelopePlanner, wallpaperDir, quarantineDir, ingestHost)
+    private val ingestor = CandidateIngestor(safetyGate, imageEvaluator, envelopePlanner, wallpaperDir, quarantineDir, libraryHost)
+    private val revalidator = Revalidator(safetyGate, imageEvaluator, libraryHost)
     private val userImportPipeline = UserImportPipeline(
         repository = this,
         appContext = appContext,
@@ -351,48 +359,13 @@ class LocalLibraryRepository(
         sourceId: String,
         reasonCode: String,
         timestampEpochMs: Long = System.currentTimeMillis()
-    ) {
-        val cleanAsset = assetId?.trim().orEmpty()
-        val cleanSha = sha256?.trim().orEmpty()
-        val cleanPhash = perceptualHash?.trim().orEmpty()
-        store.addBlocklistEntry(
-            BlocklistEntry(
-                assetId = cleanAsset,
-                sha256 = cleanSha,
-                dHash = cleanPhash,
-                sourceId = sourceId,
-                reason = reasonCode,
-                createdAtEpochMs = timestampEpochMs
-            )
-        )
-    }
+    ) = blocklist.add(assetId, sha256, perceptualHash, sourceId, reasonCode, timestampEpochMs)
 
-    fun getPermanentBlockedAssetIds(): Set<String> {
-        val fromBlocklist = store.getAllBlocklistEntries()
-            .map { it.assetId }
-            .filter { it.isNotBlank() }
-            .toSet()
-        val fromPermanentRejections = store.getAllRejections()
-            .filter { it.isPermanent }
-            .map { it.assetId }
-            .filter { it.isNotBlank() }
-            .toSet()
-        return fromBlocklist + fromPermanentRejections
-    }
+    fun getPermanentBlockedAssetIds(): Set<String> = blocklist.assetIds()
 
-    fun getPermanentBlockedSha256s(): Set<String> {
-        return store.getAllBlocklistEntries()
-            .map { it.sha256 }
-            .filter { it.isNotBlank() }
-            .toSet()
-    }
+    fun getPermanentBlockedSha256s(): Set<String> = blocklist.sha256s()
 
-    fun getPermanentBlockedPerceptualHashes(): Set<String> {
-        return store.getAllBlocklistEntries()
-            .map { it.dHash }
-            .filter { it.isNotBlank() }
-            .toSet()
-    }
+    fun getPermanentBlockedPerceptualHashes(): Set<String> = blocklist.perceptualHashes()
 
     /**
      * Purges any cached wallpaper from a source that is no longer admitted in [SourceRegistry].
@@ -423,280 +396,20 @@ class LocalLibraryRepository(
     }
 
     /**
-     * Article VII §5–6: Re-validates any non-rejected wallpapers whose stored
-     * `safetyGateVersion` differs from [SafetyGate.COMPOSITE_GATE_VERSION], running L1–L4
-     * against both stored metadata and local payload bytes (including seeds).
+     * Article VII §5–6: Re-validates any non-rejected wallpapers whose stored `safetyGateVersion` differs from
+     * [SafetyGate.COMPOSITE_GATE_VERSION], running L1–L4 against both stored metadata and local payload bytes
+     * (including seeds). See [Revalidator].
      */
-    fun revalidateGateVersionIfNeeded(display: DisplayProfile? = null): Int {
-        var evictedCount = 0
-        val preferences = loadPreferences()
-        val blockedIds = getPermanentBlockedAssetIds().toMutableSet()
-        val blockedPhashes = getPermanentBlockedPerceptualHashes().toMutableSet()
-        val blockedSha256s = getPermanentBlockedSha256s().toMutableSet()
-
-        for (record in getAllWallpapers()) {
-            if (record.isRejected || record.isBaselineRestore) continue
-            if (record.provenance.safetyGateVersion == SafetyGate.COMPOSITE_GATE_VERSION) continue
-
-            val isUserLocal = record.provenance.sourceId == SourceIds.USER_LOCAL
-            val effectiveTags = record.rawCategoriesAndTags.ifEmpty {
-                listOf(record.category.displayName.lowercase())
-            }
-            val admittedHost = SourceRegistry.get(record.provenance.sourceId)?.allowedHosts?.firstOrNull()
-            val syntheticCandidate = CandidateAsset(
-                id = record.id,
-                title = record.title,
-                description = record.description,
-                category = record.category,
-                rawCategoriesAndTags = effectiveTags,
-                downloadUrl = when {
-                    isUserLocal || record.provenance.sourceId == SourceIds.SEED_RESERVE -> ""
-                    record.provenance.originalPageUrl.startsWith("https://") -> record.provenance.originalPageUrl
-                    !admittedHost.isNullOrBlank() -> "https://$admittedHost/${record.id}"
-                    else -> ""
-                },
-                isUserLocal = isUserLocal,
-                provenance = record.provenance
-            )
-
-            val metaVerdict = safetyGate.evaluateMetadata(
-                candidate = syntheticCandidate,
-                blockedAssetIds = blockedIds,
-                blockedPerceptualHashes = blockedPhashes,
-                blockedSha256Checksums = blockedSha256s
-            )
-            if (metaVerdict is SafetyVerdict.Rejected) {
-                evictFailedRevalidationRecord(
-                    record = record,
-                    failedLayer = metaVerdict.failedLayer,
-                    reasonCode = metaVerdict.reasonCode,
-                    explanation = metaVerdict.explanation,
-                    isUserLocal = isUserLocal
-                )
-                blockedIds.add(record.id)
-                evictedCount++
-                continue
-            }
-
-            val localFile = record.localFilePath.takeIf { it.isNotBlank() }?.let(::File)
-            val bytes = if (localFile != null && localFile.exists() && localFile.isFile) {
-                runCatching { localFile.readBytes() }.getOrNull()
-            } else {
-                null
-            }
-            if (bytes == null) {
-                evictFailedRevalidationRecord(
-                    record = record,
-                    failedLayer = "L3",
-                    reasonCode = "MISSING_LOCAL_PAYLOAD",
-                    explanation = "Cached wallpaper file is missing or unreadable on disk.",
-                    isUserLocal = isUserLocal,
-                    addToPermanentBlocklist = false
-                )
-                evictedCount++
-                continue
-            }
-
-            val headerBounds = SafetyGate.inspectImageHeaderBounds(bytes)
-            val payloadVerdict = safetyGate.evaluatePayload(
-                candidate = syntheticCandidate,
-                bytes = bytes,
-                blockedAssetIds = blockedIds,
-                blockedPerceptualHashes = blockedPhashes,
-                blockedSha256Checksums = blockedSha256s,
-                headerBounds = headerBounds
-            )
-            if (payloadVerdict is SafetyVerdict.Rejected) {
-                val computedSha = SafetyGate.sha256Hex(bytes)
-                evictFailedRevalidationRecord(
-                    record = record,
-                    failedLayer = payloadVerdict.failedLayer,
-                    reasonCode = payloadVerdict.reasonCode,
-                    explanation = payloadVerdict.explanation,
-                    isUserLocal = isUserLocal,
-                    sha256Override = computedSha
-                )
-                blockedIds.add(record.id)
-                blockedSha256s.add(computedSha)
-                evictedCount++
-                continue
-            }
-            val approved = payloadVerdict as SafetyVerdict.Approved
-
-            val outcome = decodeSampledOutcome(
-                bytes = bytes,
-                headerW = headerBounds?.width ?: 0,
-                headerH = headerBounds?.height ?: 0,
-                maxEdgePx = 512
-            )
-            // Out of memory says nothing about the picture: leave it cached and check it again next time.
-            if (outcome is DecodeOutcome.OutOfMemory) continue
-            val decoded = (outcome as? DecodeOutcome.Decoded)?.bitmap
-            if (decoded == null) {
-                evictFailedRevalidationRecord(
-                    record = record,
-                    failedLayer = "L3",
-                    reasonCode = "CORRUPT_BITMAP",
-                    explanation = "BitmapFactory could not safely decode cached payload during re-validation.",
-                    isUserLocal = isUserLocal,
-                    sha256Override = approved.sha256Checksum
-                )
-                blockedIds.add(record.id)
-                blockedSha256s.add(approved.sha256Checksum)
-                evictedCount++
-                continue
-            }
-
-            val gridW = 32
-            val gridH = 20
-            val rgbGrid = sampleBitmapToRgbGrid(decoded, gridW, gridH)
-            val evalGrid = sampleBitmapToEvaluationGrid(decoded, gridW, gridH)
-            decoded.recycle()
-            val dHash = SafetyGate.computePerceptualDHashFromPixels(rgbGrid, gridW, gridH)
-            if (!record.isBaselineRestore &&
-                dHash.isNotBlank() &&
-                blockedPhashes.any { SafetyGate.isNearDuplicateDHash(dHash, it) }
-            ) {
-                evictFailedRevalidationRecord(
-                    record = record,
-                    failedLayer = "L4",
-                    reasonCode = "BLOCKLISTED_PERCEPTUAL_HASH",
-                    explanation = "Perceptual dHash ($dHash) matches a permanently blocklisted wallpaper.",
-                    isUserLocal = isUserLocal,
-                    sha256Override = approved.sha256Checksum,
-                    dHashOverride = dHash
-                )
-                blockedIds.add(record.id)
-                blockedSha256s.add(approved.sha256Checksum)
-                blockedPhashes.add(dHash)
-                evictedCount++
-                continue
-            }
-
-            if (display != null) {
-                val origW = record.provenance.originalWidth.takeIf { it > 0 }
-                    ?: headerBounds?.width?.takeIf { it > 0 }
-                    ?: 1
-                val origH = record.provenance.originalHeight.takeIf { it > 0 }
-                    ?: headerBounds?.height?.takeIf { it > 0 }
-                    ?: 1
-                val eval = imageEvaluator.evaluateRgbGrid(
-                    imageWidth = origW,
-                    imageHeight = origH,
-                    rgbGrid = evalGrid,
-                    gridWidth = gridW,
-                    gridHeight = gridH,
-                    display = display,
-                    allowBlurredFrameFill = isUserLocal || preferences.allowBlurredFrameFill
-                )
-                val effectiveEval = if (!eval.isEligible && isUserLocal) {
-                    eval.copy(
-                        isEligible = true,
-                        cropRect = eval.cropRect ?: com.sunloom.app.domain.model.CropRect.wholePictureBlurred(origW, origH, display)
-                    )
-                } else {
-                    eval
-                }
-                val trace = if (effectiveEval.isEligible) {
-                    GateTrace.fullPass(isUserLocal)
-                } else {
-                    GateTrace.failedAt(
-                        layer = "L4",
-                        reasonCode = effectiveEval.rejectionReasonCode ?: "QUALITY_THRESHOLD_NOT_MET",
-                        isUserLocal = isUserLocal
-                    )
-                }
-                upsertWallpaper(
-                    record.copy(
-                        provenance = record.provenance.copy(
-                            sha256Checksum = approved.sha256Checksum,
-                            perceptualHash = dHash.ifBlank { record.provenance.perceptualHash },
-                            safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION,
-                            gateLayerOutcomes = trace
-                        ),
-                        evaluation = effectiveEval
-                    )
-                )
-                if (!effectiveEval.isEligible) {
-                    clearInvalidatedActiveWallpaper(record.id)
-                }
-            } else {
-                // Without a known display the brightness and crop evaluation cannot be redone. The safety layers
-                // passed, but the record keeps its old gate version so the next call that has a display evaluates
-                // it; stamping it now would leave labels from an older evaluator in place for good. What was
-                // worked out on the way (checksum, perceptual hash) is kept so the near-duplicate guard has it.
-                if (record.provenance.sha256Checksum != approved.sha256Checksum ||
-                    (dHash.isNotBlank() && record.provenance.perceptualHash != dHash)
-                ) {
-                    upsertWallpaper(
-                        record.copy(
-                            provenance = record.provenance.copy(
-                                sha256Checksum = approved.sha256Checksum,
-                                perceptualHash = dHash.ifBlank { record.provenance.perceptualHash }
-                            )
-                        )
-                    )
-                }
-            }
-        }
-        return evictedCount
-    }
-
-    private fun evictFailedRevalidationRecord(
-        record: WallpaperRecord,
-        failedLayer: String,
-        reasonCode: String,
-        explanation: String,
-        isUserLocal: Boolean,
-        sha256Override: String? = null,
-        dHashOverride: String? = null,
-        addToPermanentBlocklist: Boolean = true
-    ) {
-        val now = System.currentTimeMillis()
-        val effectiveSha = sha256Override ?: record.provenance.sha256Checksum
-        val effectiveDHash = dHashOverride ?: record.provenance.perceptualHash
-        upsertWallpaper(
-            record.copy(
-                isRejected = true,
-                isFavorite = false,
-                localFilePath = "",
-                croppedFilePath = "",
-                fileSizeBytes = 0L,
-                provenance = record.provenance.copy(
-                    sha256Checksum = effectiveSha,
-                    perceptualHash = effectiveDHash,
-                    safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION,
-                    gateLayerOutcomes = GateTrace.failedAt(failedLayer, reasonCode, isUserLocal)
-                ),
-                status = WallpaperStatus.REJECTED_SAFETY_OR_QUALITY,
-                decisionExplanation = "Evicted on safety gate (${SafetyGate.COMPOSITE_GATE_VERSION}) re-validation: $explanation"
-            )
+    fun revalidateGateVersionIfNeeded(display: DisplayProfile? = null): Int = revalidator.run(
+        records = getAllWallpapers(),
+        display = display,
+        preferences = loadPreferences(),
+        blocked = Revalidator.Blocked(
+            ids = getPermanentBlockedAssetIds().toMutableSet(),
+            perceptualHashes = getPermanentBlockedPerceptualHashes().toMutableSet(),
+            sha256s = getPermanentBlockedSha256s().toMutableSet()
         )
-        if (addToPermanentBlocklist) {
-            addPermanentBlocklistEntry(
-                assetId = record.id,
-                sha256 = effectiveSha,
-                perceptualHash = effectiveDHash,
-                sourceId = record.provenance.sourceId,
-                reasonCode = reasonCode,
-                timestampEpochMs = now
-            )
-        }
-        recordRejection(
-            RejectionRecord(
-                assetId = record.id,
-                sourceId = record.provenance.sourceId,
-                reasonCode = reasonCode,
-                explanation = explanation,
-                timestampEpochMs = now,
-                isPermanent = addToPermanentBlocklist
-            )
-        )
-        // Files last: a crash before this leaves an orphan file, not a deleted picture with no record of why.
-        if (record.localFilePath.isNotBlank()) runCatching { File(record.localFilePath).delete() }
-        if (record.croppedFilePath.isNotBlank()) runCatching { File(record.croppedFilePath).delete() }
-        clearInvalidatedActiveWallpaper(record.id)
-    }
+    )
 
     /**
      * Article V §2 & VI §9: Repository invalidation clears `current_wallpaper_id` without claiming
