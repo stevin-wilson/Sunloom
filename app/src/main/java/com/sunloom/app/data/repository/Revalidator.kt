@@ -34,6 +34,13 @@ internal interface RejectionLog {
 internal interface RevalidationHost : RejectionLog {
     fun upsert(record: WallpaperRecord)
 
+    /**
+     * Runs [block] on the stored version of [id] as it is now, holding the library write lock so nothing else can change
+     * it meanwhile; null when it no longer exists. A pass works from a snapshot, and a favourite, an apply or a sync
+     * landing since would otherwise be overwritten with the stale copy.
+     */
+    fun <T> withCurrent(id: String, block: (WallpaperRecord) -> T): T?
+
     /** Clears the active wallpaper id if [wallpaperId] is the active one, without claiming a replacement was applied. */
     fun invalidateActive(wallpaperId: String)
 }
@@ -76,11 +83,19 @@ internal class Revalidator(
         preferences: UserPreferences,
         blocked: Blocked
     ): Int {
-        return records
-            .filter { !it.isRejected && !it.isBaselineRestore }
-            .filter { it.provenance.safetyGateVersion != SafetyGate.COMPOSITE_GATE_VERSION }
-            .count { revalidate(it, display, preferences, blocked) }
+        var evicted = 0
+        for (snapshot in records.filter { needsRevalidation(it) }) {
+            val wasEvicted = host.withCurrent(snapshot.id) { current ->
+                needsRevalidation(current) && revalidate(current, display, preferences, blocked)
+            }
+            if (wasEvicted == true) evicted++
+        }
+        return evicted
     }
+
+    private fun needsRevalidation(record: WallpaperRecord): Boolean =
+        !record.isRejected && !record.isBaselineRestore &&
+            record.provenance.safetyGateVersion != SafetyGate.COMPOSITE_GATE_VERSION
 
     /** True when [record] was evicted. */
     private fun revalidate(
@@ -94,17 +109,13 @@ internal class Revalidator(
 
         if (!passesMetadata(record, candidate, isUserLocal, blocked)) return true
 
-        val bytes = readPayload(record)
-        if (bytes == null) {
-            evict(
-                record = record,
-                failedLayer = "L3",
-                reasonCode = "MISSING_LOCAL_PAYLOAD",
-                explanation = "Cached wallpaper file is missing or unreadable on disk.",
-                isUserLocal = isUserLocal,
-                addToPermanentBlocklist = false
-            )
-            return true
+        val bytes = when (val payload = readPayload(record)) {
+            is Payload.Bytes -> payload.data
+            Payload.Unreadable -> return false // leave it for the next pass
+            Payload.Missing -> {
+                evictMissing(record, isUserLocal)
+                return true
+            }
         }
 
         val headerBounds = SafetyGate.inspectImageHeaderBounds(bytes)
@@ -172,13 +183,20 @@ internal class Revalidator(
         return false
     }
 
-    private fun readPayload(record: WallpaperRecord): ByteArray? {
+    private sealed interface Payload {
+        class Bytes(val data: ByteArray) : Payload
+
+        /** There is no file: the picture cannot be judged, and is evicted without a ban. */
+        data object Missing : Payload
+
+        /** The file is there but could not be read (a transient error): says nothing about the picture. */
+        data object Unreadable : Payload
+    }
+
+    private fun readPayload(record: WallpaperRecord): Payload {
         val localFile = record.localFilePath.takeIf { it.isNotBlank() }?.let(::File)
-        return if (localFile != null && localFile.exists() && localFile.isFile) {
-            runCatching { localFile.readBytes() }.getOrNull()
-        } else {
-            null
-        }
+        if (localFile == null || !localFile.exists() || !localFile.isFile) return Payload.Missing
+        return runCatching { Payload.Bytes(localFile.readBytes()) }.getOrDefault(Payload.Unreadable)
     }
 
     /** L3 on the local bytes; null means it was evicted. */
@@ -356,6 +374,15 @@ internal class Revalidator(
             )
         }
     }
+
+    private fun evictMissing(record: WallpaperRecord, isUserLocal: Boolean) = evict(
+        record = record,
+        failedLayer = "L3",
+        reasonCode = "MISSING_LOCAL_PAYLOAD",
+        explanation = "Cached wallpaper file is missing or unreadable on disk.",
+        isUserLocal = isUserLocal,
+        addToPermanentBlocklist = false
+    )
 
     private fun evict(
         record: WallpaperRecord,

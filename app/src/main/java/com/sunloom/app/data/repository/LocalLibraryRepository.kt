@@ -154,7 +154,11 @@ class LocalLibraryRepository(
             timestampEpochMs: Long
         ) = addPermanentBlocklistEntry(assetId, sha256, perceptualHash, sourceId, reasonCode, timestampEpochMs)
 
-        override fun upsert(record: WallpaperRecord) = upsertWallpaper(record)
+        override fun upsert(record: WallpaperRecord) = synchronized(LIBRARY_WRITE_LOCK) { upsertWallpaper(record) }
+
+        override fun <T> withCurrent(id: String, block: (WallpaperRecord) -> T): T? = synchronized(LIBRARY_WRITE_LOCK) {
+            getWallpaperById(id)?.let(block)
+        }
 
         override fun invalidateActive(wallpaperId: String) = clearInvalidatedActiveWallpaper(wallpaperId)
 

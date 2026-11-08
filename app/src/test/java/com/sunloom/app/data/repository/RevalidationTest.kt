@@ -40,9 +40,9 @@ class RevalidationTest {
     private fun seed(): WallpaperRecord = repository.ensureSeedReserveLoaded(display).first()
 
     /** A fetched-looking record pointing at [file], marked as judged under an old gate version. */
-    private fun stale(id: String, file: File, version: String = staleVersion, base: WallpaperRecord = seed()): WallpaperRecord {
-        // Loading the seed reserve ends with a revalidation pass of its own, so build every stale record from one seed
-        // and store them together.
+    private fun stale(id: String, file: File, version: String = staleVersion, base: WallpaperRecord): WallpaperRecord {
+        // `base` is required on purpose: loading the seed reserve ends with a revalidation pass of its own, so build
+        // every stale record from one seed and store them together.
         return base.copy(
             id = id,
             title = "Glacier Horizon Sunrise",
@@ -94,7 +94,7 @@ class RevalidationTest {
     @Test
     fun `a missing image file is evicted without a permanent ban, because the picture is not at fault`() {
         val gone = File(repository.wallpaperDir, "gone.jpg") // never written
-        repository.upsertWallpaper(stale("missing-file", gone))
+        repository.upsertWallpaper(stale("missing-file", gone, base = seed()))
 
         assertEquals(1, repository.revalidateGateVersionIfNeeded(display))
 
@@ -110,7 +110,7 @@ class RevalidationTest {
     @Test
     fun `bytes that are not a picture are evicted and refused for good`() {
         val junk = File(repository.wallpaperDir, "junk.jpg").apply { writeBytes(ByteArray(5000) { 0x55 }) }
-        repository.upsertWallpaper(stale("junk-bytes", junk))
+        repository.upsertWallpaper(stale("junk-bytes", junk, base = seed()))
 
         assertEquals(1, repository.revalidateGateVersionIfNeeded(display))
 
@@ -125,7 +125,7 @@ class RevalidationTest {
     @Test
     fun `an eviction clears the active wallpaper id without claiming a replacement was applied`() {
         val junk = File(repository.wallpaperDir, "junk-active.jpg").apply { writeBytes(ByteArray(5000) { 0x55 }) }
-        repository.upsertWallpaper(stale("junk-active", junk))
+        repository.upsertWallpaper(stale("junk-active", junk, base = seed()))
         repository.recordWallpaperApplied("junk-active")
 
         repository.revalidateGateVersionIfNeeded(display)
@@ -145,5 +145,19 @@ class RevalidationTest {
         assertTrue(repository.getWallpaperById("first")!!.isRejected)
         assertTrue(repository.getWallpaperById("second")!!.isRejected)
         assertEquals(0, repository.revalidateGateVersionIfNeeded(display))
+    }
+
+    @Test
+    fun `a picture that exists but cannot be read is left for the next pass, not evicted`() {
+        val locked = File(repository.wallpaperDir, "locked.jpg").apply { writeBytes(ByteArray(5000) { 0x55 }) }
+        org.junit.Assume.assumeTrue("needs a file this user cannot read", locked.setReadable(false) && !locked.canRead())
+        repository.upsertWallpaper(stale("unreadable", locked, base = seed()))
+
+        assertEquals(0, repository.revalidateGateVersionIfNeeded(display))
+
+        val after = repository.getWallpaperById("unreadable")!!
+        assertFalse("a read error is not the picture's fault", after.isRejected)
+        assertEquals(staleVersion, after.provenance.safetyGateVersion)
+        assertTrue(locked.exists())
     }
 }
