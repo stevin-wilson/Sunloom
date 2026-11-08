@@ -386,6 +386,10 @@ class GoogleBookPlatformAdapter(
                 )
             }
 
+            // The prepared bitmap is all that setBitmap needs, and handing it over allocates a lot (it is encoded):
+            // release the decoded source first so the two are never held together at that peak.
+            if (preparedBitmap !== sourceBitmap) sourceBitmap.recycle()
+
             val flags = when (policy) {
                 LockWorkspacePolicy.SAME_ON_BOTH -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
                 LockWorkspacePolicy.WORKSPACE_ONLY -> WallpaperManager.FLAG_SYSTEM
