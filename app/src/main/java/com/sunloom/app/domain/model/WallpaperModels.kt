@@ -342,14 +342,14 @@ data class UserPreferences(
         SafeCategory.AERIAL_EARTH
     ),
     val enabledSources: Set<String> = setOf(
-        "seed_reserve",
+        SourceIds.SEED_RESERVE,
         "wikimedia_featured",
         "nasa_library",
         "artic_cc0",
         "met_museum_cc0",
         "cma_cc0",
         "smk_open",
-        "user_local"
+        SourceIds.USER_LOCAL
     ),
     val displayPolicy: DisplayPolicy = DisplayPolicy.SAME_ON_ALL_DISPLAYS,
     val lockWorkspacePolicy: LockWorkspacePolicy = LockWorkspacePolicy.SAME_ON_BOTH,
@@ -367,4 +367,10 @@ data class UserPreferences(
         /** Ceiling before v0.14; stored values equal to it are raised once (see the repository). */
         const val LEGACY_MAX_CACHE_BYTES: Long = 250L * 1024L * 1024L
     }
+}
+
+/** Ids of the two sources that are not online catalogs; used across modules, so named once. */
+object SourceIds {
+    const val SEED_RESERVE = "seed_reserve"
+    const val USER_LOCAL = "user_local"
 }

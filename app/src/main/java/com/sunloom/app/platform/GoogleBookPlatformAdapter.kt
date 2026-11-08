@@ -1,5 +1,6 @@
 package com.sunloom.app.platform
 
+import com.sunloom.app.domain.model.SourceIds
 import android.annotation.SuppressLint
 import android.app.WallpaperManager
 import android.content.Context
@@ -345,7 +346,7 @@ class GoogleBookPlatformAdapter(
             return WallpaperStatus.FAILED_TEMPORARILY
         }
 
-        val allowBlurred = record.provenance.sourceId == "user_local" ||
+        val allowBlurred = record.provenance.sourceId == SourceIds.USER_LOCAL ||
             record.evaluation.cropRect?.usesBlurredFrameFill == true
 
         val envelopePlan: EnvelopePlan? = if (canPlanEnvelope(record)) {
@@ -357,7 +358,7 @@ class GoogleBookPlatformAdapter(
                 connectedDisplays = effectiveDisplays,
                 policy = displayPolicy,
                 allowBlurredFrameFill = allowBlurred
-            ) ?: if (record.provenance.sourceId == "user_local") {
+            ) ?: if (record.provenance.sourceId == SourceIds.USER_LOCAL) {
                 null
             } else {
                 return WallpaperStatus.FAILED_TEMPORARILY
@@ -428,15 +429,15 @@ class GoogleBookPlatformAdapter(
 
     /** Fetched and imported pictures are planned per display set; seeds and the baseline copy are not. */
     private fun canPlanEnvelope(record: WallpaperRecord): Boolean {
-        val rendered = record.isBaselineRestore || record.provenance.sourceId == "seed_reserve"
+        val rendered = record.isBaselineRestore || record.provenance.sourceId == SourceIds.SEED_RESERVE
         return !rendered && record.provenance.originalWidth > 0 && record.provenance.originalHeight > 0
     }
 
     private fun keepsStoredBlurredFill(record: WallpaperRecord): Boolean =
-        record.provenance.sourceId == "user_local" && record.evaluation.cropRect?.usesBlurredFrameFill == true
+        record.provenance.sourceId == SourceIds.USER_LOCAL && record.evaluation.cropRect?.usesBlurredFrameFill == true
 
     private fun isSharedSeed(record: WallpaperRecord, displays: List<DisplayProfile>): Boolean =
-        record.provenance.sourceId == "seed_reserve" && displays.size > 1
+        record.provenance.sourceId == SourceIds.SEED_RESERVE && displays.size > 1
 
     @SuppressLint("ExifInterface")
     private fun decodeBitmapBounded(file: File, targetWidthPx: Int, targetHeightPx: Int): Bitmap? {

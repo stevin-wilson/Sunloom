@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.domain.model.SourceIds
 import android.content.Context
 import android.content.res.Configuration
 import androidx.core.net.toUri
@@ -246,9 +247,9 @@ class AndroidSunloomGateway(
         val currentId = repo.getCurrentWallpaperId()
         val all = repo.getAllWallpapers()
         val currentRecord = all.firstOrNull { it.id == currentId }
-        if (currentRecord == null || currentRecord.provenance.sourceId == "seed_reserve") {
+        if (currentRecord == null || currentRecord.provenance.sourceId == SourceIds.SEED_RESERVE) {
             val nonSeedPool = matcher.filterEligiblePool(all, prefs)
-                .filter { it.provenance.sourceId != "seed_reserve" }
+                .filter { it.provenance.sourceId != SourceIds.SEED_RESERVE }
             if (nonSeedPool.isNotEmpty()) {
                 val targetBrightness = solarCalculator.resolveSolarSnapshot(
                     preferences = prefs,
@@ -551,7 +552,7 @@ class AndroidSunloomGateway(
                 it.status != WallpaperStatus.DISABLED_BY_USER &&
                 it.provenance.sourceId in prefs.enabledSources
         }.sortedWith(
-            compareBy<WallpaperRecord> { if (it.provenance.sourceId == "seed_reserve") 1 else 0 }
+            compareBy<WallpaperRecord> { if (it.provenance.sourceId == SourceIds.SEED_RESERVE) 1 else 0 }
                 .thenByDescending { it.provenance.retrievedAtEpochMs }
         )
     }
@@ -583,10 +584,10 @@ class AndroidSunloomGateway(
             it.id == currentId && (it.isBaselineRestore || it.evaluation.isEligible)
         }
         val hasNonSeedEligible = matcher.filterEligiblePool(activePool, prefs)
-            .any { it.provenance.sourceId != "seed_reserve" }
+            .any { it.provenance.sourceId != SourceIds.SEED_RESERVE }
 
         val current = if (appliedRecord != null &&
-            (appliedRecord.provenance.sourceId != "seed_reserve" || !hasNonSeedEligible)
+            (appliedRecord.provenance.sourceId != SourceIds.SEED_RESERVE || !hasNonSeedEligible)
         ) {
             appliedRecord
         } else {

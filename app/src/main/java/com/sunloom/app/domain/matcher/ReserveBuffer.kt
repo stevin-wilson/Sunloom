@@ -1,5 +1,6 @@
 package com.sunloom.app.domain.matcher
 
+import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.SafeCategory
 import com.sunloom.app.domain.model.WallpaperRecord
@@ -54,7 +55,7 @@ object ReserveBuffer {
             !isBaselineRestore &&
             status != WallpaperStatus.DISABLED_BY_USER &&
             evaluation.isEligible &&
-            provenance.sourceId != "seed_reserve" &&
-            provenance.sourceId != "user_local" &&
+            provenance.sourceId != SourceIds.SEED_RESERVE &&
+            provenance.sourceId != SourceIds.USER_LOCAL &&
             category in enabledCategories
 }

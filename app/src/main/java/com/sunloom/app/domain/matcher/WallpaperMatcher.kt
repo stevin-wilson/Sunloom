@@ -1,5 +1,6 @@
 package com.sunloom.app.domain.matcher
 
+import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.data.sources.SourceRegistry
 import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.DisplayPolicy
@@ -35,7 +36,7 @@ class WallpaperMatcher(
                 record.evaluation.isEligible &&
                 fileExistsVerifier(record) &&
                 SourceRegistry.isSourceAdmitted(record.provenance.sourceId) &&
-                (record.category in preferences.enabledCategories || record.provenance.sourceId == "user_local") &&
+                (record.category in preferences.enabledCategories || record.provenance.sourceId == SourceIds.USER_LOCAL) &&
                 record.provenance.sourceId in preferences.enabledSources
         }
     }
@@ -51,7 +52,7 @@ class WallpaperMatcher(
         preferences: UserPreferences
     ): Int {
         val pool = filterEligiblePool(candidates, preferences)
-            .filter { it.provenance.sourceId != "seed_reserve" }
+            .filter { it.provenance.sourceId != SourceIds.SEED_RESERVE }
         return pool.count { BrightnessFit.accepts(it.evaluation, targetBrightness) && it.appliedCount == 0 }
     }
 
@@ -272,7 +273,7 @@ class WallpaperMatcher(
 
 
     private companion object {
-        const val SEED_SOURCE_ID = "seed_reserve"
+        const val SEED_SOURCE_ID = SourceIds.SEED_RESERVE
         const val MAX_RECENT_WINDOW = 8
         const val FAVORITE_WEIGHT = 2.0
         const val SIMILARITY_LOOKBACK = 3

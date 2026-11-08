@@ -1,5 +1,6 @@
 package com.sunloom.app.domain.safety
 
+import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.data.sources.SourceRegistry
 import com.sunloom.app.domain.model.CandidateAsset
 import com.sunloom.app.domain.model.ImageFormat
@@ -122,7 +123,7 @@ class SafetyGate {
                 failedLayer = "L1"
             )
         }
-        if (enabledSources != null && srcId !in enabledSources && srcId != "seed_reserve") {
+        if (enabledSources != null && srcId !in enabledSources && srcId != SourceIds.SEED_RESERVE) {
             return SafetyVerdict.Rejected(
                 reasonCode = "DISABLED_SOURCE",
                 explanation = "Source '$srcId' is currently disabled.",
@@ -167,7 +168,7 @@ class SafetyGate {
         auditNotes.add("License verified: ${candidate.provenance.licenseType.label}")
 
         // L1e. Transport security check for internet assets (Article VI §4f & VIII)
-        if (!candidate.isUserLocal && srcId != "seed_reserve") {
+        if (!candidate.isUserLocal && srcId != SourceIds.SEED_RESERVE) {
             if (!candidate.downloadUrl.startsWith("https://")) {
                 return SafetyVerdict.Rejected(
                     reasonCode = "INSECURE_TRANSPORT",

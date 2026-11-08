@@ -1,5 +1,6 @@
 package com.sunloom.app.data.cache
 
+import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.WallpaperRecord
 import java.io.File
@@ -38,12 +39,12 @@ class BoundedCacheManager(
         val protectedIds = LinkedHashSet<String>()
         protectedIds.addAll(activeWallpaperIds)
         // A user-provided photo cannot be fetched again, so evicting it would lose it for good.
-        cachedRecords.filter { it.isFavorite || it.isBaselineRestore || it.provenance.sourceId == "user_local" }.forEach {
+        cachedRecords.filter { it.isFavorite || it.isBaselineRestore || it.provenance.sourceId == SourceIds.USER_LOCAL }.forEach {
             protectedIds.add(it.id)
         }
 
         val protectionPriority = compareBy<WallpaperRecord> {
-            if (it.provenance.sourceId == "seed_reserve") 1 else 0
+            if (it.provenance.sourceId == SourceIds.SEED_RESERVE) 1 else 0
         }.thenByDescending { it.provenance.retrievedAtEpochMs }
 
         cachedRecords
@@ -62,7 +63,7 @@ class BoundedCacheManager(
         // so the global top-3 above must not leave a category without any seed.
         cachedRecords
             .filter {
-                it.provenance.sourceId == "seed_reserve" && !it.isBaselineRestore &&
+                it.provenance.sourceId == SourceIds.SEED_RESERVE && !it.isBaselineRestore &&
                     (it.evaluation.brightnessClass == BrightnessClass.LIGHT ||
                         it.evaluation.brightnessClass == BrightnessClass.DARK)
             }
@@ -74,7 +75,7 @@ class BoundedCacheManager(
             .filter {
                 it.evaluation.brightnessClass == BrightnessClass.NEUTRAL &&
                     !it.isBaselineRestore &&
-                    it.provenance.sourceId != "seed_reserve"
+                    it.provenance.sourceId != SourceIds.SEED_RESERVE
             }
             .sortedByDescending { it.provenance.retrievedAtEpochMs }
             .take(minProtectedPerBrightness)

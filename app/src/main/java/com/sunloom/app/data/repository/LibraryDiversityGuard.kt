@@ -1,5 +1,6 @@
 package com.sunloom.app.data.repository
 
+import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.safety.SafetyDenylist
 import com.sunloom.app.domain.safety.SafetyGate
@@ -54,7 +55,7 @@ internal class LibraryDiversityGuard(usableRows: List<WallpaperRecord>) {
 
     companion object {
         const val MAX_UNSEEN_PER_CREATOR = 3
-        private val EXEMPT_SOURCES = setOf("seed_reserve", "user_local", "nasa_library")
+        private val EXEMPT_SOURCES = setOf(SourceIds.SEED_RESERVE, SourceIds.USER_LOCAL, "nasa_library")
         private val GENERIC_CREDIT_FRAGMENTS = listOf("public domain", "wikimedia commons", "archival")
         private val PLACEHOLDERS = setOf("unknown", "unknown author", "anonymous", "unknown artist", "n a", "none")
     }

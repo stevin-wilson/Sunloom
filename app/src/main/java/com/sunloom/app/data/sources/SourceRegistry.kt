@@ -1,5 +1,6 @@
 package com.sunloom.app.data.sources
 
+import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.domain.model.SafeCategory
 
 /**
@@ -36,7 +37,7 @@ object SourceRegistry {
 
     private val REGISTRATIONS: Map<String, SourceRegistration> = listOf(
         SourceRegistration(
-            sourceId = "seed_reserve",
+            sourceId = SourceIds.SEED_RESERVE,
             sourceName = "Sunloom On-Device Procedural Reserve",
             plainDescription = "Generated on device by Sunloom at your display's native resolution (CC0 1.0)",
             licenseSummary = "CC0 1.0 Public Domain (Generated on device)",
@@ -188,7 +189,7 @@ object SourceRegistry {
             safetySignalsSummary = "Fail-closed public_domain==true & PDM/CC0 rights verification + English/Nordic L2 denylist"
         ),
         SourceRegistration(
-            sourceId = "user_local",
+            sourceId = SourceIds.USER_LOCAL,
             sourceName = "User Local Photos",
             plainDescription = "Direct user-selected photos via Android Photo Picker",
             licenseSummary = "User-Provided Local File (Exempt under Article VI §10)",

@@ -1,5 +1,6 @@
 package com.sunloom.app.domain.renderer
 
+import com.sunloom.app.domain.model.SourceIds
 import com.sunloom.app.domain.model.CropRect
 import com.sunloom.app.domain.model.DisplayPolicy
 import com.sunloom.app.domain.model.DisplayProfile
@@ -72,7 +73,7 @@ class EnvelopePlanner(
             focalY = record.evaluation.cropRect?.focalY ?: 0.5,
             connectedDisplays = displays,
             policy = preferences.displayPolicy,
-            allowBlurredFrameFill = record.provenance.sourceId == "user_local" || preferences.allowBlurredFrameFill
+            allowBlurredFrameFill = record.provenance.sourceId == SourceIds.USER_LOCAL || preferences.allowBlurredFrameFill
         )
     }
 

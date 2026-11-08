@@ -1,5 +1,6 @@
 package com.sunloom.app.data.repository
 
+import com.sunloom.app.domain.model.SourceIds
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
@@ -92,14 +93,14 @@ class LocalLibraryRepository(
         private const val TAG = "LocalLibraryRepository"
         private val LIBRARY_WRITE_LOCK = Any()
         private val SYNC_MUTEX = kotlinx.coroutines.sync.Mutex()
-        private val HEAL_EXEMPT_SOURCES = setOf("seed_reserve", "user_local")
+        private val HEAL_EXEMPT_SOURCES = setOf(SourceIds.SEED_RESERVE, SourceIds.USER_LOCAL)
         private val LEGACY_V1_3_SOURCES = setOf(
-            "seed_reserve",
+            SourceIds.SEED_RESERVE,
             "wikimedia_featured",
             "nasa_library",
             "artic_cc0",
             "met_museum_cc0",
-            "user_local"
+            SourceIds.USER_LOCAL
         )
 
         private data class CachedSeedAsset(
@@ -561,7 +562,7 @@ class LocalLibraryRepository(
             if (record.isRejected || record.isBaselineRestore) continue
             if (record.provenance.safetyGateVersion == SafetyGate.COMPOSITE_GATE_VERSION) continue
 
-            val isUserLocal = record.provenance.sourceId == "user_local"
+            val isUserLocal = record.provenance.sourceId == SourceIds.USER_LOCAL
             val effectiveTags = record.rawCategoriesAndTags.ifEmpty {
                 listOf(record.category.displayName.lowercase())
             }
@@ -573,7 +574,7 @@ class LocalLibraryRepository(
                 category = record.category,
                 rawCategoriesAndTags = effectiveTags,
                 downloadUrl = when {
-                    isUserLocal || record.provenance.sourceId == "seed_reserve" -> ""
+                    isUserLocal || record.provenance.sourceId == SourceIds.SEED_RESERVE -> ""
                     record.provenance.originalPageUrl.startsWith("https://") -> record.provenance.originalPageUrl
                     !admittedHost.isNullOrBlank() -> "https://$admittedHost/${record.id}"
                     else -> ""
@@ -948,7 +949,7 @@ class LocalLibraryRepository(
             }
 
             val seedProvenance = ProvenanceRecord(
-                sourceId = "seed_reserve",
+                sourceId = SourceIds.SEED_RESERVE,
                 sourceName = "Sunloom On-Device Procedural Reserve",
                 assetId = spec.id,
                 originalPageUrl = "",
@@ -967,7 +968,7 @@ class LocalLibraryRepository(
                 safetyClassificationSource = "Sunloom On-Device Procedural CC0 Reserve",
                 sha256Checksum = cachedAsset.sha256,
                 perceptualHash = cachedAsset.dHash,
-                adapterVersion = SourceRegistry.get("seed_reserve")?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
+                adapterVersion = SourceRegistry.get(SourceIds.SEED_RESERVE)?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
                 safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION,
                 gateLayerOutcomes = GateTrace.fullPass()
             )
@@ -1060,7 +1061,7 @@ class LocalLibraryRepository(
 
         var changedAny = false
         for (record in getAllWallpapers()) {
-            if (record.isRejected || record.isBaselineRestore || record.provenance.sourceId == "seed_reserve") {
+            if (record.isRejected || record.isBaselineRestore || record.provenance.sourceId == SourceIds.SEED_RESERVE) {
                 continue
             }
             val srcW = record.provenance.originalWidth
@@ -1069,7 +1070,7 @@ class LocalLibraryRepository(
 
             val focalX = record.evaluation.cropRect?.focalX ?: 0.5
             val focalY = record.evaluation.cropRect?.focalY ?: 0.5
-            val isUserLocal = record.provenance.sourceId == "user_local"
+            val isUserLocal = record.provenance.sourceId == SourceIds.USER_LOCAL
 
             val plan = envelopePlanner.planForRecord(record, validDisplays, preferences)
 
@@ -1255,7 +1256,7 @@ class LocalLibraryRepository(
         val unseenDarkCount = allActiveWallpapers.count {
             it.id !in ghostRows &&
                 !it.isBaselineRestore &&
-                it.provenance.sourceId != "seed_reserve" &&
+                it.provenance.sourceId != SourceIds.SEED_RESERVE &&
                 it.evaluation.isEligible &&
                 it.evaluation.brightnessClass == BrightnessClass.DARK &&
                 it.appliedCount == 0
@@ -1732,8 +1733,8 @@ class LocalLibraryRepository(
     private fun isPausedForResolution(record: WallpaperRecord): Boolean =
         !record.isRejected &&
             !record.isBaselineRestore &&
-            record.provenance.sourceId != "seed_reserve" &&
-            record.provenance.sourceId != "user_local" &&
+            record.provenance.sourceId != SourceIds.SEED_RESERVE &&
+            record.provenance.sourceId != SourceIds.USER_LOCAL &&
             !record.evaluation.isEligible &&
             record.evaluation.rejectionReasonCode == "RESOLUTION_BELOW_DISPLAY_TARGET" &&
             hasUsableFile(record)
