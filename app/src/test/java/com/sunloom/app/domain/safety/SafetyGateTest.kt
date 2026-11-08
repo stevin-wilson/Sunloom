@@ -613,21 +613,27 @@ class SafetyGateTest {
 
     @Test
     fun `NASA data maps and illustrations are rejected as not photographic`() {
-        val dataMap = nasaCandidate(
-            "COWVR's New Map",
-            "This map, made using the Compact Ocean Wind Vector Radiometer's observations, shows Earth's microwave emissions.",
-            listOf("COWVR", "Earth")
+        val titledMap = nasaCandidate(
+            "Geologic Map of Titan Volcano",
+            "Surface units of a region of Titan.",
+            listOf("Titan", "Space")
         )
-        val concept = nasaCandidate(
+        val conceptInFirstSentence = nasaCandidate(
             "Spacecraft Over Titan",
             "Artist's concept of a spacecraft above the clouds of Titan.",
             listOf("Titan", "Space")
         )
-        for (candidate in listOf(dataMap, concept)) {
+        for (candidate in listOf(titledMap, conceptInFirstSentence)) {
             val verdict = safetyGate.evaluateMetadata(candidate)
             assertTrue("Expected Rejected for '${candidate.title}', got $verdict", verdict is SafetyVerdict.Rejected)
             assertEquals("NON_PHOTOGRAPHIC_CONTENT", (verdict as SafetyVerdict.Rejected).reasonCode)
         }
+        val selfDescribedMap = nasaCandidate(
+            "COWVR's New Map",
+            "This map, made using the Compact Ocean Wind Vector Radiometer's observations, shows Earth's microwave emissions.",
+            listOf("COWVR", "Earth")
+        )
+        assertTrue(safetyGate.evaluateMetadata(selfDescribedMap) is SafetyVerdict.Rejected)
     }
 
     @Test
@@ -651,5 +657,19 @@ class SafetyGateTest {
             val verdict = safetyGate.evaluateMetadata(candidate)
             assertTrue("Expected Approved for '${candidate.title}', got $verdict", verdict is SafetyVerdict.Approved)
         }
+    }
+
+    @Test
+    fun `NASA computer-modelled illustration PIA21074 is rejected`() {
+        val candidate = nasaCandidate(
+            "Hot Jupiters' Cloudy Skies",
+            "Hot Jupiters are exoplanets that orbit their stars so tightly that their temperatures are extremely high. " +
+                "Research suggests that the \"dayside\" is largely free of clouds. This illustration represents how hot " +
+                "Jupiters of different temperatures might appear to a person flying over the dayside, based on computer " +
+                "modeling. Figure 1 shows an approximation of what various hot Jupiters might look like.",
+            listOf("Hot Jupiters", "Exoplanets", "Kepler")
+        )
+        val verdict = safetyGate.evaluateMetadata(candidate)
+        assertTrue("Expected Rejected, got $verdict", verdict is SafetyVerdict.Rejected)
     }
 }

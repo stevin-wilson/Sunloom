@@ -23,7 +23,7 @@ import java.util.Locale
  */
 object SafetyDenylist {
 
-    const val DENYLIST_VERSION = "2026.11.08-v6"
+    const val DENYLIST_VERSION = "2026.11.08-v7"
 
     private val DIACRITICS_REGEX = Regex("\\p{M}+")
     private val NON_LETTER_DIGIT_REGEX = Regex("[^a-z0-9]+")
@@ -143,6 +143,10 @@ object SafetyDenylist {
         // Press and staff events on agency photo sites, whose keywords still read as scenery (Earth, Cloud)
         "media day", "media interview", "media briefing", "science briefing", "news conference",
         "from left to right",
+        // A description that says what it is: a rendering, not a photograph (Constitution v0.25)
+        "this illustration", "this animation", "this map", "this diagram", "this chart", "this graphic",
+        "this rendering", "this visualization", "this artist s concept", "this artist concept",
+        "computer model", "computer generated", "computer simulation",
         // Text-Dominated Images & Document Scans (Article VII §2)
         "document scan", "manuscript page", "newspaper page", "infographic",
         "motivational quote", "text heavy", "meme",
