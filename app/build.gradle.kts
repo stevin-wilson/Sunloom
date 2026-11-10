@@ -78,6 +78,14 @@ android {
         base.archivesName.set(appName)
     }
 
+    // Two distributions of one app (Article XVIII §1): "github" (sideloaded APK) may check GitHub for a newer
+    // release; "play" contains no update code at all. Same applicationId and signing key, so one can replace the other.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("github") { dimension = "distribution" }
+        create("play") { dimension = "distribution" }
+    }
+
     signingConfigs {
         create("release") {
             if (hasUploadSigningCredentials) {
@@ -176,9 +184,10 @@ tasks.matching { it.name.contains("ComposeMapping", ignoreCase = true) }.configu
     enabled = false
 }
 
-tasks.matching { it.name == "packageReleaseBundle" }.configureEach {
+// Only the Play flavor ships a bundle; the GitHub flavor ships an APK.
+tasks.matching { it.name == "packagePlayReleaseBundle" }.configureEach {
     doFirst {
-        val mappingDir = layout.buildDirectory.dir("outputs/mapping/release").get().asFile
+        val mappingDir = layout.buildDirectory.dir("outputs/mapping/playRelease").get().asFile
         val prtFile = File(mappingDir, "mapping.prt")
         val txtFile = File(mappingDir, "mapping.txt")
         if (!txtFile.exists() && prtFile.exists()) {
@@ -218,7 +227,7 @@ dependencies {
 }
 
 tasks.register<JacocoReport>("jacocoTestReport") {
-    dependsOn("testDebugUnitTest")
+    dependsOn("testGithubDebugUnitTest")
     reports {
         xml.required.set(true)
         html.required.set(true)
@@ -233,7 +242,7 @@ tasks.register<JacocoReport>("jacocoTestReport") {
         "android/**/*.*",
         "**/ComposableSingletons*.*"
     )
-    val kotlinClasses = fileTree("${project.layout.buildDirectory.get()}/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes") {
+    val kotlinClasses = fileTree("${project.layout.buildDirectory.get()}/intermediates/built_in_kotlinc/githubDebug/compileGithubDebugKotlin/classes") {
         exclude(fileFilter)
     }
     classDirectories.setFrom(files(kotlinClasses))
@@ -241,8 +250,8 @@ tasks.register<JacocoReport>("jacocoTestReport") {
     executionData.setFrom(
         fileTree(project.layout.buildDirectory.get()) {
             include(
-                "outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec",
-                "jacoco/testDebugUnitTest.exec"
+                "outputs/unit_test_code_coverage/githubDebugUnitTest/testGithubDebugUnitTest.exec",
+                "jacoco/testGithubDebugUnitTest.exec"
             )
         }
     )
