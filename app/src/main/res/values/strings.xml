@@ -47,6 +47,10 @@
     <string name="saved_wallpapers">Saved Wallpapers</string>
     <string name="schedule">Schedule</string>
     <string name="setup_guide">Setup Guide</string>
+    <string name="automatic_switching">Automatic switching</string>
+    <string name="automatic_switching_paused_note">Paused right now: use Resume on Home to continue.</string>
+    <string name="automatic_switching_manual_note">Schedule is set to Manual, so nothing changes by itself. Pick another schedule below.</string>
+    <string name="automatic_switching_hint">Change the wallpaper by itself on the schedule below. Turn off to choose wallpapers only by hand.</string>
     <string name="sunloom">Sunloom</string>
     <string name="switch_between_bright_wallpapers_during">Switch between bright wallpapers during the day and calm dark wallpapers at night.</string>
     <string name="to_protect_your_permanent_rejection_bloc">To protect your permanent rejection blocklist, Sunloom fails closed rather than running without persistent storage. Check available device storage and restart Sunloom.</string>

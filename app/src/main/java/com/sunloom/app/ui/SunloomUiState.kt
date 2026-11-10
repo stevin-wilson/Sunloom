@@ -44,6 +44,8 @@ data class PendingDiscard(
 data class SunloomUiState(
     val activeTab: DesktopNavTab = DesktopNavTab.TODAY_CANVAS,
     val isInitialLoading: Boolean = false,
+    /** "Setup Guide" was pressed: show first-run setup again. A screen, not a saved state (a relaunch starts normally). */
+    val isSetupReopened: Boolean = false,
     val isStorageUnavailable: Boolean = false,
     val preferences: UserPreferences = UserPreferences(),
     val capabilities: PlatformCapabilities = PlatformCapabilities(

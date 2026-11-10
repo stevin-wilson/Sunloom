@@ -157,6 +157,8 @@ fun SunloomApp(
     val onDeleteManyFromReserve = actions.onDeleteManyFromReserve
     val onUndoDiscard = actions.onUndoDiscard
     val onCommitDiscard = actions.onCommitDiscard
+    val onToggleAutoSwitch = actions.onToggleAutoSwitch
+    val onReopenSetup = actions.onReopenSetup
     val snackbarHostState = remember { SnackbarHostState() }
     val colorScheme = if (darkTheme) SunloomDarkPalette else SunloomLightPalette
     val shortcutGate = remember { ShortcutGate() }
@@ -374,7 +376,7 @@ fun SunloomApp(
                         }
                     }
                 }
-                !uiState.preferences.isSetupCompleted -> {
+                !uiState.preferences.isSetupCompleted || uiState.isSetupReopened -> {
                     FirstRunSetupScreen(
                         uiState = uiState,
                         onCompleteSetup = onCompleteSetup
@@ -412,9 +414,8 @@ fun SunloomApp(
                     onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
                     onUpdateDisplayPolicy = onUpdateDisplayPolicy,
                     onForgetRememberedDisplay = onForgetRememberedDisplay,
-                    onReopenSetup = {
-                        onCompleteSetup(uiState.preferences.copy(isSetupCompleted = false))
-                    }
+                    onToggleAutoSwitch = onToggleAutoSwitch,
+                    onReopenSetup = onReopenSetup
                     )
                 }
             }
@@ -831,6 +832,7 @@ fun DesktopWorkspaceScreen(
     onForgetRememberedDisplay: (String) -> Unit = {},
     isFullscreen: Boolean = false,
     onToggleFullscreen: () -> Unit = {},
+    onToggleAutoSwitch: (Boolean) -> Unit = {},
     onReopenSetup: () -> Unit
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -889,6 +891,7 @@ fun DesktopWorkspaceScreen(
                             onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
                             onUpdateDisplayPolicy = onUpdateDisplayPolicy,
                             onForgetRememberedDisplay = onForgetRememberedDisplay,
+                            onToggleAutoSwitch = onToggleAutoSwitch,
                             onRestoreSystemDefault = onRestoreSystemDefault,
                             onReopenSetup = onReopenSetup
                         )

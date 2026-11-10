@@ -154,7 +154,11 @@ class MainViewModel(
     ) {
         val newerEdits = pendingPreferenceEdits.get() - if (ownPreferenceEdit) 1 else 0
         _uiState.update { cur ->
-            var merged = next.copy(pendingDiscard = cur.pendingDiscard, isInitialLoading = false)
+            var merged = next.copy(
+                pendingDiscard = cur.pendingDiscard,
+                isSetupReopened = cur.isSetupReopened,
+                isInitialLoading = false
+            )
             if (preserveNavigation) {
                 merged = merged.copy(
                     activeTab = cur.activeTab,
@@ -235,6 +239,7 @@ class MainViewModel(
 
     fun completeFirstRunSetup(updatedPreferences: UserPreferences) {
         val completed = updatedPreferences.copy(isSetupCompleted = true)
+        _uiState.update { s -> s.copy(isSetupReopened = false) }
         val saved = launchGatewayMutation(preserveNavigation = false) {
             val newState = gateway.savePreferences(completed)
             newState.copy(
@@ -341,6 +346,22 @@ class MainViewModel(
             }
             gateway.savePreferences(prefs.copy(enabledSources = nextSet))
         }
+    }
+
+    /**
+     * The "Automatic switching" switch. Setup is the only other place this is chosen, so without this switch
+     * someone who turned it off there could never turn it back on.
+     */
+    fun setAutoChangeEnabled(enabled: Boolean) {
+        updatePreferences { it.copy(autoChangeEnabled = enabled) }
+    }
+
+    /**
+     * "Setup Guide": show the first-run screen again, starting from the current choices. Nothing is saved until the
+     * person finishes it, so leaving mid-way or relaunching costs nothing and no reserve work runs.
+     */
+    fun reopenSetup() {
+        _uiState.update { s -> s.copy(isSetupReopened = true) }
     }
 
     fun togglePauseAutomation() {

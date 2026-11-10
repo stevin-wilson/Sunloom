@@ -44,8 +44,20 @@ import androidx.compose.ui.unit.dp
 import com.sunloom.app.domain.model.DisplayPolicy
 import com.sunloom.app.domain.model.LockWorkspacePolicy
 import com.sunloom.app.domain.model.ScheduleMode
+import com.sunloom.app.domain.model.UserPreferences
 import com.sunloom.app.domain.solar.CityCoordinates
 import kotlin.math.roundToInt
+
+/**
+ * Why a switched-on "Automatic switching" will still not change anything, or null when it really runs. Saying so
+ * beats leaving the switch looking broken.
+ */
+internal fun automaticSwitchingNote(prefs: UserPreferences): Int? = when {
+    !prefs.autoChangeEnabled -> null
+    prefs.isPaused -> R.string.automatic_switching_paused_note
+    prefs.scheduleMode == ScheduleMode.MANUAL_ONLY -> R.string.automatic_switching_manual_note
+    else -> null
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -60,6 +72,7 @@ internal fun DisplaysAndSchedulePane(
     onToggleBatterySaverDeferral: (Boolean) -> Unit,
     onUpdateDisplayPolicy: (DisplayPolicy) -> Unit = {},
     onForgetRememberedDisplay: (String) -> Unit = {},
+    onToggleAutoSwitch: (Boolean) -> Unit = {},
     onRestoreSystemDefault: () -> Unit,
     onReopenSetup: () -> Unit
 ) {
@@ -87,6 +100,41 @@ internal fun DisplaysAndSchedulePane(
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(R.string.schedule), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.automatic_switching),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            stringResource(R.string.automatic_switching_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        val note = automaticSwitchingNote(uiState.preferences)
+                        if (note != null) {
+                            Text(
+                                stringResource(note),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = uiState.preferences.autoChangeEnabled,
+                        onCheckedChange = onToggleAutoSwitch,
+                        modifier = Modifier
+                            .desktopControl(RoundedCornerShape(50))
+                            .switchLabel(stringResource(R.string.automatic_switching))
+                            .testTag("auto_switch")
+                    )
+                }
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)

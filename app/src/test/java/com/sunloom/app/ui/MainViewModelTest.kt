@@ -169,6 +169,46 @@ class MainViewModelTest {
     }
 
     @Test
+    fun `automatic switching can be turned back on after setup turned it off`() {
+        viewModel.completeFirstRunSetup(UserPreferences(scheduleMode = ScheduleMode.SUNRISE_SUNSET, autoChangeEnabled = false))
+        assertFalse(viewModel.uiState.value.preferences.autoChangeEnabled)
+
+        viewModel.setAutoChangeEnabled(true)
+
+        assertTrue(viewModel.uiState.value.preferences.autoChangeEnabled)
+        assertTrue("the choice is saved, not only shown", fakeGateway.state.preferences.autoChangeEnabled)
+    }
+
+    @Test
+    fun `reopening setup shows setup again without saving anything`() {
+        viewModel.completeFirstRunSetup(
+            UserPreferences(scheduleMode = ScheduleMode.FIXED_CLOCK, autoChangeEnabled = true)
+        )
+        assertFalse(viewModel.uiState.value.isSetupReopened)
+
+        viewModel.reopenSetup()
+
+        val state = viewModel.uiState.value
+        assertTrue("setup is shown again", state.isSetupReopened)
+        assertTrue("but it is only a screen, not a saved state", state.preferences.isSetupCompleted)
+        assertTrue("so a relaunch does not boot into first-run", fakeGateway.state.preferences.isSetupCompleted)
+        assertEquals(ScheduleMode.FIXED_CLOCK, state.preferences.scheduleMode)
+    }
+
+    @Test
+    fun `reopened setup stays open through other updates and closes when completed`() {
+        viewModel.completeFirstRunSetup(UserPreferences(autoChangeEnabled = true))
+        viewModel.reopenSetup()
+
+        viewModel.changeToNextWallpaper()
+        assertTrue("another update must not close setup under the person", viewModel.uiState.value.isSetupReopened)
+
+        viewModel.completeFirstRunSetup(UserPreferences(autoChangeEnabled = false))
+        assertFalse(viewModel.uiState.value.isSetupReopened)
+        assertFalse(viewModel.uiState.value.preferences.autoChangeEnabled)
+    }
+
+    @Test
     fun `completeFirstRunSetup marks setup completed and activates TODAY_CANVAS tab`() {
         assertFalse(viewModel.uiState.value.preferences.isSetupCompleted)
         viewModel.completeFirstRunSetup(

@@ -48,7 +48,9 @@ data class SunloomActions(
     val onSaveAs: (WallpaperRecord) -> Unit,
     val onDeleteManyFromReserve: (Collection<String>) -> Unit,
     val onUndoDiscard: () -> Unit,
-    val onCommitDiscard: () -> Unit
+    val onCommitDiscard: () -> Unit,
+    val onToggleAutoSwitch: (Boolean) -> Unit,
+    val onReopenSetup: () -> Unit
 ) {
     companion object {
         /**
@@ -90,7 +92,9 @@ data class SunloomActions(
             onSaveAs = { _ -> },
             onDeleteManyFromReserve = { _ -> },
             onUndoDiscard = {},
-            onCommitDiscard = {}
+            onCommitDiscard = {},
+            onToggleAutoSwitch = { _ -> },
+            onReopenSetup = {}
         )
     }
 }

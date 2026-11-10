@@ -153,6 +153,8 @@ class MainActivity : ComponentActivity() {
                     onRejectForever = { viewModel.dislikeCurrentWithUndo() },
                     onUndoDiscard = { viewModel.undoPendingDiscard() },
                     onCommitDiscard = { viewModel.commitPendingDiscard() },
+                    onToggleAutoSwitch = { viewModel.setAutoChangeEnabled(it) },
+                    onReopenSetup = { viewModel.reopenSetup() },
                     onTogglePause = { viewModel.togglePauseAutomation() },
                     onRestoreOriginal = { viewModel.restoreOriginalBaselineWallpaper() },
                     onRestoreSystemDefault = { viewModel.restoreSystemDefaultWallpaper() },
