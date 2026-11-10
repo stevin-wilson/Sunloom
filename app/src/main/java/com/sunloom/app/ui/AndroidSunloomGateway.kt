@@ -71,6 +71,13 @@ class AndroidSunloomGateway(
         val activeBefore = repo.getCurrentWallpaperId()
         repo.purgeRevokedSources()
         repo.healMissingFiles()
+        // Photos a restore could not bring back: say so once rather than leaving the person to find them missing.
+        val lostImports = repo.takeLostImportsNotice()
+        val lostNotice = if (lostImports > 0) {
+            context.resources.getQuantityString(R.plurals.msg_lost_imports, lostImports, lostImports)
+        } else {
+            null
+        }
         if (display != null) {
             repo.ensureSeedReserveLoadedForDisplays(connectedDisplays, prefs.displayPolicy)
             repo.revalidateGateVersionIfNeeded(display)
@@ -83,11 +90,11 @@ class AndroidSunloomGateway(
         if (display != null) {
             reconcileActiveWallpaperForDisplay(repo, display, connectedDisplays, prefs, activeBefore)
             promoteNonSeedOverSeedIfNeeded(repo, prefs, display, connectedDisplays)
-            buildSnapshot(repo, "Ready", preloadedPrefs = prefs)
+            buildSnapshot(repo, lostNotice ?: "Ready", preloadedPrefs = prefs)
         } else {
             buildSnapshot(
                 repo = repo,
-                bannerMessage = context.getString(R.string.msg_display_dimensions_unknown_waiting_for),
+                bannerMessage = lostNotice ?: context.getString(R.string.msg_display_dimensions_unknown_waiting_for),
                 preloadedPrefs = prefs
             )
         }

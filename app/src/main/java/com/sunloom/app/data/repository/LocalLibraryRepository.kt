@@ -80,7 +80,9 @@ class LocalLibraryRepository(
         private const val KEY_SOFT_SWEEP_VERSION = "soft_rejections_denylist_version"
         private val LIBRARY_WRITE_LOCK = Any()
         private val SYNC_MUTEX = kotlinx.coroutines.sync.Mutex()
-        private val HEAL_EXEMPT_SOURCES = setOf(SourceIds.SEED_RESERVE, SourceIds.USER_LOCAL)
+        // Seeds are re-rendered rather than healed.
+        private val HEAL_EXEMPT_SOURCES = setOf(SourceIds.SEED_RESERVE)
+        private const val KEY_LOST_IMPORTS = "lost_imports_notice"
 
         @Volatile
         internal var testStoreFactoryOverride: ((Context) -> LibraryStore)? = null
@@ -774,14 +776,17 @@ class LocalLibraryRepository(
     /**
      * Auto Backup restores the library database but not the image files (Article IX §3), and the cache
      * manager evicts files too. Rows left without a file are marked evicted so counts are honest and the
-     * next sync downloads them again. Seeds are re-rendered by [ensureSeedReserveLoaded]; the baseline
-     * restore copy is left untouched. Returns how many rows changed.
+     * next sync downloads them again. Seeds are re-rendered by [ensureSeedReserveLoaded].
+     *
+     * A personal photo or the baseline copy cannot be fetched again, but its row is healed the same way: left with a
+     * size and a path to a file that is gone, it would count as bytes on disk, push real images out of the cache and
+     * hold back top-ups. The row and its provenance stay. Each lost personal photo is counted for a one-time notice
+     * ([takeLostImportsNotice]). Returns how many rows changed.
      */
     fun healMissingFiles(): Int {
         var healed = 0
         for (record in getAllWallpapers()) {
-            // Seeds are re-rendered, the baseline copy is kept, and a missing personal photo cannot be fetched again.
-            if (record.isRejected || record.isBaselineRestore || record.provenance.sourceId in HEAL_EXEMPT_SOURCES) continue
+            if (record.isRejected || record.provenance.sourceId in HEAL_EXEMPT_SOURCES) continue
             if (record.localFilePath.isBlank() && record.fileSizeBytes == 0L) continue
             if (hasUsableFile(record)) continue
             // Re-read the row: a sync may have re-downloaded it since the list was read, and blanking a fresh
@@ -790,14 +795,25 @@ class LocalLibraryRepository(
             // check and the blanking write cannot interleave with a fresh download.
             synchronized(LIBRARY_WRITE_LOCK) {
                 val current = getWallpaperById(record.id) ?: return@synchronized
-                if (current.isRejected || current.isBaselineRestore || current.provenance.sourceId in HEAL_EXEMPT_SOURCES ||
-                    hasUsableFile(current)
-                ) return@synchronized
+                if (current.isRejected || current.provenance.sourceId in HEAL_EXEMPT_SOURCES || hasUsableFile(current)) {
+                    return@synchronized
+                }
+                if (current.localFilePath.isBlank() && current.fileSizeBytes == 0L) return@synchronized
                 upsertWallpaper(current.copy(localFilePath = "", croppedFilePath = "", fileSizeBytes = 0L))
+                if (current.provenance.sourceId == SourceIds.USER_LOCAL && !current.isBaselineRestore) {
+                    prefs.edit { putInt(KEY_LOST_IMPORTS, prefs.getInt(KEY_LOST_IMPORTS, 0) + 1) }
+                }
                 healed++
             }
         }
         return healed
+    }
+
+    /** How many personal photos were found missing since the last call, then forgets them: the notice is shown once. */
+    fun takeLostImportsNotice(): Int = synchronized(LIBRARY_WRITE_LOCK) {
+        val count = prefs.getInt(KEY_LOST_IMPORTS, 0)
+        if (count != 0) prefs.edit { remove(KEY_LOST_IMPORTS) }
+        count
     }
 
     fun enforceCacheLimit() {

@@ -9,6 +9,7 @@ import com.sunloom.app.Requirement
 import com.sunloom.app.data.sources.HttpClient
 import com.sunloom.app.data.sources.WallpaperSourceAdapter
 import com.sunloom.app.data.sources.fetchTextOrNull
+import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.model.CandidateAsset
 import com.sunloom.app.domain.model.DisplayProfile
 import com.sunloom.app.domain.model.LicenseType
@@ -775,15 +776,74 @@ class LocalLibrarySyncTest {
         assertTrue(repo.getAllRejections().any { it.assetId == "tall-1" && it.reasonCode == "COMPOSITION_CROPS_TOO_MUCH" && !it.isPermanent })
     }
 
-    @Test
-    fun `healMissingFiles leaves the users own photos alone`() = kotlinx.coroutines.test.runTest {
-        val repo = repo(FixedAdapter("artic_cc0", listOf(candidate("mine-1"))))
+    private suspend fun importedRow(repo: LocalLibraryRepository, id: String, baseline: Boolean = false): WallpaperRecord {
         repo.refreshOnlineCatalog(display)
-        val row = repo.getWallpaperById("mine-1")!!
-        File(row.localFilePath).delete()
-        repo.upsertWallpaper(row.copy(provenance = row.provenance.copy(sourceId = "user_local")))
+        val row = repo.getWallpaperById(id)!!
+        val mine = row.copy(provenance = row.provenance.copy(sourceId = "user_local"), isBaselineRestore = baseline)
+        repo.upsertWallpaper(mine)
+        return mine
+    }
+
+    @Test
+    fun `a personal photo whose file is gone is marked gone so its size stops counting`() = kotlinx.coroutines.test.runTest {
+        val repo = repo(FixedAdapter("artic_cc0", listOf(candidate("mine-1"))))
+        val mine = importedRow(repo, "mine-1")
+        File(mine.localFilePath).delete()
+        val before = repo.getAllWallpapers().sumOf { it.fileSizeBytes }
+        assertTrue("the missing file still counts as bytes until healed", before >= mine.fileSizeBytes && mine.fileSizeBytes > 0)
+
+        assertEquals(1, repo.healMissingFiles())
+
+        val healed = repo.getWallpaperById("mine-1")!!
+        assertEquals("", healed.localFilePath)
+        assertEquals(0L, healed.fileSizeBytes)
+        assertEquals("the row and its provenance are kept", "user_local", healed.provenance.sourceId)
+        assertEquals(before - mine.fileSizeBytes, repo.getAllWallpapers().sumOf { it.fileSizeBytes })
+        assertEquals("a second pass has nothing left to heal", 0, repo.healMissingFiles())
+    }
+
+    @Test
+    fun `lost personal photos are reported once`() = kotlinx.coroutines.test.runTest {
+        val repo = repo(FixedAdapter("artic_cc0", listOf(candidate("mine-1"), candidate("mine-2"))))
+        repo.refreshOnlineCatalog(display)
+        for (id in listOf("mine-1", "mine-2")) {
+            val row = repo.getWallpaperById(id)!!
+            File(row.localFilePath).delete()
+            repo.upsertWallpaper(row.copy(provenance = row.provenance.copy(sourceId = "user_local")))
+        }
+        assertEquals(0, repo.takeLostImportsNotice())
+
+        repo.healMissingFiles()
+
+        assertEquals(2, repo.takeLostImportsNotice())
+        assertEquals("taking the notice clears it", 0, repo.takeLostImportsNotice())
+        repo.healMissingFiles()
+        assertEquals("nothing new was lost", 0, repo.takeLostImportsNotice())
+    }
+
+    @Test
+    fun `a healthy personal photo is left alone and not reported`() = kotlinx.coroutines.test.runTest {
+        val repo = repo(FixedAdapter("artic_cc0", listOf(candidate("mine-1"))))
+        val mine = importedRow(repo, "mine-1")
+
         assertEquals(0, repo.healMissingFiles())
-        assertEquals(row.localFilePath, repo.getWallpaperById("mine-1")!!.localFilePath)
+
+        assertEquals(mine.localFilePath, repo.getWallpaperById("mine-1")!!.localFilePath)
+        assertEquals(0, repo.takeLostImportsNotice())
+    }
+
+    @Test
+    fun `a missing baseline copy stops counting its size but is not reported as a lost import`() = kotlinx.coroutines.test.runTest {
+        val repo = repo(FixedAdapter("artic_cc0", listOf(candidate("base-1"))))
+        val baseline = importedRow(repo, "base-1", baseline = true)
+        File(baseline.localFilePath).delete()
+
+        assertEquals(1, repo.healMissingFiles())
+
+        val healed = repo.getWallpaperById("base-1")!!
+        assertEquals(0L, healed.fileSizeBytes)
+        assertTrue("it is still the baseline row", healed.isBaselineRestore)
+        assertEquals(0, repo.takeLostImportsNotice())
     }
 
     @Test

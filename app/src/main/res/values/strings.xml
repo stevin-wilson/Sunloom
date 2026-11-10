@@ -161,6 +161,10 @@
     <string name="msg_sync_interrupted">Online sync interrupted: %1$s</string>
     <string name="msg_check_connection">check connection</string>
     <string name="msg_next_wallpaper_fallback">next wallpaper</string>
+    <plurals name="msg_lost_imports">
+        <item quantity="one">%1$d imported photo could not be restored on this device and is gone. Import it again if you still have it.</item>
+        <item quantity="other">%1$d imported photos could not be restored on this device and are gone. Import them again if you still have them.</item>
+    </plurals>
     <plurals name="msg_batch_checked">
         <item quantity="one">Checked %1$d image — approved ones are in your reserve.</item>
         <item quantity="other">Checked %1$d images — approved ones are in your reserve.</item>

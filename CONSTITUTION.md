@@ -1,7 +1,7 @@
 # Wallpaper Tool Development Constitution
 
 - **Product:** Sunloom (`com.sunloom.app`)
-- **Status:** Adopted v0.29 (Governing Engineering Law) **[v0.29]**
+- **Status:** Adopted v0.30 (Governing Engineering Law) **[v0.30]**
 - **Scope:** Product principles, user experience, platform-independent requirements, and platform and distribution obligations confined to Article XVIII **[v0.3]**
 - **Purpose:** Guide product and engineering decisions. Articles I–XVII remain platform-independent; platform-specific obligations live only in Article XVIII so the core law survives a future port. **[v0.3]**
 
@@ -41,6 +41,7 @@ The articles and schedules below carry the current rules; the `[vX.Y]` tags in t
 | v0.27 | 2026-11-08 | Source defaults live in the registry: each registration says whether it is on by default and whether an install that had it on gets it switched off once (`SourceRegistry.defaultEnabledSourceIds`); NASA becomes opt-in, existing installs have it switched off once and a later choice to switch it on is kept, and a newly admitted source joins an existing install only if it is on by default (Schedule A, X §4). Space & Astronomy and Aerial & Earth rest on Wikimedia alone until NASA is switched on. |
 | v0.28 | 2026-11-10 | Two distribution flavors: `github` (sideloaded APK, may check GitHub for updates) and `play` (no update code), one applicationId and signing key; Article XVI task names follow the flavors, CI enforces per-package coverage floors, emulator smoke tests cover the real SQLite, WorkManager and activity, and releases are signed APKs built from a tag by a GitHub workflow with tag-derived versions (XVI, XVII §5, XVIII §1, §4). |
 | v0.29 | 2026-11-10 | Setup choices are reversible: an "Automatic switching" switch in Schedule, and Setup Guide reopens first-run setup as a screen, saving nothing until it is finished (XII §1). |
+| v0.30 | 2026-11-10 | Restore honesty: a personal photo or baseline copy whose file did not survive a restore is marked gone (no phantom size in the cache count) and the loss is reported once (IX §5). |
 
 ---
 
@@ -196,7 +197,7 @@ A wallpaper should look intentionally selected for the display on which it appea
 2. **Protected reserve floor:** The local library maintains at least **3 Light + 3 Dark** approved wallpapers protected from cache eviction (in addition to active wallpapers, user favorites, and the baseline restore wallpaper).
 3. **Atomic wallpaper changes:** A candidate wallpaper is fully downloaded, validated through L1–L4, and verified to exist on disk (`fileSizeBytes > 0`) before `WallpaperManager` is invoked. If applying a wallpaper fails, the scheduler advances to the next eligible reserve wallpaper rather than getting stuck.
 4. **Event-driven schedule recovery:** Time changes (`TIME_SET`) and timezone changes (`TIMEZONE_CHANGED`) reschedule the next transition immediately.
-5. **Restored libraries heal:** Auto Backup restores the library database but not the image files. At startup and at the start of scheduled work, rows whose image file is missing are marked evicted (provenance retained), counts exclude them, and the next sync downloads them again, keeping their Kept flag and play history. **[v0.14]**
+5. **Restored libraries heal:** Auto Backup restores the library database but not the image files. At startup and at the start of scheduled work, rows whose image file is missing are marked evicted (provenance retained), counts exclude them, and the next sync downloads them again, keeping their Kept flag and play history. A personal photo or the baseline copy that the restore could not bring back cannot be downloaded again: its row is kept but marked gone the same way, so its missing size no longer counts toward the cache, evicts real images or holds back top-ups, and the person is told once how many personal photos were lost. **[v0.14, v0.30]**
 
 ## Article X: Resource Restraint and Network Budgets **[v0.4]**
 
