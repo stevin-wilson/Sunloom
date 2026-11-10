@@ -28,6 +28,55 @@ class WorkerResultMappingTest {
     private fun refresh(attempt: Int, cancelled: BooleanArray = booleanArrayOf(false), exec: suspend () -> Int) =
         runBlocking { mapRefreshWorkResult(attempt, exec) { cancelled[0] = true } }
 
+    // Article XVIII §4: every background run ends by checkpointing the database, so an Auto Backup taken while the
+    // app is closed does not miss what the run just wrote (the -wal file is not part of the backup).
+
+    private fun changeAfter(ran: IntArray, attempt: Int = 0, afterRun: () -> Unit = { ran[0]++ }, exec: suspend () -> WallpaperStatus?) =
+        runBlocking { mapChangeWorkResult(attempt, exec, afterRun = afterRun, onStoreUnavailable = {}) }
+
+    private fun refreshAfter(ran: IntArray, attempt: Int = 0, afterRun: () -> Unit = { ran[0]++ }, exec: suspend () -> Int) =
+        runBlocking { mapRefreshWorkResult(attempt, exec, afterRun = afterRun, onStoreUnavailable = {}) }
+
+    @Test
+    fun change_afterRunRunsOnEveryOutcome() {
+        val ran = intArrayOf(0)
+        changeAfter(ran) { WallpaperStatus.APPLIED_SUCCESSFULLY }
+        changeAfter(ran) { WallpaperStatus.FAILED_TEMPORARILY }
+        changeAfter(ran) { throw IllegalStateException("boom") }
+        changeAfter(ran) { throw LibraryStoreUnavailableException("down") }
+        assertEquals(4, ran[0])
+    }
+
+    @Test
+    fun change_afterRunRunsWhenTheWorkIsCancelled() {
+        val ran = intArrayOf(0)
+        try {
+            changeAfter(ran) { throw CancellationException("stopped") }
+            fail("cancellation must propagate")
+        } catch (_: CancellationException) {
+        }
+        assertEquals(1, ran[0])
+    }
+
+    @Test
+    fun change_aFailingAfterRunDoesNotChangeTheResult() {
+        val ran = intArrayOf(0)
+        val result = changeAfter(ran, afterRun = { throw IllegalStateException("checkpoint failed") }) {
+            WallpaperStatus.APPLIED_SUCCESSFULLY
+        }
+        assertEquals(Result.success(), result)
+    }
+
+    @Test
+    fun refresh_afterRunRunsOnEveryOutcomeAndCannotChangeTheResult() {
+        val ran = intArrayOf(0)
+        assertEquals(Result.success(), refreshAfter(ran) { 3 })
+        assertEquals(Result.retry(), refreshAfter(ran) { throw IllegalStateException("boom") })
+        assertEquals(Result.retry(), refreshAfter(ran) { throw LibraryStoreUnavailableException("down") })
+        assertEquals(3, ran[0])
+        assertEquals(Result.success(), refreshAfter(ran, afterRun = { throw IllegalStateException("x") }) { 0 })
+    }
+
     @Test
     fun change_successAndNullStatusMapToSuccess() {
         assertEquals(Result.success(), change(0) { WallpaperStatus.APPLIED_SUCCESSFULLY })

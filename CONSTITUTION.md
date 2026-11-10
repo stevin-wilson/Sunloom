@@ -1,7 +1,7 @@
 # Wallpaper Tool Development Constitution
 
 - **Product:** Sunloom (`com.sunloom.app`)
-- **Status:** Adopted v0.30 (Governing Engineering Law) **[v0.30]**
+- **Status:** Adopted v0.31 (Governing Engineering Law) **[v0.31]**
 - **Scope:** Product principles, user experience, platform-independent requirements, and platform and distribution obligations confined to Article XVIII **[v0.3]**
 - **Purpose:** Guide product and engineering decisions. Articles I–XVII remain platform-independent; platform-specific obligations live only in Article XVIII so the core law survives a future port. **[v0.3]**
 
@@ -42,6 +42,7 @@ The articles and schedules below carry the current rules; the `[vX.Y]` tags in t
 | v0.28 | 2026-11-10 | Two distribution flavors: `github` (sideloaded APK, may check GitHub for updates) and `play` (no update code), one applicationId and signing key; Article XVI task names follow the flavors, CI enforces per-package coverage floors, emulator smoke tests cover the real SQLite, WorkManager and activity, and releases are signed APKs built from a tag by a GitHub workflow with tag-derived versions (XVI, XVII §5, XVIII §1, §4). |
 | v0.29 | 2026-11-10 | Setup choices are reversible: an "Automatic switching" switch in Schedule, and Setup Guide reopens first-run setup as a screen, saving nothing until it is finished (XII §1). |
 | v0.30 | 2026-11-10 | Restore honesty: a personal photo or baseline copy whose file did not survive a restore is marked gone (no phantom size in the cache count) and the loss is reported once (IX §5). |
+| v0.31 | 2026-11-10 | The database is checkpointed at the end of every background run as well as when the app stops, so Auto Backup never misses a worker's writes (XVIII §4). |
 
 ---
 
@@ -238,7 +239,7 @@ A wallpaper should look intentionally selected for the display on which it appea
 4. **Store declarations:**
    - Applies to the `play` flavor: the Play Data safety declaration must accurately reflect that the developer collects no user data. **[v0.28]**
    - The privacy policy must name every source host the app contacts and state that those hosts receive the device's network requests.
-   - Auto Backup rules (`dataExtractionRules` / `fullBackupContent`) back up user preferences and a WAL-checkpointed SQLite database while excluding `-wal`/`-shm` transient files and the `wallpapers/` and `quarantine/` image directories. **[v0.6]**
+   - Auto Backup rules (`dataExtractionRules` / `fullBackupContent`) back up user preferences and the SQLite database file (checkpointed when the app stops and at the end of every background run, so the excluded `-wal` file holds nothing a backup would miss) while excluding `-wal`/`-shm` transient files and the `wallpapers/` and `quarantine/` image directories. **[v0.6]**
    - The content rating questionnaire is answered conservatively.
 5. **Lightweight verification & optional on-device AI:** Core safety and visual evaluation ship as deterministic, zero-bloat verification (`SafetyGate` + `ImageEvaluator`). System-provided or bundled on-device AI features may be added only as an extra reject-only signal. They must never be a sole approver or compromise laptop resource restraint (Preamble & Article IV §5).
 6. **Window model:** Sunloom runs as a single window (`launchMode="singleTask"`): relaunching focuses the existing window and any images it carries are imported into it. Wallpaper state is global to the device, so parallel windows would only contend for the same database and schedule. **[v0.9]**

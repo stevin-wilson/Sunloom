@@ -441,6 +441,15 @@ class SunloomWallpaperScheduler(
     }
 }
 
+/**
+ * Folds the database's write-ahead log into the main file at the end of a background run. Auto Backup copies
+ * `sunloom_library.db` but not the `-wal` file, and a run can finish while the app is closed, so without this a
+ * backup taken afterwards would miss the run's last writes (blocklist and rejection rows especially).
+ */
+internal fun checkpointAfterRun(context: Context) {
+    context.appContainer().newRepository().checkpointStore()
+}
+
 class ChangeWorker(
     appContext: Context,
     params: WorkerParameters
@@ -449,6 +458,7 @@ class ChangeWorker(
         runAttemptCount = runAttemptCount,
         execute = { SunloomWallpaperScheduler.executeScheduledWallpaperChange(applicationContext) },
         onGiveUp = { SunloomWallpaperScheduler.rearmAfterGivingUp(applicationContext) },
+        afterRun = { checkpointAfterRun(applicationContext) },
         onStoreUnavailable = { SunloomWallpaperScheduler(applicationContext).suspendForUnavailableStore() }
     )
 }
@@ -471,15 +481,31 @@ class RefreshWorker(
     override suspend fun doWork(): Result = mapRefreshWorkResult(
         runAttemptCount = runAttemptCount,
         execute = { SunloomWallpaperScheduler.executeScheduledCatalogRefresh(applicationContext) },
+        afterRun = { checkpointAfterRun(applicationContext) },
         onStoreUnavailable = { SunloomWallpaperScheduler(applicationContext).suspendForUnavailableStore() }
     )
 }
 
-/** Maps a change execution outcome to a WorkManager [ListenableWorker.Result]. */
+/**
+ * Maps a change execution outcome to a WorkManager [ListenableWorker.Result]. [afterRun] runs once the attempt ends,
+ * whatever its outcome (see [checkpointAfterRun]); it cannot change the result.
+ */
 internal suspend fun mapChangeWorkResult(
     runAttemptCount: Int,
     execute: suspend () -> WallpaperStatus?,
     onGiveUp: () -> Unit = {},
+    afterRun: () -> Unit = {},
+    onStoreUnavailable: () -> Unit
+): ListenableWorker.Result = try {
+    mapChangeOutcome(runAttemptCount, execute, onGiveUp, onStoreUnavailable)
+} finally {
+    runCatching(afterRun)
+}
+
+private suspend fun mapChangeOutcome(
+    runAttemptCount: Int,
+    execute: suspend () -> WallpaperStatus?,
+    onGiveUp: () -> Unit,
     onStoreUnavailable: () -> Unit
 ): ListenableWorker.Result {
     return try {
@@ -508,8 +534,19 @@ internal suspend fun mapChangeWorkResult(
     }
 }
 
-/** Maps a catalog refresh execution outcome to a WorkManager [ListenableWorker.Result]. */
+/** Maps a catalog refresh execution outcome to a WorkManager [ListenableWorker.Result]; see [mapChangeWorkResult]. */
 internal suspend fun mapRefreshWorkResult(
+    runAttemptCount: Int,
+    execute: suspend () -> Int,
+    afterRun: () -> Unit = {},
+    onStoreUnavailable: () -> Unit
+): ListenableWorker.Result = try {
+    mapRefreshOutcome(runAttemptCount, execute, onStoreUnavailable)
+} finally {
+    runCatching(afterRun)
+}
+
+private suspend fun mapRefreshOutcome(
     runAttemptCount: Int,
     execute: suspend () -> Int,
     onStoreUnavailable: () -> Unit

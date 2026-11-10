@@ -40,6 +40,18 @@ class RealSqliteStoreSmokeTest {
     }
 
     @Test
+    fun checkpointFoldsTheWriteAheadLogIntoTheMainFile() {
+        val store = SqliteLibraryStore(context)
+        store.addBlocklistEntry(BlocklistEntry("asset-wal", "sha-wal", "dhash-wal", "test", "smoke", 2L))
+
+        store.checkpoint()
+
+        // Auto Backup copies the .db file but not the -wal, so the write must now live in the main file.
+        val wal = java.io.File(context.getDatabasePath(SqliteLibraryStore.DATABASE_NAME).path + "-wal")
+        assertTrue("the -wal file must be empty after a TRUNCATE checkpoint", !wal.exists() || wal.length() == 0L)
+    }
+
+    @Test
     fun databaseIsCreatedAtTheCurrentSchemaVersionAndCheckpointsCleanly() {
         val store = SqliteLibraryStore(context)
         store.getAllBlocklistEntries()
