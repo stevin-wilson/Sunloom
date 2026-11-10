@@ -64,8 +64,9 @@ android {
         applicationId = "com.sunloom.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "1.7.0"
+        // Release builds pass the values derived from the git tag (scripts/release_version.py); local builds keep these.
+        versionCode = providers.gradleProperty("sunloom.versionCode").orNull?.toInt() ?: 13
+        versionName = providers.gradleProperty("sunloom.versionName").orNull ?: "1.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

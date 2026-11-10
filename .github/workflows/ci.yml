@@ -20,6 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Release script tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
