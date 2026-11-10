@@ -225,6 +225,12 @@ dependencies {
     testImplementation(libs.androidx.work.testing)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    // On-device smoke tests (src/androidTest), run on emulators in CI.
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.work.runtime.ktx)
 }
 
 tasks.register<JacocoReport>("jacocoTestReport") {
