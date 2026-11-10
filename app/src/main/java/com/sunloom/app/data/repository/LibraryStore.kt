@@ -415,91 +415,24 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
                 )
                 """.trimIndent()
             )
-            db.execSQL(
-                """
-                CREATE TABLE IF NOT EXISTS blocklist (
-                    entry_id TEXT PRIMARY KEY,
-                    asset_id TEXT NOT NULL DEFAULT '',
-                    sha256 TEXT NOT NULL DEFAULT '',
-                    perceptual_hash TEXT NOT NULL DEFAULT '',
-                    source_id TEXT NOT NULL DEFAULT '',
-                    reason_code TEXT NOT NULL,
-                    timestamp_ms INTEGER NOT NULL
-                )
-                """.trimIndent()
-            )
+            db.execSQL(LibraryMigrations.CREATE_BLOCKLIST.trimIndent())
             createIndexes(db)
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-            if (oldVersion < 3) {
-                // Per-image features for variety (lightness, label contrast, warmth, hue); unknown on old rows.
-                val featureColumns = listOf(
-                    "lightness_p50 REAL NOT NULL DEFAULT -1.0",
-                    "label_contrast REAL NOT NULL DEFAULT -1.0",
-                    "warmth REAL NOT NULL DEFAULT 0.0",
-                    "hue_bucket INTEGER NOT NULL DEFAULT -1"
-                )
-                for (columnSpec in featureColumns) {
-                    runCatching { db.execSQL("ALTER TABLE wallpapers ADD COLUMN $columnSpec") }
-                }
-            }
-            if (oldVersion < 2) {
-                val wallpaperColumnsToAdd = listOf(
-                    "description TEXT NOT NULL DEFAULT ''",
-                    "raw_categories_tags TEXT NOT NULL DEFAULT ''",
-                    "license_url TEXT NOT NULL DEFAULT ''",
-                    "license_version TEXT NOT NULL DEFAULT ''",
-                    "perceptual_hash TEXT NOT NULL DEFAULT ''",
-                    "adapter_version TEXT NOT NULL DEFAULT '1.0.0'",
-                    "safety_gate_version TEXT NOT NULL DEFAULT 'v0.1.0'",
-                    "gate_layer_outcomes TEXT NOT NULL DEFAULT 'L1:PASS;L2:PASS;L3:PASS;L4:PASS'",
-                    "rejection_reason_code TEXT",
-                    "crop_x INTEGER NOT NULL DEFAULT 0",
-                    "crop_y INTEGER NOT NULL DEFAULT 0",
-                    "crop_w INTEGER NOT NULL DEFAULT 0",
-                    "crop_h INTEGER NOT NULL DEFAULT 0",
-                    "focal_x REAL NOT NULL DEFAULT 0.5",
-                    "focal_y REAL NOT NULL DEFAULT 0.5",
-                    "uses_blurred_fill INTEGER NOT NULL DEFAULT 0",
-                    "native_coverage REAL NOT NULL DEFAULT 1.0"
-                )
-                for (columnSpec in wallpaperColumnsToAdd) {
-                    runCatching { db.execSQL("ALTER TABLE wallpapers ADD COLUMN $columnSpec") }
-                }
-
-                val rejectionColumnsToAdd = listOf(
-                    "is_permanent INTEGER NOT NULL DEFAULT 1",
-                    "display_signature TEXT NOT NULL DEFAULT ''"
-                )
-                for (columnSpec in rejectionColumnsToAdd) {
-                    runCatching { db.execSQL("ALTER TABLE rejections ADD COLUMN $columnSpec") }
-                }
-
-                db.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS blocklist (
-                        entry_id TEXT PRIMARY KEY,
-                        asset_id TEXT NOT NULL DEFAULT '',
-                        sha256 TEXT NOT NULL DEFAULT '',
-                        perceptual_hash TEXT NOT NULL DEFAULT '',
-                        source_id TEXT NOT NULL DEFAULT '',
-                        reason_code TEXT NOT NULL,
-                        timestamp_ms INTEGER NOT NULL
-                    )
-                    """.trimIndent()
-                )
-                createIndexes(db)
-            }
+            // SQLiteOpenHelper runs this in a transaction: if a statement throws, nothing is applied, the version
+            // stays where it was, and the open fails (storage unavailable) instead of half-migrating.
+            for (sql in LibraryMigrations.statements(oldVersion) { table -> columnNames(db, table) }) db.execSQL(sql)
         }
 
+        private fun columnNames(db: SQLiteDatabase, table: String): Set<String> =
+            db.rawQuery("PRAGMA table_info($table)", null).use { c ->
+                val nameIndex = c.getColumnIndexOrThrow("name")
+                buildSet { while (c.moveToNext()) add(c.getString(nameIndex)) }
+            }
+
         private fun createIndexes(db: SQLiteDatabase) {
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_wallpapers_retrieved_at ON wallpapers(retrieved_at DESC)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_wallpapers_source_id ON wallpapers(source_id)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_rejections_timestamp ON rejections(timestamp_ms DESC)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_blocklist_sha256 ON blocklist(sha256)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_blocklist_phash ON blocklist(perceptual_hash)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_blocklist_asset ON blocklist(asset_id)")
+            LibraryMigrations.INDEXES.forEach(db::execSQL)
         }
     }
 

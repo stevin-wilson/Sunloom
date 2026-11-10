@@ -64,4 +64,25 @@ class RealSqliteStoreSmokeTest {
         db.use { assertEquals(SqliteLibraryStore.DATABASE_VERSION, it.version) }
         assertTrue(store.getAllWallpapers().isEmpty())
     }
+
+    @Test
+    fun aVersion1DatabaseUpgradesOnTheDevicesSqlite() {
+        val path = context.getDatabasePath(SqliteLibraryStore.DATABASE_NAME).also { it.parentFile?.mkdirs() }.path
+        android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(path, null).use { db ->
+            // Only the tables the upgrade alters; the column additions are what is being exercised.
+            db.execSQL("CREATE TABLE wallpapers (id TEXT PRIMARY KEY)")
+            db.execSQL("CREATE TABLE rejections (asset_id TEXT PRIMARY KEY)")
+            db.version = 1
+        }
+
+        SqliteLibraryStore(context).getAllBlocklistEntries()
+
+        android.database.sqlite.SQLiteDatabase.openDatabase(path, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY).use { db ->
+            assertEquals(SqliteLibraryStore.DATABASE_VERSION, db.version)
+            val wallpaperColumns = db.rawQuery("PRAGMA table_info(wallpapers)", null).use { c ->
+                buildSet { while (c.moveToNext()) add(c.getString(1)) }
+            }
+            assertTrue(wallpaperColumns.containsAll(listOf("description", "crop_x", "lightness_p50", "hue_bucket")))
+        }
+    }
 }
