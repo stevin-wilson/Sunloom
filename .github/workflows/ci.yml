@@ -41,6 +41,11 @@ jobs:
           -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
           -Pkotlin.daemon.jvmargs="-Xmx3g"
 
+      # Per-package line-coverage floors (app/coverage-floors.csv). CI-only: the aarch64 dev box skips the real-SQLite
+      # and WorkManager tests, so local coverage sits below what this runner measures. Floors only ratchet upward.
+      - name: Coverage floors
+        run: ./gradlew :app:coverageFloors -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" -Pkotlin.daemon.jvmargs="-Xmx3g"
+
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -51,6 +56,7 @@ jobs:
             app/build/reports/tests/testPlayDebugUnitTest
             app/build/reports/lint-results-githubDebug.html
             app/build/reports/lint-results-playDebug.html
+            app/build/reports/jacoco/jacocoTestReport/html
             build/reports/detekt
             app/build/reports/detekt
           if-no-files-found: ignore
