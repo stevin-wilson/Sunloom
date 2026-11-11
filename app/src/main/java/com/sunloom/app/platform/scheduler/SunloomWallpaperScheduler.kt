@@ -118,7 +118,8 @@ class SunloomWallpaperScheduler(
         val pending = runCatching {
             workManager.getWorkInfosForUniqueWork(WORK_NAME_CHANGE).get().any { !it.state.isFinished }
         }.getOrDefault(true)
-        if (plan.scheduleChanges && pending && ChangeAlarm.isScheduled(context)) {
+        val alarmInPlace = !RefreshSchedulePolicy.usesBackstopAlarm(preferences.scheduleMode) || ChangeAlarm.isScheduled(context)
+        if (plan.scheduleChanges && pending && alarmInPlace) {
             // The change is armed; the periodic refresh uses KEEP, so re-syncing it is harmless and restores it too.
             syncRefreshOnly(preferences)
             return
@@ -213,7 +214,11 @@ class SunloomWallpaperScheduler(
             ExistingWorkPolicy.REPLACE,
             changeRequest
         )
-        ChangeAlarm.schedule(context, delayMs = delayMs)
+        if (RefreshSchedulePolicy.usesBackstopAlarm(effectivePrefs?.scheduleMode)) {
+            ChangeAlarm.schedule(context, delayMs = delayMs)
+        } else {
+            ChangeAlarm.cancel(context) // Follow-OS looks every few minutes; an alarm would only add wake-ups
+        }
 
         scheduleRefreshWork(workManager, schedulePrefs, wifiOnly, deferBatterySaver, rescheduleRefreshWork)
     }
@@ -294,10 +299,19 @@ class SunloomWallpaperScheduler(
             // Follow-OS mode polls every few minutes. When the wallpaper on screen already suits the theme there is
             // nothing to do, and the library pass below (healing, revalidation, reconcile) would only cost battery.
             if (prefs.scheduleMode == ScheduleMode.FOLLOW_OS_THEME) {
-                val current = repo.getCurrentWallpaperId()?.let { repo.getWallpaperById(it) }
+                val currentId = repo.getCurrentWallpaperId()
+                // The theme and the wallpaper are exactly what the last poll verified (or the person chose the system
+                // default for this theme): nothing to read, nothing to do.
+                val verified = repo.getFollowOsVerifiedKey()
+                if (RefreshSchedulePolicy.canSkipFollowOsPoll(prefs.scheduleMode, verified, targetBrightness, currentId)) {
+                    rearmChange(appContext, prefs, nowZoned)
+                    return null
+                }
+                val current = currentId?.let { repo.getWallpaperById(it) }
                 val suits = current?.takeIf { it.localFilePath.isNotBlank() && File(it.localFilePath).exists() }
                     ?.let { BrightnessFit.accepts(it.evaluation, targetBrightness) }
                 if (RefreshSchedulePolicy.isRedundantFollowOsChange(prefs.scheduleMode, suits)) {
+                    repo.setFollowOsVerified(targetBrightness, currentId)
                     rearmChange(appContext, prefs, nowZoned)
                     return null
                 }

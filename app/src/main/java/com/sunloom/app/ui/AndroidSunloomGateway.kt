@@ -463,6 +463,9 @@ class AndroidSunloomGateway(
         val ok = platformAdapter.restoreSystemDefaultWallpaper(dryRunPreviewOnly = prefs.dryRunPreviewOnly)
         return if (ok) {
             repo.clearCurrentWallpaperId()
+            // A Follow-OS poll must not cover the system default with one of ours until the theme changes.
+            val target = solarCalculator.resolveSolarSnapshot(prefs, isSystemInDarkTheme()).targetBrightness
+            repo.markSystemDefaultChosen(target)
             buildSnapshot(repo, context.getString(R.string.msg_restored_googlebookos_system_default_wallpaper), preloadedPrefs = prefs)
         } else {
             buildSnapshot(repo, context.getString(R.string.msg_system_wallpaper_restore_was_not), preloadedPrefs = prefs)

@@ -21,6 +21,7 @@ import com.sunloom.app.data.sources.WikimediaFeaturedSourceAdapter
 import com.sunloom.app.domain.evaluator.ImageEvaluator
 import com.sunloom.app.domain.model.BlocklistEntry
 import com.sunloom.app.domain.model.BrightnessClass
+import com.sunloom.app.domain.model.FollowOsVerification
 import com.sunloom.app.domain.model.CandidateAsset
 import com.sunloom.app.domain.model.DisplayPolicy
 import com.sunloom.app.domain.model.DisplayProfile
@@ -83,6 +84,7 @@ class LocalLibraryRepository(
         // Seeds are re-rendered rather than healed.
         private val HEAL_EXEMPT_SOURCES = setOf(SourceIds.SEED_RESERVE)
         private const val KEY_LOST_IMPORTS = "lost_imports_notice"
+        private const val KEY_FOLLOW_OS_VERIFIED = "follow_os_verified"
         private const val KEY_LAST_HYGIENE = "last_storage_hygiene_ms"
         private const val HYGIENE_INTERVAL_MS = 24L * 60 * 60 * 1000
 
@@ -304,9 +306,23 @@ class LocalLibraryRepository(
         }
     }
 
+    /** What the last Follow-OS poll verified (see [FollowOsVerification.key]); null when nothing is. */
+    fun getFollowOsVerifiedKey(): String? = prefs.getString(KEY_FOLLOW_OS_VERIFIED, null)
+
+    fun setFollowOsVerified(target: BrightnessClass, currentId: String?) {
+        prefs.edit { putString(KEY_FOLLOW_OS_VERIFIED, FollowOsVerification.key(target, currentId)) }
+    }
+
+    /**
+     * The person put the system's own wallpaper back. A Follow-OS poll must not cover it up with one of ours until the
+     * theme changes, so this is recorded as verified for the current theme.
+     */
+    fun markSystemDefaultChosen(target: BrightnessClass) = setFollowOsVerified(target, null)
+
     fun recordWallpaperApplied(wallpaperId: String) {
         val current = getCurrentWallpaperId()
         prefs.edit {
+            remove(KEY_FOLLOW_OS_VERIFIED) // a new wallpaper (or leaving the system default) must be verified afresh
             if (current != null && current != wallpaperId) {
                 putString("previous_wallpaper_id", current)
             }
