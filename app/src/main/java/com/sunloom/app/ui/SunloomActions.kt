@@ -53,7 +53,8 @@ data class SunloomActions(
     val onReopenSetup: () -> Unit,
     val onResetSunloom: () -> Unit,
     val onCopyDiagnostics: () -> Unit,
-    val onReportProblem: () -> Unit
+    val onReportProblem: () -> Unit,
+    val onCheckForUpdates: () -> Unit
 ) {
     companion object {
         /**
@@ -100,7 +101,8 @@ data class SunloomActions(
             onReopenSetup = {},
             onResetSunloom = {},
             onCopyDiagnostics = {},
-            onReportProblem = {}
+            onReportProblem = {},
+            onCheckForUpdates = {}
         )
     }
 }

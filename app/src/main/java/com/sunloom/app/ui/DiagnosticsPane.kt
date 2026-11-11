@@ -53,7 +53,8 @@ internal fun DiagnosticsPane(
     onUpdateMaxCacheBytes: (Long) -> Unit = {},
     onResetSunloom: () -> Unit = {},
     onCopyDiagnostics: () -> Unit = {},
-    onReportProblem: () -> Unit = {}
+    onReportProblem: () -> Unit = {},
+    onCheckForUpdates: () -> Unit = {}
 ) {
     var showResetConfirm by remember { mutableStateOf(false) }
     if (showResetConfirm) {
@@ -83,11 +84,13 @@ internal fun DiagnosticsPane(
         modifier = Modifier.fillMaxSize().desktopScrollbar(listState),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
+        aboutItems(uiState.updateCheck, onCheckForUpdates)
+
         item(key = "diag_header") {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
+                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp).testTag("diag_header")
             ) {
                 Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(
@@ -267,32 +270,6 @@ internal fun DiagnosticsPane(
             )
         }
         item(key = "diag_prepared_gap") { Spacer(Modifier.height(14.dp)) }
-
-        item(key = "diag_about_privacy_card") {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
-            ) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        stringResource(R.string.privacy_open_source_attribution),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        stringResource(R.string.privacy_sunloom_operates_locally_on_your),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        stringResource(R.string.licensing_every_remote_wallpaper_is_veri),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
     }
 }
 

@@ -162,6 +162,7 @@ fun SunloomApp(
     val onResetSunloom = actions.onResetSunloom
     val onCopyDiagnostics = actions.onCopyDiagnostics
     val onReportProblem = actions.onReportProblem
+    val onCheckForUpdates = actions.onCheckForUpdates
     val snackbarHostState = remember { SnackbarHostState() }
     val colorScheme = if (darkTheme) SunloomDarkPalette else SunloomLightPalette
     val shortcutGate = remember { ShortcutGate() }
@@ -421,6 +422,7 @@ fun SunloomApp(
                     onResetSunloom = onResetSunloom,
                     onCopyDiagnostics = onCopyDiagnostics,
                     onReportProblem = onReportProblem,
+                    onCheckForUpdates = onCheckForUpdates,
                     onReopenSetup = onReopenSetup
                     )
                 }
@@ -842,6 +844,7 @@ fun DesktopWorkspaceScreen(
     onResetSunloom: () -> Unit = {},
     onCopyDiagnostics: () -> Unit = {},
     onReportProblem: () -> Unit = {},
+    onCheckForUpdates: () -> Unit = {},
     onReopenSetup: () -> Unit
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -910,7 +913,8 @@ fun DesktopWorkspaceScreen(
                             onUpdateMaxCacheBytes = onUpdateMaxCacheBytes,
                             onResetSunloom = onResetSunloom,
                             onCopyDiagnostics = onCopyDiagnostics,
-                            onReportProblem = onReportProblem
+                            onReportProblem = onReportProblem,
+                            onCheckForUpdates = onCheckForUpdates
                         )
                 
                             else -> Unit

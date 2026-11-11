@@ -165,6 +165,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     },
+                    onCheckForUpdates = { viewModel.checkForUpdates() },
                     onReportProblem = {
                         val url = com.sunloom.app.diagnostics.ReportProblem.issueUrl(com.sunloom.app.diagnostics.AppInfo.current())
                         runCatching {

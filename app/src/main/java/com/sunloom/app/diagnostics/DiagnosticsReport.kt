@@ -67,7 +67,7 @@ object DiagnosticsReport {
 
 /** "Report a problem": a new issue on the project, opened in the browser for the person to read and send. */
 object ReportProblem {
-    private const val ISSUES = "https://github.com/stevin-wilson/Sunloom/issues/new"
+    private const val ISSUES = com.sunloom.app.ui.ProjectLinks.ISSUES_NEW
 
     /**
      * The issue form with the build filled in. The diagnostics themselves are not in the link (they can be long and

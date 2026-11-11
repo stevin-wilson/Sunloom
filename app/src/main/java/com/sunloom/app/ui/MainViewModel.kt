@@ -40,7 +40,9 @@ class MainViewModel(
     private val clockMs: () -> Long = System::currentTimeMillis,
     private val roundPauseMs: Long = 2_000L,
     private val strings: UiStrings = UiStrings.English,
-    private val appInfo: () -> com.sunloom.app.diagnostics.AppInfo = { com.sunloom.app.diagnostics.AppInfo.current() }
+    private val appInfo: () -> com.sunloom.app.diagnostics.AppInfo = { com.sunloom.app.diagnostics.AppInfo.current() },
+    /** The update check, or null in a build that has none (the Play build). */
+    private val updateCheck: com.sunloom.app.update.UpdateCheckFeature? = com.sunloom.app.update.updateCheckFeature()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -165,6 +167,7 @@ class MainViewModel(
             var merged = next.copy(
                 pendingDiscard = cur.pendingDiscard,
                 isSetupReopened = cur.isSetupReopened,
+                updateCheck = cur.updateCheck,
                 isInitialLoading = false
             )
             if (preserveNavigation) {
@@ -373,6 +376,23 @@ class MainViewModel(
             val report = com.sunloom.app.diagnostics.DiagnosticsReport.build(appInfo(), _uiState.value, gateway.recentCrashes())
             onReady(report)
             _uiState.update { s -> s.copy(statusBannerMessage = strings.diagnosticsCopied) }
+        }
+    }
+
+    /** "Check for updates" (GitHub build): asks, shows that it is checking, then what was found. A no-op where there is none. */
+    fun checkForUpdates() {
+        val feature = updateCheck ?: return
+        if (_uiState.value.updateCheck == UpdateCheckUiState.Checking) return
+        _uiState.update { s -> s.copy(updateCheck = UpdateCheckUiState.Checking) }
+        viewModelScope.launch(workDispatcher) {
+            val result = try {
+                feature.check(appInfo().versionName)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                com.sunloom.app.update.UpdateCheckResult.Failed
+            }
+            _uiState.update { s -> s.copy(updateCheck = UpdateCheckUiState.Done(result)) }
         }
     }
 

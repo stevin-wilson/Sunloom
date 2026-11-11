@@ -47,6 +47,8 @@ data class SunloomUiState(
     /** "Setup Guide" was pressed: show first-run setup again. A screen, not a saved state (a relaunch starts normally). */
     val isSetupReopened: Boolean = false,
     val isStorageUnavailable: Boolean = false,
+    /** The result of the last "Check for updates" (GitHub build only); shown in About. */
+    val updateCheck: UpdateCheckUiState = UpdateCheckUiState.Idle,
     val preferences: UserPreferences = UserPreferences(),
     val capabilities: PlatformCapabilities = PlatformCapabilities(
         isWallpaperSupported = true,
@@ -126,3 +128,10 @@ private val WallpaperRecord.hasImage: Boolean get() = fileSizeBytes > 0L
 
 /** An image the user can be shown from the reserve: it has a file and is neither rejected nor the restore point. */
 private val WallpaperRecord.isReserveImage: Boolean get() = hasImage && !isRejected && !isBaselineRestore
+
+/** Where "Check for updates" is: not asked, running, or answered. */
+sealed interface UpdateCheckUiState {
+    data object Idle : UpdateCheckUiState
+    data object Checking : UpdateCheckUiState
+    data class Done(val result: com.sunloom.app.update.UpdateCheckResult) : UpdateCheckUiState
+}
