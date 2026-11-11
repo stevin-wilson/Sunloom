@@ -51,7 +51,9 @@ internal fun DiagnosticsPane(
     uiState: SunloomUiState,
     onToggleLegibilityOverlay: () -> Unit = {},
     onUpdateMaxCacheBytes: (Long) -> Unit = {},
-    onResetSunloom: () -> Unit = {}
+    onResetSunloom: () -> Unit = {},
+    onCopyDiagnostics: () -> Unit = {},
+    onReportProblem: () -> Unit = {}
 ) {
     var showResetConfirm by remember { mutableStateOf(false) }
     if (showResetConfirm) {
@@ -129,6 +131,38 @@ internal fun DiagnosticsPane(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                }
+            }
+        }
+
+        item(key = "diag_help") {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
+            ) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        stringResource(R.string.problem_help_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.sectionHeading()
+                    )
+                    Text(
+                        stringResource(R.string.problem_help_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = onCopyDiagnostics,
+                            modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("copy_diagnostics_button")
+                        ) { Text(stringResource(R.string.copy_diagnostics)) }
+                        OutlinedButton(
+                            onClick = onReportProblem,
+                            modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("report_problem_button")
+                        ) { Text(stringResource(R.string.report_a_problem)) }
                     }
                 }
             }

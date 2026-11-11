@@ -37,7 +37,8 @@ class MainViewModel(
     private val workDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val clockMs: () -> Long = System::currentTimeMillis,
     private val roundPauseMs: Long = 2_000L,
-    private val strings: UiStrings = UiStrings.English
+    private val strings: UiStrings = UiStrings.English,
+    private val appInfo: () -> com.sunloom.app.diagnostics.AppInfo = { com.sunloom.app.diagnostics.AppInfo.current() }
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -354,6 +355,18 @@ class MainViewModel(
      */
     fun setAutoChangeEnabled(enabled: Boolean) {
         updatePreferences { it.copy(autoChangeEnabled = enabled) }
+    }
+
+    /**
+     * "Copy diagnostics": builds the report off the main thread (it reads the crash files) and hands it to [onReady],
+     * which puts it on the clipboard. Nothing is sent anywhere.
+     */
+    fun copyDiagnostics(onReady: (String) -> Unit) {
+        viewModelScope.launch(workDispatcher) {
+            val report = com.sunloom.app.diagnostics.DiagnosticsReport.build(appInfo(), _uiState.value, gateway.recentCrashes())
+            onReady(report)
+            _uiState.update { s -> s.copy(statusBannerMessage = strings.diagnosticsCopied) }
+        }
     }
 
     /** "Reset Sunloom": erase everything and start again from first-run setup. */

@@ -1,7 +1,7 @@
 # Wallpaper Tool Development Constitution
 
 - **Product:** Sunloom (`com.sunloom.app`)
-- **Status:** Adopted v0.34 (Governing Engineering Law) **[v0.34]**
+- **Status:** Adopted v0.35 (Governing Engineering Law) **[v0.35]**
 - **Scope:** Product principles, user experience, platform-independent requirements, and platform and distribution obligations confined to Article XVIII **[v0.3]**
 - **Purpose:** Guide product and engineering decisions. Articles I–XVII remain platform-independent; platform-specific obligations live only in Article XVIII so the core law survives a future port. **[v0.3]**
 
@@ -46,6 +46,7 @@ The articles and schedules below carry the current rules; the `[vX.Y]` tags in t
 | v0.32 | 2026-11-10 | Honest migrations: columns are added only when missing and other failures surface (XIV); the combined "Article XIII–XVII" block is split into Articles XIII to XVII so each can be traced to tests. |
 | v0.33 | 2026-11-11 | Storage hygiene: the cache limit counts real bytes on disk; a daily pass removes orphaned image files (after a one-hour grace) and rows of long-evicted, never-kept pictures, leaving the blocklist alone (X §3). |
 | v0.34 | 2026-11-11 | `Reset Sunloom`: a confirmed, irreversible way to erase everything the app keeps and start again from setup (XII §3). |
+| v0.35 | 2026-11-11 | Diagnosability without telemetry: a local crash log, "Copy diagnostics" and "Report a problem" (opens a pre-filled GitHub issue), and release builds strip Log.v/d/i (VIII §2). |
 
 ---
 
@@ -192,7 +193,7 @@ A wallpaper should look intentionally selected for the display on which it appea
 ## Article VIII: Privacy and Data Minimization **[v0.4]**
 
 1. **Local-first storage:** All user preferences, wallpaper history, schedules, provenance records, and blocklists are stored locally on the device.
-2. **Zero telemetry:** The app includes no analytics SDKs, crash-reporting trackers, advertising identifiers, or developer-operated tracking endpoints.
+2. **Zero telemetry:** The app includes no analytics SDKs, crash-reporting trackers, advertising identifiers, or developer-operated tracking endpoints. A crash is written to a small file in the app's private storage (kept out of Auto Backup, the latest five kept) and goes nowhere on its own; Storage & About can copy diagnostics (build, device, displays, source health, recent crashes; never location or photo titles) and open a pre-filled GitHub issue for the person to read and send. Release builds strip verbose, debug and info logging **[v0.35]**.
 3. **Zero embedded secrets:** No API keys, OAuth client secrets, or keystore passwords may be embedded in source code, resources, or build scripts across any variant.
 
 ## Article IX: Offline Reliability and Reserve Management **[v0.4]**

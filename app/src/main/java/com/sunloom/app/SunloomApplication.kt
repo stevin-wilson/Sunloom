@@ -10,6 +10,12 @@ import com.sunloom.app.data.repository.LocalLibraryRepository
  */
 class SunloomApplication : Application() {
     val container: AppContainer by lazy { AppContainer(this) }
+
+    override fun onCreate() {
+        super.onCreate()
+        // Only installs a handler (no I/O): an uncaught crash is written to a small local file the person can share.
+        com.sunloom.app.diagnostics.CrashLog.install(this)
+    }
 }
 
 /**

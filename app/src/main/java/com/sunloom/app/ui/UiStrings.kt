@@ -13,6 +13,7 @@ interface UiStrings {
     val settingNotSaved: String
     val storageProblem: String
     val resetDone: String
+    val diagnosticsCopied: String
     val fetchingCatalogs: String
     fun scheduleEnabled(modeLabel: String): String
 
@@ -28,6 +29,7 @@ interface UiStrings {
             override val manualModeEnabled = "Manual mode enabled — click Next Wallpaper whenever you'd like a change"
             override val settingNotSaved = "Couldn't save that setting. Your previous choice was kept."
             override val storageProblem = "Couldn't finish that. Check free space and your connection, then try again."
+            override val diagnosticsCopied = "Diagnostics copied. Paste them into your report."
             override val resetDone = "Sunloom was reset. Set it up again whenever you like."
             override val fetchingCatalogs = "Fetching high-resolution wallpapers from online catalogs…"
             override fun scheduleEnabled(modeLabel: String) = "Automatic wallpaper schedule enabled ($modeLabel)"
@@ -43,6 +45,7 @@ class AndroidUiStrings(private val context: Context) : UiStrings {
     override val manualModeEnabled: String get() = context.getString(R.string.msg_manual_mode_enabled)
     override val settingNotSaved: String get() = context.getString(R.string.msg_setting_not_saved)
     override val storageProblem: String get() = context.getString(R.string.msg_storage_problem)
+    override val diagnosticsCopied: String get() = context.getString(R.string.msg_diagnostics_copied)
     override val resetDone: String get() = context.getString(R.string.msg_reset_done)
     override val fetchingCatalogs: String get() = context.getString(R.string.msg_fetching_catalogs)
     override fun scheduleEnabled(modeLabel: String): String = context.getString(R.string.msg_schedule_enabled, modeLabel)

@@ -19,6 +19,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
+import androidx.core.net.toUri
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
@@ -156,6 +157,20 @@ class MainActivity : ComponentActivity() {
                     onToggleAutoSwitch = { viewModel.setAutoChangeEnabled(it) },
                     onReopenSetup = { viewModel.reopenSetup() },
                     onResetSunloom = { viewModel.resetSunloom() },
+                    onCopyDiagnostics = {
+                        viewModel.copyDiagnostics { text ->
+                            runOnUiThread {
+                                val clipboard = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Sunloom diagnostics", text))
+                            }
+                        }
+                    },
+                    onReportProblem = {
+                        val url = com.sunloom.app.diagnostics.ReportProblem.issueUrl(com.sunloom.app.diagnostics.AppInfo.current())
+                        runCatching {
+                            startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, url.toUri()))
+                        }
+                    },
                     onTogglePause = { viewModel.togglePauseAutomation() },
                     onRestoreOriginal = { viewModel.restoreOriginalBaselineWallpaper() },
                     onRestoreSystemDefault = { viewModel.restoreSystemDefaultWallpaper() },

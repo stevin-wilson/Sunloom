@@ -68,6 +68,9 @@ class MainViewModelTest {
         override suspend fun applyPreviousWallpaper(): SunloomUiState = applyWallpaper(state.previousWallpaperId ?: "seed-1")
         override suspend fun restoreBaselineWallpaper(): SunloomUiState = applyWallpaper("seed-1")
 
+        var crashes: List<com.sunloom.app.diagnostics.CrashEntry> = emptyList()
+        override suspend fun recentCrashes() = crashes
+
         var resetCount = 0
         override suspend fun resetSunloom(): SunloomUiState {
             resetCount++
@@ -174,6 +177,19 @@ class MainViewModelTest {
         viewModel.changeToNextWallpaper()
         assertEquals(UiStrings.English.storageProblem, viewModel.uiState.value.statusBannerMessage)
         assertFalse(viewModel.uiState.value.isApplyingWallpaper)
+    }
+
+    @Test
+    fun `copying diagnostics hands over a report and says so`() {
+        fakeGateway.crashes = listOf(com.sunloom.app.diagnostics.CrashEntry("crash-1.txt", 1L, "RuntimeException: boom\nat x"))
+        var copied: String? = null
+
+        viewModel.copyDiagnostics { copied = it }
+
+        val text = copied!!
+        assertTrue(text.startsWith("Sunloom diagnostics"))
+        assertTrue("recent crashes are included", text.contains("RuntimeException: boom"))
+        assertEquals(UiStrings.English.diagnosticsCopied, viewModel.uiState.value.statusBannerMessage)
     }
 
     @Test
