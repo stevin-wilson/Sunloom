@@ -320,7 +320,11 @@ private fun ReserveHeader(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s), verticalAlignment = Alignment.CenterVertically) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.s),
+                    itemVerticalAlignment = Alignment.CenterVertically
+                ) {
                     FilterChip(
                         selected = !gridView,
                         onClick = { onSetGridView(false) },

@@ -24,6 +24,12 @@ enum class WorkspaceWidthClass {
     }
 }
 
+/**
+ * Bottom-navigation labels stay on screen up to 130 percent text. Beyond that they would wrap or be cut off, so only the
+ * chosen section shows its label and every item keeps its name for screen readers.
+ */
+fun navLabelsAlwaysVisible(fontScale: Float): Boolean = fontScale <= 1.3f
+
 /** Below this pane width the Today canvas stacks its preview above the provenance card. */
 val TodayCanvasStackBreakpoint: Dp = 720.dp
 

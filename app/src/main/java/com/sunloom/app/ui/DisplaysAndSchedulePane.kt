@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import com.sunloom.app.R
 import androidx.compose.ui.res.stringResource
@@ -166,10 +167,11 @@ internal fun DisplaysAndSchedulePane(
                     if (showCustomCoords) {
                         val latError = coordinateError(customLatText, -90.0, 90.0)
                         val lonError = coordinateError(customLonText, -180.0, 180.0)
-                        Row(
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(Spacing.s),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(Spacing.s),
+                            itemVerticalAlignment = Alignment.CenterVertically
                         ) {
                             OutlinedTextField(
                                 value = customLatText,
@@ -180,6 +182,7 @@ internal fun DisplaysAndSchedulePane(
                                 supportingText = { latError?.let { Text(it) } },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 modifier = Modifier
+                                    .widthIn(min = 140.dp)
                                     .weight(1f)
                                     .suppressShortcutsWhileFocused()
                                     .testTag("custom_lat_input")
@@ -193,6 +196,7 @@ internal fun DisplaysAndSchedulePane(
                                 supportingText = { lonError?.let { Text(it) } },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 modifier = Modifier
+                                    .widthIn(min = 140.dp)
                                     .weight(1f)
                                     .suppressShortcutsWhileFocused()
                                     .testTag("custom_lon_input")
@@ -356,7 +360,10 @@ internal fun DisplaysAndSchedulePane(
                     )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.m)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.m),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.s)
+                ) {
                     OutlinedButton(onClick = onReopenSetup, modifier = Modifier.desktopControl(CircleShape)) {
                         Text(stringResource(R.string.setup_guide))
                     }

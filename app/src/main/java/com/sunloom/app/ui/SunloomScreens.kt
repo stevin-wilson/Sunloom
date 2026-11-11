@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.shape.CircleShape
 import com.sunloom.app.R
 import androidx.activity.compose.BackHandler
@@ -731,13 +732,16 @@ fun DesktopWorkspaceScreen(
                     windowInsets = WindowInsets(0, 0, 0, 0),
                     modifier = Modifier.testTag("workspace_nav_bar")
                 ) {
+                    val labelsVisible = navLabelsAlwaysVisible(LocalDensity.current.fontScale)
                     DesktopNavTab.entries.forEach { tab ->
                         NavigationBarItem(
                             selected = uiState.activeTab == tab,
                             onClick = { onSelectTab(tab) },
                             modifier = Modifier.desktopControl(MaterialTheme.shapes.large).testTag("nav_${tab.name}"),
-                            icon = { Icon(navIcon(tab), contentDescription = null) }, // the visible label names it
-                            label = { Text(tab.label, fontSize = 12.sp, maxLines = 1) }
+                            // The visible label names it; when labels give way to large text the icon must.
+                            icon = { Icon(navIcon(tab), contentDescription = if (labelsVisible) null else tab.label) },
+                            label = { Text(tab.label, fontSize = 12.sp, maxLines = 1) },
+                            alwaysShowLabel = labelsVisible
                         )
                     }
                 }

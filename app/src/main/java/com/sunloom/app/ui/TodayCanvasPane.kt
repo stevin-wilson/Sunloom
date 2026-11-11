@@ -260,10 +260,11 @@ internal fun TodayCanvasPane(
                                 }
                             }
 
-                            Row(
+                            FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalArrangement = Arrangement.spacedBy(Spacing.s),
+                                itemVerticalAlignment = Alignment.CenterVertically
                             ) {
                                 FlowRow(
                                     horizontalArrangement = Arrangement.spacedBy(Spacing.s),
