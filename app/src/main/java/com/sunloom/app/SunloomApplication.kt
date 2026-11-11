@@ -19,6 +19,7 @@ class SunloomApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         lastNight = isNight(resources.configuration)
+        com.sunloom.app.ui.UiPrefs.warm(this) // only starts the background load of a small file
         // Only installs a handler (no I/O): an uncaught crash is written to a small local file the person can share.
         com.sunloom.app.diagnostics.CrashLog.install(this)
     }

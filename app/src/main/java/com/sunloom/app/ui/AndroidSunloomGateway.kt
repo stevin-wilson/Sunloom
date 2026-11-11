@@ -36,6 +36,8 @@ class AndroidSunloomGateway(
     @Volatile
     private var resolvedRepository: LocalLibraryRepository? = repository
 
+    private val reconcileGate = DisplayReconcileGate()
+
     private fun obtainRepository(): LocalLibraryRepository {
         resolvedRepository?.let { return it }
         return synchronized(this) {
@@ -91,6 +93,7 @@ class AndroidSunloomGateway(
         if (display != null) {
             reconcileActiveWallpaperForDisplay(repo, display, connectedDisplays, prefs, activeBefore)
             promoteNonSeedOverSeedIfNeeded(repo, prefs, display, connectedDisplays)
+            reconcileGate.markReconciled(platformAdapter.computeDisplayGeometryKey(connectedDisplays, prefs.displayPolicy))
             buildSnapshot(repo, lostNotice ?: "Ready", preloadedPrefs = prefs)
         } else {
             buildSnapshot(
@@ -106,6 +109,12 @@ class AndroidSunloomGateway(
         val display = platformAdapter.getPrimaryOrSharpestDisplayOrNull(connectedDisplays)
         val prevGeometryKey = repo.getLastAppliedDisplayGeometryKey()
         val prefs = repo.loadPreferences()
+        val currentGeometryKey = display?.let { platformAdapter.computeDisplayGeometryKey(connectedDisplays, prefs.displayPolicy) }
+        if (currentGeometryKey != null && !reconcileGate.needsReconcile(currentGeometryKey)) {
+            // The display set is the one the library was already reconciled for (a resize, a focus change, a start):
+            // nothing to plan, so skip the pass and just report the library as it is.
+            return@withGatewayIo buildSnapshot(repo, "Ready", preloadedPrefs = prefs)
+        }
         val activeBefore = repo.getCurrentWallpaperId()
         repo.purgeRevokedSources()
         if (display == null) {
@@ -123,7 +132,7 @@ class AndroidSunloomGateway(
         repo.syncSourceEnabledStates(prefs.enabledSources)
         val reapplied = reconcileActiveWallpaperForDisplay(repo, display, connectedDisplays, prefs, activeBefore)
         promoteNonSeedOverSeedIfNeeded(repo, prefs, display, connectedDisplays)
-        val currentGeometryKey = platformAdapter.computeDisplayGeometryKey(connectedDisplays, prefs.displayPolicy)
+        currentGeometryKey?.let(reconcileGate::markReconciled)
         val banner = if (reapplied || reserveChanged || (prevGeometryKey != null && prevGeometryKey != currentGeometryKey)) {
             if (connectedDisplays.size > 1 && prefs.displayPolicy == DisplayPolicy.SAME_ON_ALL_DISPLAYS) {
                 context.resources.getQuantityString(R.plurals.msg_adapted_multi_display, connectedDisplays.size, connectedDisplays.size)
@@ -293,6 +302,7 @@ class AndroidSunloomGateway(
 
     override suspend fun savePreferences(preferences: UserPreferences): SunloomUiState = withGatewayIo { repo ->
         val activeBefore = repo.getCurrentWallpaperId()
+        reconcileGate.invalidate() // what a pass does depends on the preferences; the next display change plans afresh
         val cleanPreferences = preferences.copy(dryRunPreviewOnly = false)
         val previousPreferences = repo.loadPreferences()
         // Schedule-only / toggle-only edits (the common case) skip the reserve-wide reconcile.
@@ -426,6 +436,14 @@ class AndroidSunloomGateway(
      * Article II §2: Restores the user's saved baseline wallpaper if configured, or clears to the
      * OS system default wallpaper — never silently falling back to `previousWallpaperId`.
      */
+    /** The platform's own idea of what each item is (a call to another process); an unknown type is let through. */
+    override suspend fun filterImageUris(uriStrings: List<String>) = withContext(ioDispatcher) {
+        uriStrings.filter { raw ->
+            val type = runCatching { context.contentResolver.getType(raw.toUri()) }.getOrNull()
+            type == null || type.startsWith("image/")
+        }
+    }
+
     override suspend fun networkConditions() = withContext(ioDispatcher) {
         NetworkConditions(platformAdapter.isUnmeteredNetwork(), platformAdapter.isDataSaverRestricting())
     }
@@ -440,6 +458,7 @@ class AndroidSunloomGateway(
             platformAdapter.cancelAllScheduledWork()
             repo.wipeAllData()
             resolvedRepository = null // its store is gone; the next one opens a fresh database
+            reconcileGate.invalidate()
             PreviewBitmapCache.clear()
         }
         return loadInitialSnapshot()

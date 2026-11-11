@@ -52,7 +52,8 @@ class ResetSunloomTest {
         prefsFile("sunloom_preferences").edit().putString("current_wallpaper_id", "w1").putInt("lost_imports_notice", 3).commit()
         prefsFile("sunloom_display_history").edit().putString("remembered_displays_v1", "[{}]").commit()
         prefsFile("sunloom_ui").edit().putBoolean("reserve_grid_view", true).commit()
-        return listOf(image, staged, exported)
+        val seedRender = File(context.cacheDir, "seed_renders/1000x625_1000x625/seed-a.png").apply { parentFile!!.mkdirs(); writeBytes(ByteArray(8)) }
+        return listOf(image, staged, exported, seedRender)
     }
 
     @Test

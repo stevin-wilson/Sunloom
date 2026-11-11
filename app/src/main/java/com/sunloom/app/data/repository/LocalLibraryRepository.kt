@@ -84,6 +84,7 @@ class LocalLibraryRepository(
         // Seeds are re-rendered rather than healed.
         private val HEAL_EXEMPT_SOURCES = setOf(SourceIds.SEED_RESERVE)
         private const val KEY_LOST_IMPORTS = "lost_imports_notice"
+        private const val SEED_RENDER_CACHE_DIR = "seed_renders"
         private const val KEY_FOLLOW_OS_VERIFIED = "follow_os_verified"
         private const val KEY_LAST_HYGIENE = "last_storage_hygiene_ms"
         private const val HYGIENE_INTERVAL_MS = 24L * 60 * 60 * 1000
@@ -151,7 +152,10 @@ class LocalLibraryRepository(
     private val blocklist = Blocklist(store)
     val wallpaperDir: File = File(appContext.filesDir, "wallpapers").apply { mkdirs() }
 
-    private val seedReserve = SeedReserve(wallpaperDir, safetyGate, imageEvaluator, maxSeedRenderPixels)
+    private val seedReserve = SeedReserve(
+        wallpaperDir, safetyGate, imageEvaluator, maxSeedRenderPixels,
+        renderCacheDir = File(appContext.cacheDir, SEED_RENDER_CACHE_DIR)
+    )
 
     val quarantineDir: File = File(appContext.noBackupFilesDir, "quarantine").apply { mkdirs() }
 
@@ -896,6 +900,7 @@ class LocalLibraryRepository(
                 PREFERENCE_FILES.forEach { appContext.getSharedPreferences(it, Context.MODE_PRIVATE).edit(commit = true) { clear() } }
                 listOf(wallpaperDir, quarantineDir).forEach { dir -> dir.listFiles().orEmpty().forEach { it.deleteRecursively() } }
                 appContext.cacheDir.listFiles { f -> f.name.startsWith("export-") }.orEmpty().forEach { it.delete() }
+                File(appContext.cacheDir, SEED_RENDER_CACHE_DIR).deleteRecursively()
                 SeedReserve.clearSeedRenderCache()
             }
         }

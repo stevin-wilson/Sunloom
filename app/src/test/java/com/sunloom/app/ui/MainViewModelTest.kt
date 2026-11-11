@@ -68,6 +68,10 @@ class MainViewModelTest {
         override suspend fun applyPreviousWallpaper(): SunloomUiState = applyWallpaper(state.previousWallpaperId ?: "seed-1")
         override suspend fun restoreBaselineWallpaper(): SunloomUiState = applyWallpaper("seed-1")
 
+        /** Which picked or dropped items the platform recognises as images; null means all of them. */
+        var imageUris: Set<String>? = null
+        override suspend fun filterImageUris(uriStrings: List<String>) = uriStrings.filter { imageUris?.contains(it) ?: true }
+
         var crashes: List<com.sunloom.app.diagnostics.CrashEntry> = emptyList()
         override suspend fun recentCrashes() = crashes
 
@@ -177,6 +181,26 @@ class MainViewModelTest {
         viewModel.changeToNextWallpaper()
         assertEquals(UiStrings.English.storageProblem, viewModel.uiState.value.statusBannerMessage)
         assertFalse(viewModel.uiState.value.isApplyingWallpaper)
+    }
+
+    @Test
+    fun `dropped or shared items that are not images are left out before importing`() {
+        fakeGateway.imageUris = setOf("content://a/1.jpg", "content://a/3.png")
+
+        viewModel.importLocalUris(listOf("content://a/1.jpg", "content://a/2.pdf", "content://a/3.png"))
+
+        assertEquals("two images imported, the pdf was not", 2, fakeGateway.importApplyFlags.size)
+    }
+
+    @Test
+    fun `nothing is imported, and the caller is told, when no item is an image`() {
+        fakeGateway.imageUris = emptySet()
+        var finished = false
+
+        viewModel.importLocalUris(listOf("content://a/1.pdf")) { finished = true }
+
+        assertTrue(fakeGateway.importApplyFlags.isEmpty())
+        assertTrue("a finished callback still fires so grants are released", finished)
     }
 
     @Test

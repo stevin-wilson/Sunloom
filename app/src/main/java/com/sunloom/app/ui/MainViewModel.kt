@@ -648,16 +648,18 @@ class MainViewModel(
             return
         }
         launchGatewayMutation { current ->
+            val images = gateway.filterImageUris(uriStrings)
+            if (images.isEmpty()) return@launchGatewayMutation current
             var state = current
             // One image behaves like the picker (imported and applied). A batch only fills the reserve:
             // changing the system wallpaper once per image would flash through all of them.
-            val applyAfterImport = uriStrings.size == 1
-            for (uri in uriStrings) {
+            val applyAfterImport = images.size == 1
+            for (uri in images) {
                 state = gateway.importLocalUri(uri, false, applyAfterImport)
             }
-            if (uriStrings.size > 1) {
+            if (images.size > 1) {
                 state = state.copy(
-                    statusBannerMessage = strings.batchChecked(uriStrings.size)
+                    statusBannerMessage = strings.batchChecked(images.size)
                 )
             }
             state

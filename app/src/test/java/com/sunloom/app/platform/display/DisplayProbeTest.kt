@@ -210,4 +210,60 @@ class DisplayProbeTest {
         assertEquals(5, afterForget.size)
         assertFalse(afterForget.any { it.name == "Monitor 6" })
     }
+
+    // --- the remembered-displays file is written when something changed, not on every look ---
+
+    private fun history(): DisplayHistoryStore {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        ctx.getSharedPreferences("sunloom_display_history", Context.MODE_PRIVATE).edit().clear().commit()
+        return DisplayHistoryStore(ctx)
+    }
+
+    private val laptop = DisplayProfile(0, "Built-in", 2560, 1600, densityDpi = 220)
+    private val monitor = DisplayProfile(1, "Monitor", 3840, 2160, densityDpi = 160)
+
+    private fun lastSeen(store: DisplayHistoryStore, display: DisplayProfile) =
+        store.getRememberedDisplays(listOf(display)).single { it.name == display.name }.lastSeenEpochMs
+
+    @Test
+    fun `looking again at the same display straight away does not rewrite the history`() {
+        val store = history()
+        store.recordConnectedDisplays(listOf(laptop), nowEpochMs = 1_000_000L)
+
+        store.recordConnectedDisplays(listOf(laptop), nowEpochMs = 1_000_000L + 60_000L)
+
+        assertEquals("still the first look: nothing was written", 1_000_000L, lastSeen(store, laptop))
+    }
+
+    @Test
+    fun `the last seen time is refreshed once it is a while old`() {
+        val store = history()
+        store.recordConnectedDisplays(listOf(laptop), nowEpochMs = 1_000_000L)
+
+        store.recordConnectedDisplays(listOf(laptop), nowEpochMs = 1_000_000L + DisplayHistoryStore.REFRESH_AFTER_MS + 1)
+
+        assertEquals(1_000_000L + DisplayHistoryStore.REFRESH_AFTER_MS + 1, lastSeen(store, laptop))
+    }
+
+    @Test
+    fun `a newly connected display is recorded at once`() {
+        val store = history()
+        store.recordConnectedDisplays(listOf(laptop), nowEpochMs = 1_000_000L)
+
+        store.recordConnectedDisplays(listOf(laptop, monitor), nowEpochMs = 1_000_000L + 1_000L)
+
+        assertEquals(2, store.getRememberedDisplays(listOf(laptop, monitor)).size)
+        assertEquals(1_000_000L + 1_000L + 1, lastSeen(store, monitor))
+    }
+
+    @Test
+    fun `a display whose details changed is recorded at once`() {
+        val store = history()
+        store.recordConnectedDisplays(listOf(laptop), nowEpochMs = 1_000_000L)
+        val rescaled = laptop.copy(densityDpi = 240)
+
+        store.recordConnectedDisplays(listOf(rescaled), nowEpochMs = 1_000_000L + 1_000L)
+
+        assertEquals(240, store.getRememberedDisplays(listOf(rescaled)).single { it.name == "Built-in" }.densityDpi)
+    }
 }

@@ -32,7 +32,13 @@ internal class SeedReserve(
     private val wallpaperDir: File,
     private val safetyGate: SafetyGate,
     private val imageEvaluator: ImageEvaluator,
-    private val maxRenderPixels: Int
+    private val maxRenderPixels: Int,
+    /**
+     * Where rendered seeds are kept between runs, one folder per display size; the last [KEPT_SIZES] sizes stay. It is a
+     * cache (the system may reclaim it, and a seed is always regenerable), so null simply renders every time.
+     */
+    private val renderCacheDir: File? = null,
+    private val render: (SeedWallpaperSpec, Int, Int) -> Bitmap = { spec, w, h -> SeedRenderer.render(spec, w, h) }
 ) {
 
     /** What one run is for: the display, the size the seeds stand for and the size they are drawn at. */
@@ -62,6 +68,7 @@ internal class SeedReserve(
         for (spec in BundledSeedSourceAdapter.SEED_SPECS) {
             buildRecord(spec, plan, existing.firstOrNull { it.id == spec.id }, blocked)?.let(store)
         }
+        pruneRenderCache()
     }
 
     /**
@@ -134,11 +141,7 @@ internal class SeedReserve(
             val gridH = 30
             val grid = BundledSeedSourceAdapter.generateRgbGrid(spec, gridW, gridH)
             val dHash = SafetyGate.computePerceptualDHashFromPixels(grid, gridW, gridH)
-            val bmp = SeedRenderer.render(spec, widthPx = plan.renderW, heightPx = plan.renderH)
-            val baos = ByteArrayOutputStream()
-            bmp.compress(Bitmap.CompressFormat.PNG, 100, baos)
-            bmp.recycle()
-            val pngBytes = baos.toByteArray()
+            val pngBytes = readCachedRender(spec, plan) ?: renderAndKeep(spec, plan)
             CachedSeedAsset(
                 pngBytes = pngBytes,
                 sha256 = SafetyGate.sha256Hex(pngBytes),
@@ -149,6 +152,58 @@ internal class SeedReserve(
             )
         }
     }
+
+    private fun renderAndKeep(spec: SeedWallpaperSpec, plan: Plan): ByteArray {
+        val bmp = render(spec, plan.renderW, plan.renderH)
+        val baos = ByteArrayOutputStream()
+        bmp.compress(Bitmap.CompressFormat.PNG, 100, baos)
+        bmp.recycle()
+        val pngBytes = baos.toByteArray()
+        writeCachedRender(spec, plan, pngBytes)
+        return pngBytes
+    }
+
+    private fun sizeFolder(plan: Plan): File? =
+        renderCacheDir?.let { File(it, "${plan.renderW}x${plan.renderH}_${plan.targetW}x${plan.targetH}") }
+
+    /** The kept render of [spec] at this size, or null when there is none or it does not look like a whole PNG. */
+    private fun readCachedRender(spec: SeedWallpaperSpec, plan: Plan): ByteArray? = runCatching {
+        val folder = sizeFolder(plan) ?: return null
+        val file = File(folder, "${spec.id}.png")
+        if (!file.isFile) return null
+        val bytes = file.readBytes()
+        if (!looksLikePng(bytes)) {
+            file.delete()
+            return null
+        }
+        folder.setLastModified(System.currentTimeMillis()) // in use now: keep it among the recent sizes
+        bytes
+    }.getOrNull()
+
+    /** Written to a temporary file and renamed, so a render cut short by a crash is never mistaken for a whole one. */
+    private fun writeCachedRender(spec: SeedWallpaperSpec, plan: Plan, bytes: ByteArray) {
+        runCatching {
+            val folder = sizeFolder(plan) ?: return
+            folder.mkdirs()
+            val tmp = File(folder, "${spec.id}.png.tmp")
+            tmp.writeBytes(bytes)
+            if (!tmp.renameTo(File(folder, "${spec.id}.png"))) tmp.delete()
+            folder.setLastModified(System.currentTimeMillis())
+        }
+    }
+
+    /** Keeps the [KEPT_SIZES] most recently used sizes and removes the rest. */
+    private fun pruneRenderCache() {
+        runCatching {
+            renderCacheDir?.listFiles { f -> f.isDirectory }.orEmpty()
+                .sortedByDescending { it.lastModified() }
+                .drop(KEPT_SIZES)
+                .forEach { it.deleteRecursively() }
+        }
+    }
+
+    private fun looksLikePng(bytes: ByteArray): Boolean =
+        bytes.size > PNG_SIGNATURE.size && PNG_SIGNATURE.indices.all { bytes[it] == PNG_SIGNATURE[it] }
 
     private fun provenanceFor(
         spec: SeedWallpaperSpec,
@@ -206,6 +261,11 @@ internal class SeedReserve(
     }
 
     companion object {
+        /** How many display sizes keep their rendered seeds (the current one and the one before it). */
+        const val KEPT_SIZES = 2
+
+        private val PNG_SIGNATURE = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47)
+
         private data class CachedSeedAsset(
             val pngBytes: ByteArray,
             val sha256: String,

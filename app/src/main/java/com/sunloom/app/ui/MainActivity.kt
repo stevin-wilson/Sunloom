@@ -210,8 +210,11 @@ class MainActivity : ComponentActivity() {
     /** Imports images dropped from the Files app or another window (each becomes a reserve item). */
     private fun importDroppedImages(dragEvent: DragEvent): Boolean {
         val clip = dragEvent.clipData ?: return false
-        val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }.filter(::looksLikeImage)
-        if (uris.isEmpty()) return false
+        // The clip's own description says what it carries without asking another process; each item is checked off the
+        // main thread by the view model before it is imported.
+        val carriesImages = (0 until clip.description.mimeTypeCount).any { clip.description.getMimeType(it).startsWith("image/") }
+        val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
+        if (!carriesImages || uris.isEmpty()) return false
         // Cross-app content URIs are only readable while this grant is held; release it as soon as the
         // batch finishes so grants never accumulate for the life of the window.
         val grant = requestDragAndDropPermissions(dragEvent)
@@ -221,25 +224,22 @@ class MainActivity : ComponentActivity() {
 
     /** Imports images delivered by the Share sheet or "Open with" (SEND, SEND_MULTIPLE, VIEW). */
     private fun importFromIntent(source: Intent?) {
-        val uris = ShareIntentImport.extractImageUris(source).filter(::looksLikeImage)
+        val uris = ShareIntentImport.extractImageUris(source)
         if (uris.isEmpty()) return
         viewModel.importLocalUris(uris.map { it.toString() })
     }
 
-    /** MIME is a routing hint only; the L3 payload check is what actually decides (Article VII §4). */
-    private fun looksLikeImage(uri: Uri): Boolean {
-        val type = runCatching { contentResolver.getType(uri) }.getOrNull()
-        return type == null || type.startsWith("image/")
-    }
-
     private fun saveWallpaperAs(record: WallpaperRecord) {
-        if (!exporter.isExportable(record)) {
-            viewModel.announce(getString(R.string.export_failed))
-            return
+        lifecycleScope.launch {
+            // Looks at the file on disk, so not on the main thread.
+            if (!withContext(Dispatchers.IO) { exporter.isExportable(record) }) {
+                viewModel.announce(getString(R.string.export_failed))
+                return@launch
+            }
+            pendingExport = record
+            exportMimeType = exporter.mimeTypeFor(record)
+            exportImageLauncher.launch(exporter.suggestedImageName(record))
         }
-        pendingExport = record
-        exportMimeType = exporter.mimeTypeFor(record)
-        exportImageLauncher.launch(exporter.suggestedImageName(record))
     }
 
     private fun onExportImageTargetChosen(uri: Uri?) {

@@ -247,6 +247,9 @@ class DisplayHistoryStore(context: Context) {
 
     companion object {
         const val MAX_REMEMBERED_DISPLAYS = 6
+
+        /** How old a display's "last seen" may get before looking at it again rewrites it. */
+        const val REFRESH_AFTER_MS = 10L * 60L * 1000L
         private const val PREFS_NAME = "sunloom_display_history"
         private const val KEY_RECORDS_JSON = "remembered_displays_v1"
 
@@ -266,6 +269,15 @@ class DisplayHistoryStore(context: Context) {
         for (entry in loadStoredEntries()) {
             existingByKey[entry.key] = entry
         }
+        // The app looks at the displays on every resize and start. Rewriting the file each time only to move the "last
+        // seen" time is churn: write when a display is new, its details changed, or the time has gone stale.
+        val unchanged = displays.all { d ->
+            val old = existingByKey[computeHistoryKey(d)] ?: return@all false
+            old.name == d.name && old.widthPx == d.widthPx && old.heightPx == d.heightPx &&
+                old.densityDpi == d.densityDpi && old.physicalPpi == d.physicalPpi && old.qualityTier == d.qualityTier &&
+                nowEpochMs - old.lastSeenEpochMs < REFRESH_AFTER_MS
+        }
+        if (unchanged) return
         displays.forEachIndexed { idx, d ->
             val key = computeHistoryKey(d)
             existingByKey[key] = StoredDisplayEntry(

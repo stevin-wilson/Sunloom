@@ -29,6 +29,11 @@ interface SunloomGateway {
     suspend fun onDisplaysChanged(): SunloomUiState = loadInitialSnapshot()
     suspend fun forgetRememberedDisplay(key: String): SunloomUiState = loadInitialSnapshot()
     suspend fun checkpointDatabaseForBackup() {}
+    /**
+     * Keeps the items the platform says are images (a MIME type is only a routing hint; the payload check decides). This
+     * asks another process, so it belongs off the main thread.
+     */
+    suspend fun filterImageUris(uriStrings: List<String>): List<String> = uriStrings
     /** The connection as it is now; tests that do not care assume a free one. */
     suspend fun networkConditions(): NetworkConditions = NetworkConditions(unmetered = true, dataSaverRestricting = false)
     /** The crashes recorded on this device, newest first (for "Copy diagnostics"). */
