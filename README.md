@@ -53,8 +53,10 @@ source URL `https://github.com/stevin-wilson/Sunloom`. Leave "include prerelease
 | `INTERNET` | To download pictures from the sources you have switched on, and (GitHub build) to check for a new version when you ask. |
 | `ACCESS_NETWORK_STATE` | To download only on a network that is not metered, and to respect Data Saver. |
 | `RECEIVE_BOOT_COMPLETED` | To arm the next wallpaper change again after a restart. |
+| `WAKE_LOCK`, `FOREGROUND_SERVICE` | Added by Android's WorkManager, which runs the scheduled wallpaper change and the download job. Sunloom shows no notification and starts no service of its own. |
 
-There is no location, storage, camera, contacts or notification permission. Sunrise and sunset come from the city you
+There is no location, storage, camera, contacts or notification permission. (Installing also lists one permission
+named `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`: Android's own library adds it, and only Sunloom itself can hold it.) Sunrise and sunset come from the city you
 pick (guessed from your time zone at first), never from GPS. Photos you add are read through Android's picker, one at
 a time, when you choose them.
 
