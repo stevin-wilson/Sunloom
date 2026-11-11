@@ -54,7 +54,8 @@ class DocumentationTest {
         val permissions = Regex("uses-permission android:name=\"android.permission.([A-Z_]+)\"").findAll(manifest).map { it.groupValues[1] }.toList()
         assertTrue(permissions.isNotEmpty())
         val readme = text("README.md")
-        val missing = permissions.filterNot { readme.contains(it) }
+        // WorkManager adds these two when the manifests are merged; the installed app has them, so the README says so.
+        val missing = (permissions + listOf("WAKE_LOCK", "FOREGROUND_SERVICE")).filterNot { readme.contains(it) }
         assertTrue("permissions the README does not explain: $missing", missing.isEmpty())
     }
 
