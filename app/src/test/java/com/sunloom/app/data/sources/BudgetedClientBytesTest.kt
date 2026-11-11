@@ -44,4 +44,20 @@ class BudgetedClientBytesTest {
 
         assertEquals(0L, c.bytesDownloaded)
     }
+
+    @Test
+    fun `a page is counted in bytes, not characters`() = runBlocking {
+        val c = BudgetedSourceHttpClient(
+            delegate = object : HttpClient {
+                override suspend fun getText(url: String) = "h\u00e9llo" // 5 characters, 6 bytes in UTF-8
+                override suspend fun getBytes(url: String, maxBytes: Int) = ByteArray(0)
+                override fun scopedTo(sourceId: String): HttpClient = this
+            },
+            sourceId = "met_museum_cc0", maxRequests = 10, minSpacingMs = 0L
+        )
+
+        c.getText("https://collectionapi.metmuseum.org/public/collection/v1.1/search")
+
+        assertEquals(6L, c.bytesDownloaded)
+    }
 }

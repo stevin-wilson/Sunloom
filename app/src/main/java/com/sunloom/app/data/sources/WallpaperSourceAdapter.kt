@@ -150,7 +150,7 @@ class BudgetedSourceHttpClient(
     }
 
     override suspend fun getText(url: String): String = acquireAndRun(url) {
-        tracked { scopedDelegate.getText(url) }.also { bytesDownloaded += it.length }
+        tracked { scopedDelegate.getText(url) }.also { bytesDownloaded += it.encodeToByteArray().size }
     }
 
     override suspend fun getBytes(url: String, maxBytes: Int): ByteArray = acquireAndRun(url) {

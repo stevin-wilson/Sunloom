@@ -793,6 +793,33 @@ class LocalLibrarySyncTest {
         )
 
     @Test
+    fun `a sync that fails before it starts does not report the previous sync's bytes`() = kotlinx.coroutines.test.runTest {
+        val base = InMemoryLibraryStore()
+        var failReads = false
+        val flaky = object : LibraryStore by base {
+            override fun getAllWallpapers(): List<WallpaperRecord> {
+                if (failReads) throw java.io.IOException("disk error")
+                return base.getAllWallpapers()
+            }
+        }
+        val repo = LocalLibraryRepository(
+            context = context, httpClient = okClient, store = flaky,
+            sourceAdapters = listOf(FixedAdapter("artic_cc0", (1..2).map { candidate("flaky-$it") }))
+        )
+        repo.refreshOnlineCatalog(display)
+        assertTrue("setup: the first sync downloaded something", repo.lastSyncBytesDownloaded > 0)
+
+        failReads = true
+        try {
+            repo.refreshOnlineCatalog(display)
+        } catch (_: java.io.IOException) {
+        }
+
+        // The background budget adds this number after every round, success or not: it must not be the old round's.
+        assertEquals(0L, repo.lastSyncBytesDownloaded)
+    }
+
+    @Test
     fun `a sync reports the bytes it downloaded`() = kotlinx.coroutines.test.runTest {
         val repo = repo(FixedAdapter("artic_cc0", (1..3).map { candidate("bytes-$it") }))
         servedBytes = 0L

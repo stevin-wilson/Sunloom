@@ -598,6 +598,11 @@ class LocalLibraryRepository(
         maxSourcesPerSync: Int,
         connectedDisplays: List<DisplayProfile>
     ): Int {
+        // First thing once the lock is held: the figures describe this sync only. A step below that fails must not leave the
+        // previous sync's totals behind for a caller (the background data budget) to count a second time.
+        lastSyncAttemptedSources = 0
+        lastSyncFailedSources = 0
+        lastSyncBytesDownloaded = 0L
         val activeDisplaySet = connectedDisplays.filter { it.widthPx > 0 && it.heightPx > 0 }
             .ifEmpty { listOf(display) }
         val currentSetSignature = displaySetSignature(activeDisplaySet)
