@@ -66,7 +66,14 @@ interface SystemWallpaperGateway {
     fun getWallpaperId(which: Int): Int = 1
     fun getObservedIndependentLockSupport(): Boolean? = null
     fun clearWallpaper(): Boolean = true
-    fun isWifiConnected(): Boolean
+    /**
+     * True when the active network is one the user does not pay for by the byte. This is the network's own flag
+     * (`NET_CAPABILITY_NOT_METERED`), not the radio in use: a phone hotspot is Wi-Fi but metered.
+     */
+    fun isUnmeteredNetwork(): Boolean
+
+    /** True when Android's Data Saver is on and would hold back background data on a metered network. */
+    fun isDataSaverRestricting(): Boolean = false
     fun isBatterySaverActive(): Boolean
 }
 
@@ -175,12 +182,16 @@ class DefaultSystemWallpaperGateway(private val context: Context) : SystemWallpa
         }.getOrDefault(false)
     }
 
-    override fun isWifiConnected(): Boolean {
+    override fun isUnmeteredNetwork(): Boolean {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
         val net = cm.activeNetwork ?: return false
         val caps = cm.getNetworkCapabilities(net) ?: return false
-        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+    }
+
+    override fun isDataSaverRestricting(): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        return cm.restrictBackgroundStatus != ConnectivityManager.RESTRICT_BACKGROUND_STATUS_DISABLED
     }
 
     override fun isBatterySaverActive(): Boolean {
@@ -208,6 +219,10 @@ class GoogleBookPlatformAdapter(
     fun forgetRememberedDisplay(key: String) {
         gateway.forgetRememberedDisplay(key)
     }
+
+    fun isUnmeteredNetwork(): Boolean = gateway.isUnmeteredNetwork()
+
+    fun isDataSaverRestricting(): Boolean = gateway.isDataSaverRestricting()
 
     fun probeCapabilities(displayPolicy: DisplayPolicy = DisplayPolicy.SAME_ON_ALL_DISPLAYS): PlatformCapabilities {
         val displays = gateway.getConnectedDisplays()

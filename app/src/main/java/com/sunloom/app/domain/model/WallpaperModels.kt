@@ -369,7 +369,8 @@ data class UserPreferences(
     val displayPolicy: DisplayPolicy = DisplayPolicy.SAME_ON_ALL_DISPLAYS,
     val lockWorkspacePolicy: LockWorkspacePolicy = LockWorkspacePolicy.SAME_ON_BOTH,
     val allowBlurredFrameFill: Boolean = false,
-    val wifiOnlyDownloads: Boolean = false,
+    /** Background downloads only on an unmetered network (a phone hotspot counts as metered). On unless the person turns it off. */
+    val wifiOnlyDownloads: Boolean = true,
     val deferOnBatterySaver: Boolean = true,
     val maxCacheBytes: Long = DEFAULT_MAX_CACHE_BYTES,
     val baselineRestorePath: String? = null,

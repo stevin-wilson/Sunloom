@@ -2,6 +2,9 @@ package com.sunloom.app.ui
 
 import com.sunloom.app.domain.model.UserPreferences
 
+/** What the device says about its connection right now (the part that decides whether downloading is free). */
+data class NetworkConditions(val unmetered: Boolean, val dataSaverRestricting: Boolean)
+
 /**
  * Pure suspend interface abstracting repository and platform operations so [MainViewModel]
  * executes all I/O, bitmap decode, SQLite, and `WallpaperManager` calls off the main thread
@@ -26,6 +29,8 @@ interface SunloomGateway {
     suspend fun onDisplaysChanged(): SunloomUiState = loadInitialSnapshot()
     suspend fun forgetRememberedDisplay(key: String): SunloomUiState = loadInitialSnapshot()
     suspend fun checkpointDatabaseForBackup() {}
+    /** The connection as it is now; tests that do not care assume a free one. */
+    suspend fun networkConditions(): NetworkConditions = NetworkConditions(unmetered = true, dataSaverRestricting = false)
     /** The crashes recorded on this device, newest first (for "Copy diagnostics"). */
     suspend fun recentCrashes(): List<com.sunloom.app.diagnostics.CrashEntry> = emptyList()
     /** Erases everything the app keeps and returns to a freshly installed state (first-run setup). */

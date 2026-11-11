@@ -423,9 +423,16 @@ class SunloomWallpaperScheduler(
             // Fetching is independent of automatic wallpaper changes: manual-mode users want fresh images too.
             if (prefs.isPaused) return 0
             // The cheap checks first: a run that cannot download anyway touches nothing (no probing, no file scans).
-            val canDownload = (!prefs.wifiOnlyDownloads || gateway.isWifiConnected()) &&
-                (!prefs.deferOnBatterySaver || !gateway.isBatterySaverActive())
-            if (!canDownload) return 0
+            val budget = BackgroundDataBudget(appContext.getSharedPreferences("sunloom_preferences", Context.MODE_PRIVATE))
+            fun blocked() = BackgroundDownloadPolicy.blockedBy(
+                unmeteredOnly = prefs.wifiOnlyDownloads,
+                deferOnBatterySaver = prefs.deferOnBatterySaver,
+                unmeteredNetwork = gateway.isUnmeteredNetwork(),
+                dataSaverRestricting = gateway.isDataSaverRestricting(),
+                batterySaverActive = gateway.isBatterySaverActive(),
+                bytesUsedToday = budget.usedToday(System.currentTimeMillis())
+            )
+            if (blocked() != DownloadBlock.NONE) return 0
             val connectedDisplays = platform.getConnectedDisplays()
             val display = platform.getPrimaryOrSharpestDisplayOrNull(connectedDisplays) ?: return 0
             repo.healMissingFiles()
@@ -439,9 +446,15 @@ class SunloomWallpaperScheduler(
             var total = 0
             return try {
                 repeat(RefreshSchedulePolicy.MAX_BACKGROUND_ROUNDS) {
-                    val added = repo.refreshOnlineCatalog(display, connectedDisplays = connectedDisplays)
+                    val added = try {
+                        repo.refreshOnlineCatalog(display, connectedDisplays = connectedDisplays)
+                    } finally {
+                        // What was downloaded counts toward today's budget even if the round was cut short.
+                        budget.record(repo.lastSyncBytesDownloaded, System.currentTimeMillis())
+                    }
                     total += added
-                    if (added <= 0 || !repo.needsTopUp(prefs)) return total
+                    // Another round only while it is still wanted and the day's budget has room.
+                    if (added <= 0 || !repo.needsTopUp(prefs) || blocked() != DownloadBlock.NONE) return total
                 }
                 total
             } catch (cancel: CancellationException) {

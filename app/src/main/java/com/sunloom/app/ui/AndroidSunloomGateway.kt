@@ -426,6 +426,10 @@ class AndroidSunloomGateway(
      * Article II §2: Restores the user's saved baseline wallpaper if configured, or clears to the
      * OS system default wallpaper — never silently falling back to `previousWallpaperId`.
      */
+    override suspend fun networkConditions() = withContext(ioDispatcher) {
+        NetworkConditions(platformAdapter.isUnmeteredNetwork(), platformAdapter.isDataSaverRestricting())
+    }
+
     override suspend fun recentCrashes() = withContext(ioDispatcher) { com.sunloom.app.diagnostics.CrashLog.forApp(context).entries() }
 
     override suspend fun resetSunloom(): SunloomUiState {

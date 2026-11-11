@@ -55,7 +55,7 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
                 it.name == prefs.getString("lock_workspace_policy", LockWorkspacePolicy.SAME_ON_BOTH.name)
             } ?: LockWorkspacePolicy.SAME_ON_BOTH,
             allowBlurredFrameFill = prefs.getBoolean("allow_blurred_fill", false),
-            wifiOnlyDownloads = prefs.getBoolean("wifi_only", false),
+            wifiOnlyDownloads = prefs.getBoolean("wifi_only", true),
             deferOnBatterySaver = prefs.getBoolean("defer_battery_saver", true),
             maxCacheBytes = prefs.getLong("max_cache_bytes", UserPreferences.DEFAULT_MAX_CACHE_BYTES),
             baselineRestorePath = prefs.getString("baseline_restore_path", null),

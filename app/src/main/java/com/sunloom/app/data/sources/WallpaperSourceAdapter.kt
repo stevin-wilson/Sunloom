@@ -115,6 +115,10 @@ class BudgetedSourceHttpClient(
     var successfulRequestCount: Int = 0
         private set
 
+    /** Bytes received so far in this sync (images and pages), for the background's daily data budget. */
+    var bytesDownloaded: Long = 0L
+        private set
+
     private var lastRequestEpochMs: Long = 0L
 
     private suspend fun <T> acquireAndRun(url: String, block: suspend () -> T): T {
@@ -146,11 +150,11 @@ class BudgetedSourceHttpClient(
     }
 
     override suspend fun getText(url: String): String = acquireAndRun(url) {
-        tracked { scopedDelegate.getText(url) }
+        tracked { scopedDelegate.getText(url) }.also { bytesDownloaded += it.length }
     }
 
     override suspend fun getBytes(url: String, maxBytes: Int): ByteArray = acquireAndRun(url) {
-        tracked { scopedDelegate.getBytes(url, maxBytes) }
+        tracked { scopedDelegate.getBytes(url, maxBytes) }.also { bytesDownloaded += it.size }
     }
 }
 

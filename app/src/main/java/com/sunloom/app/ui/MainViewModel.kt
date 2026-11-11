@@ -1,5 +1,7 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.platform.scheduler.BackgroundDownloadPolicy
+import com.sunloom.app.platform.scheduler.DownloadBlock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sunloom.app.domain.matcher.ReserveBuffer
@@ -98,8 +100,13 @@ class MainViewModel(
     private suspend fun replenishIfLow(requireSetup: Boolean = true) {
         val state = _uiState.value
         if (requireSetup && !state.preferences.isSetupCompleted) return
-        if (state.preferences.wifiOnlyDownloads || state.isSyncingOnline) return
+        if (state.isSyncingOnline) return
         if (!state.reserveNeedsTopUp) return
+        // Unmetered-only (the default) means not over a metered network, not "never from here": at home this still runs.
+        val network = gateway.networkConditions()
+        if (BackgroundDownloadPolicy.networkBlock(state.preferences.wifiOnlyDownloads, network.unmetered, network.dataSaverRestricting) !=
+            DownloadBlock.NONE
+        ) return
         // Filters (resolution, near-duplicates, creator cap) can leave the count low after a fetch; do not
         // start another one on every launch or Next press.
         val now = clockMs()
@@ -408,12 +415,33 @@ class MainViewModel(
         }
     }
 
+    /** Set once a metered-network warning has been shown, so the next tap goes ahead; cleared on an unmetered network. */
+    @Volatile
+    private var meteredWarningShown = false
+
     fun triggerOnlineSync() {
         if (_uiState.value.isSyncingOnline) return
         viewModelScope.launch(workDispatcher) {
+            if (warnOnceOnMeteredNetwork()) return@launch
             // The user asked for fresh images: always fetch once, then keep going while the buffer is short.
             topUpReserve(MAX_TOP_UP_ROUNDS, forceFirstRound = true)
         }
+    }
+
+    /**
+     * An explicit Refresh is the person's own request, so it is never refused; but on a metered network the first tap
+     * says that it may use mobile data and waits for a second one. Returns true when it warned (and so did not fetch).
+     */
+    private suspend fun warnOnceOnMeteredNetwork(): Boolean {
+        val network = gateway.networkConditions()
+        if (network.unmetered) {
+            meteredWarningShown = false
+            return false
+        }
+        if (meteredWarningShown) return false
+        meteredWarningShown = true
+        _uiState.update { s -> s.copy(statusBannerMessage = strings.meteredFetchWarning) }
+        return true
     }
 
     /**

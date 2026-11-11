@@ -55,7 +55,7 @@ class GoogleBookPlatformAdapterTest {
             clearedCount++
             return true
         }
-        override fun isWifiConnected(): Boolean = true
+        override fun isUnmeteredNetwork(): Boolean = true
         override fun isBatterySaverActive(): Boolean = false
     }
 
@@ -283,7 +283,7 @@ class GoogleBookPlatformAdapterTest {
         assertTrue(displays.isNotEmpty())
         defaultGateway.isWallpaperSupported()
         defaultGateway.isSetWallpaperAllowed()
-        defaultGateway.isWifiConnected()
+        defaultGateway.isUnmeteredNetwork()
         defaultGateway.isBatterySaverActive()
 
         val receiver = SunloomScheduleReceiver()
@@ -367,7 +367,7 @@ class GoogleBookPlatformAdapterTest {
                 lastHeight = bitmap.height
                 return true
             }
-            override fun isWifiConnected(): Boolean = true
+            override fun isUnmeteredNetwork(): Boolean = true
             override fun isBatterySaverActive(): Boolean = false
         }
 
@@ -484,7 +484,7 @@ class GoogleBookPlatformAdapterTest {
                 // Fail the first candidate apply, succeed on the second fallback candidate!
                 return attempt >= 2
             }
-            override fun isWifiConnected(): Boolean = true
+            override fun isUnmeteredNetwork(): Boolean = true
             override fun isBatterySaverActive(): Boolean = true
         }
         val platform = GoogleBookPlatformAdapter(context, flakyGateway)
@@ -528,7 +528,7 @@ class GoogleBookPlatformAdapterTest {
                 applies++
                 return true
             }
-            override fun isWifiConnected(): Boolean = true
+            override fun isUnmeteredNetwork(): Boolean = true
             override fun isBatterySaverActive(): Boolean = false
         }
         val status = com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler.executeScheduledWallpaperChange(

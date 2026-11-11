@@ -115,12 +115,13 @@ class LocalLibrarySyncTest {
     )
 
     private var downloads = 0
+    private var servedBytes = 0L
 
     private val okClient = object : HttpClient {
         override suspend fun getText(url: String): String = "{}"
         override suspend fun getBytes(url: String, maxBytes: Int): ByteArray {
             downloads++
-            return jpegFor(imageKey(url))
+            return jpegFor(imageKey(url)).also { servedBytes += it.size }
         }
     }
 
@@ -693,7 +694,7 @@ class LocalLibrarySyncTest {
             override fun isSetWallpaperAllowed() = true
             override fun getConnectedDisplays() = displays.toList()
             override fun applyBitmapToDestination(bitmap: Bitmap, flags: Int) = true
-            override fun isWifiConnected() = true
+            override fun isUnmeteredNetwork() = true
             override fun isBatterySaverActive() = false
         }
     )
@@ -704,21 +705,24 @@ class LocalLibrarySyncTest {
         val repo = repo(EndlessAdapter("artic_cc0", { candidate(it, creator = "Artist $it") }, rounds))
         repo.savePreferences(repo.loadPreferences().copy(autoChangeEnabled = false))
 
-        val added = com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler.executeScheduledCatalogRefresh(
-            appContext = context, repo = repo, platform = platformFor(display)
-        )
+        val added = backgroundRefresh(repo, gatewayWith())
 
         assertTrue("manual mode must still fetch ($added added)", added > 0)
         assertTrue("several rounds expected, got $rounds", rounds.size >= 2)
         assertTrue(rounds.size <= com.sunloom.app.platform.scheduler.RefreshSchedulePolicy.MAX_BACKGROUND_ROUNDS)
     }
 
-    private fun gatewayWith(wifi: Boolean, batterySaver: Boolean = false) = object : com.sunloom.app.platform.SystemWallpaperGateway {
+    private fun gatewayWith(
+        wifi: Boolean = true,
+        batterySaver: Boolean = false,
+        dataSaver: Boolean = false
+    ) = object : com.sunloom.app.platform.SystemWallpaperGateway {
         override fun isWallpaperSupported() = true
         override fun isSetWallpaperAllowed() = true
         override fun getConnectedDisplays() = listOf(display)
         override fun applyBitmapToDestination(bitmap: Bitmap, flags: Int) = true
-        override fun isWifiConnected() = wifi
+        override fun isUnmeteredNetwork() = wifi
+        override fun isDataSaverRestricting() = dataSaver
         override fun isBatterySaverActive() = batterySaver
     }
 
@@ -777,6 +781,68 @@ class LocalLibrarySyncTest {
         repo.getWallpaperById(victim.id)?.let { after ->
             assertTrue(after.localFilePath.isBlank() || File(after.localFilePath).exists())
         }
+    }
+
+    private fun budget() = com.sunloom.app.platform.scheduler.BackgroundDataBudget(
+        context.getSharedPreferences("sunloom_preferences", Context.MODE_PRIVATE)
+    )
+
+    private suspend fun backgroundRefresh(repo: LocalLibraryRepository, gateway: com.sunloom.app.platform.SystemWallpaperGateway) =
+        com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler.executeScheduledCatalogRefresh(
+            appContext = context, repo = repo, platform = platformFor(display), gateway = gateway
+        )
+
+    @Test
+    fun `a sync reports the bytes it downloaded`() = kotlinx.coroutines.test.runTest {
+        val repo = repo(FixedAdapter("artic_cc0", (1..3).map { candidate("bytes-$it") }))
+        servedBytes = 0L
+
+        repo.refreshOnlineCatalog(display)
+
+        assertTrue("it downloaded something", servedBytes > 0)
+        assertTrue("and counted at least the images (${repo.lastSyncBytesDownloaded} of $servedBytes)", repo.lastSyncBytesDownloaded >= servedBytes)
+    }
+
+    @Test
+    fun `the background refresh stays off a metered network, a hotspot included`() = kotlinx.coroutines.test.runTest {
+        val rounds = mutableListOf<Int>()
+        val repo = repo(EndlessAdapter("artic_cc0", { candidate(it, creator = "Artist $it") }, rounds))
+        assertTrue("setup: a top-up is wanted", repo.needsTopUp())
+
+        assertEquals(0, backgroundRefresh(repo, gatewayWith(wifi = false)))
+
+        assertTrue("no request on a metered network, asked for $rounds", rounds.isEmpty())
+    }
+
+    @Test
+    fun `a person who allows metered networks still gets none while Data Saver is on`() = kotlinx.coroutines.test.runTest {
+        val rounds = mutableListOf<Int>()
+        val repo = repo(EndlessAdapter("artic_cc0", { candidate(it, creator = "Artist $it") }, rounds))
+        repo.savePreferences(repo.loadPreferences().copy(wifiOnlyDownloads = false))
+
+        assertEquals(0, backgroundRefresh(repo, gatewayWith(wifi = false, dataSaver = true)))
+        assertTrue(rounds.isEmpty())
+
+        val added = backgroundRefresh(repo, gatewayWith(wifi = false, dataSaver = false))
+        assertTrue("without Data Saver the allowed metered network is used ($added)", added > 0)
+    }
+
+    @Test
+    fun `the background refresh counts what it downloads against the day and stops at the budget`() = kotlinx.coroutines.test.runTest {
+        val rounds = mutableListOf<Int>()
+        val repo = repo(EndlessAdapter("artic_cc0", { candidate(it, creator = "Artist $it") }, rounds))
+        val before = budget().usedToday(System.currentTimeMillis())
+
+        val added = backgroundRefresh(repo, gatewayWith())
+
+        assertTrue("it fetched ($added)", added > 0)
+        assertTrue("and the day's total grew", budget().usedToday(System.currentTimeMillis()) > before)
+
+        // The day's budget is used up: not one more request.
+        budget().record(com.sunloom.app.platform.scheduler.BackgroundDownloadPolicy.DAILY_BUDGET_BYTES, System.currentTimeMillis())
+        rounds.clear()
+        assertEquals(0, backgroundRefresh(repo, gatewayWith()))
+        assertTrue("a spent budget costs no request, asked for $rounds", rounds.isEmpty())
     }
 
     @Test

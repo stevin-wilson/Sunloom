@@ -549,6 +549,11 @@ class LocalLibraryRepository(
     var lastSyncFailedSources: Int = 0
         private set
 
+    /** Bytes the most recent [refreshOnlineCatalog] downloaded, counting pictures it then rejected. */
+    @Volatile
+    var lastSyncBytesDownloaded: Long = 0L
+        private set
+
     /**
      * One sync at a time per process. The app and the background worker each build their own repository, so without
      * this they can poll the same sources together (doubling the request rate the register budgets) and race on the
@@ -645,6 +650,7 @@ class LocalLibraryRepository(
 
         lastSyncAttemptedSources = selectedAdapters.size
         lastSyncFailedSources = 0
+        lastSyncBytesDownloaded = 0L
         for (adapter in selectedAdapters) {
             coroutineContext.ensureActive()
             newlyAdded += syncSource(adapter, state, effectiveTargetWidthPx)
@@ -663,6 +669,20 @@ class LocalLibraryRepository(
             maxRequests = reg?.maxRequestsPerSync ?: 6,
             minSpacingMs = reg?.minRequestSpacingMs ?: 150L
         )
+        try {
+            return syncSourceWith(adapter, budgetedClient, state, targetWidthPx)
+        } finally {
+            // Data used counts even when the sync is cancelled or the pictures are then rejected.
+            lastSyncBytesDownloaded += budgetedClient.bytesDownloaded
+        }
+    }
+
+    private suspend fun syncSourceWith(
+        adapter: WallpaperSourceAdapter,
+        budgetedClient: BudgetedSourceHttpClient,
+        state: SyncState,
+        targetWidthPx: Int
+    ): Int {
         val cursor = sourceHealth.fetchCursor(adapter.sourceId)
         val candidates = fetchPage(adapter, budgetedClient, state.preferences, cursor, targetWidthPx) ?: return 0
         sourceHealth.advanceCursor(adapter.sourceId, cursor)

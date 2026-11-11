@@ -14,6 +14,7 @@ import com.sunloom.app.domain.model.WallpaperRecord
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 private fun unseen(id: String, brightness: BrightnessClass) = WallpaperRecord(
@@ -48,6 +49,10 @@ class AutoReplenishTest {
 
     private class CountingGateway(var state: SunloomUiState, private val perRefresh: (Int) -> Int = { 0 }) : SunloomGateway {
         var refreshCalls = 0
+        /** What the device reports: set false to be on a metered network (cellular, or a phone's hotspot). */
+        var unmetered = true
+        var dataSaver = false
+        override suspend fun networkConditions() = NetworkConditions(unmetered = unmetered, dataSaverRestricting = dataSaver)
         var afterDisplayChange: SunloomUiState? = null
         override suspend fun onDisplaysChanged(): SunloomUiState {
             afterDisplayChange?.let { state = it }
@@ -132,10 +137,29 @@ class AutoReplenishTest {
     }
 
     @Test
-    fun `launch leaves fetching to the scheduler on Wi-Fi-only setups`() {
-        val gateway = CountingGateway(stateWith(unseenCount = 0, wifiOnly = true))
+    fun `launch does not fetch over a metered network on unmetered-only setups`() {
+        val gateway = CountingGateway(stateWith(unseenCount = 0, wifiOnly = true)).apply { unmetered = false }
         launch(gateway)
         assertEquals(0, gateway.refreshCalls)
+    }
+
+    @Test
+    fun `launch does fetch on an unmetered network even on unmetered-only setups`() {
+        // The default is unmetered-only, so a fresh install must still fill its reserve at home.
+        val gateway = CountingGateway(stateWith(unseenCount = 0, wifiOnly = true))
+        launch(gateway)
+        assertTrue(gateway.refreshCalls >= 1)
+    }
+
+    @Test
+    fun `launch over a metered network is allowed when the person allows it, unless Data Saver is on`() {
+        val allowed = CountingGateway(stateWith(unseenCount = 0, wifiOnly = false)).apply { unmetered = false }
+        launch(allowed)
+        assertTrue(allowed.refreshCalls >= 1)
+
+        val saving = CountingGateway(stateWith(unseenCount = 0, wifiOnly = false)).apply { unmetered = false; dataSaver = true }
+        launch(saving)
+        assertEquals(0, saving.refreshCalls)
     }
 
     @Test
@@ -165,14 +189,14 @@ class AutoReplenishTest {
     }
 
     @Test
-    fun `finishing setup fetches a first batch unless downloads are Wi-Fi only`() {
+    fun `finishing setup fetches a first batch unless the network is metered and downloads are unmetered-only`() {
         val open = CountingGateway(stateWith(unseenCount = 0, setupCompleted = false))
         launch(open).completeFirstRunSetup(UserPreferences())
         assertEquals(1, open.refreshCalls)
 
-        val wifi = CountingGateway(stateWith(unseenCount = 0, setupCompleted = false))
-        launch(wifi).completeFirstRunSetup(UserPreferences(wifiOnlyDownloads = true))
-        assertEquals(0, wifi.refreshCalls)
+        val metered = CountingGateway(stateWith(unseenCount = 0, setupCompleted = false)).apply { unmetered = false }
+        launch(metered).completeFirstRunSetup(UserPreferences(wifiOnlyDownloads = true))
+        assertEquals(0, metered.refreshCalls)
     }
 
     @Test
@@ -204,19 +228,65 @@ class AutoReplenishTest {
     }
 
     @Test
-    fun `Next does not fetch on Wi-Fi-only setups`() = kotlinx.coroutines.test.runTest {
-        val gateway = CountingGateway(stateWith(unseenCount = 0, setupCompleted = false, wifiOnly = true))
+    fun `Next does not fetch over a metered network on unmetered-only setups`() = kotlinx.coroutines.test.runTest {
+        val gateway = CountingGateway(stateWith(unseenCount = 0, setupCompleted = false, wifiOnly = true)).apply { unmetered = false }
         launch(gateway).advanceToNextWallpaperSmart()
         assertEquals(0, gateway.refreshCalls)
     }
 
     @Test
-    fun `the Refresh button always fetches and keeps going while below the target`() {
-        val gateway = CountingGateway(stateWith(unseenCount = 0, wifiOnly = true)) { 5 }
+    fun `the Refresh button fetches even on an unmetered-only setup and keeps going while below the target`() {
+        val gateway = CountingGateway(stateWith(unseenCount = 0, wifiOnly = true)) { 5 }.apply { unmetered = false }
         val vm = launch(gateway)
-        assertEquals(0, gateway.refreshCalls)
+        assertEquals("launch stays off the metered network", 0, gateway.refreshCalls)
+        vm.triggerOnlineSync() // the first tap on a metered network warns (below)
         vm.triggerOnlineSync()
         assertEquals(3, gateway.refreshCalls)
+    }
+
+    @Test
+    fun `the first Refresh on a metered network warns instead of fetching, and the next one goes ahead`() {
+        val gateway = CountingGateway(stateWith(unseenCount = 0, wifiOnly = true)) { 5 }.apply { unmetered = false }
+        val vm = launch(gateway)
+
+        vm.triggerOnlineSync()
+
+        assertEquals("nothing is downloaded by the warning", 0, gateway.refreshCalls)
+        assertEquals(UiStrings.English.meteredFetchWarning, vm.uiState.value.statusBannerMessage)
+
+        vm.triggerOnlineSync()
+
+        assertTrue("the second tap is the person's decision", gateway.refreshCalls >= 1)
+    }
+
+    @Test
+    fun `the warning comes back the next time the network is metered`() {
+        val gateway = CountingGateway(stateWith(unseenCount = 0, wifiOnly = true)) { 5 }.apply { unmetered = false }
+        val vm = launch(gateway)
+        vm.triggerOnlineSync() // warns
+        vm.triggerOnlineSync() // fetches
+        val afterFirstFetch = gateway.refreshCalls
+
+        gateway.unmetered = true
+        vm.triggerOnlineSync()
+        assertTrue("on an unmetered network there is nothing to warn about", gateway.refreshCalls > afterFirstFetch)
+        val afterUnmetered = gateway.refreshCalls
+
+        gateway.unmetered = false
+        vm.triggerOnlineSync()
+        assertEquals("metered again: it warns again", afterUnmetered, gateway.refreshCalls)
+    }
+
+    @Test
+    fun `a person who allows metered networks is still warned once, since the data is theirs`() {
+        val gateway = CountingGateway(stateWith(unseenCount = 0, wifiOnly = false)) { 5 }.apply { unmetered = false }
+        val vm = launch(gateway)
+        gateway.refreshCalls = 0 // launch fetched; start counting the taps
+
+        vm.triggerOnlineSync()
+
+        assertEquals(0, gateway.refreshCalls)
+        assertEquals(UiStrings.English.meteredFetchWarning, vm.uiState.value.statusBannerMessage)
     }
 
     @Test
