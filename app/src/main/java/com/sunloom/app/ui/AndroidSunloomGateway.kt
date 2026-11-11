@@ -71,6 +71,7 @@ class AndroidSunloomGateway(
         val activeBefore = repo.getCurrentWallpaperId()
         repo.purgeRevokedSources()
         repo.healMissingFiles()
+        repo.runStorageHygieneIfDue()
         // Photos a restore could not bring back: say so once rather than leaving the person to find them missing.
         val lostImports = repo.takeLostImportsNotice()
         val lostNotice = if (lostImports > 0) {

@@ -416,6 +416,7 @@ class SunloomWallpaperScheduler(
             val connectedDisplays = platform.getConnectedDisplays()
             val display = platform.getPrimaryOrSharpestDisplayOrNull(connectedDisplays) ?: return 0
             repo.healMissingFiles()
+            repo.runStorageHygieneIfDue()
             repo.ensureSeedReserveLoadedForDisplays(connectedDisplays, prefs.displayPolicy)
 
             val canDownload = (!prefs.wifiOnlyDownloads || gateway.isWifiConnected()) &&

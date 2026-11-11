@@ -83,6 +83,8 @@ class LocalLibraryRepository(
         // Seeds are re-rendered rather than healed.
         private val HEAL_EXEMPT_SOURCES = setOf(SourceIds.SEED_RESERVE)
         private const val KEY_LOST_IMPORTS = "lost_imports_notice"
+        private const val KEY_LAST_HYGIENE = "last_storage_hygiene_ms"
+        private const val HYGIENE_INTERVAL_MS = 24L * 60 * 60 * 1000
 
         @Volatile
         internal var testStoreFactoryOverride: ((Context) -> LibraryStore)? = null
@@ -170,6 +172,13 @@ class LocalLibraryRepository(
 
         override fun recordSourceFailure(sourceId: String, error: Throwable) = sourceHealth.recordFailure(sourceId, error)
     }
+
+    private val hygiene = StorageHygiene(
+        wallpaperDir = wallpaperDir,
+        records = { store.getAllWallpapers() },
+        deleteRow = { store.deleteWallpaper(it) },
+        writeLock = LIBRARY_WRITE_LOCK
+    )
 
     private val ingestor = CandidateIngestor(safetyGate, imageEvaluator, envelopePlanner, wallpaperDir, quarantineDir, libraryHost)
     private val revalidator = Revalidator(safetyGate, imageEvaluator, libraryHost)
@@ -816,13 +825,31 @@ class LocalLibraryRepository(
         count
     }
 
+    /**
+     * Removes orphaned image files and long-forgotten rows, at most once a day (opening the app and every worker run
+     * may call this freely). Returns what was removed, or null when it is not yet due.
+     */
+    fun runStorageHygieneIfDue(nowEpochMs: Long = System.currentTimeMillis()): StorageHygieneReport? {
+        val last = prefs.getLong(KEY_LAST_HYGIENE, 0L)
+        if (last != 0L && nowEpochMs - last < HYGIENE_INTERVAL_MS) return null
+        // Recorded first: a pass that fails must not retry on every launch.
+        prefs.edit { putLong(KEY_LAST_HYGIENE, nowEpochMs) }
+        val activeIds = setOfNotNull(getCurrentWallpaperId(), getPreviousWallpaperId())
+        return StorageHygieneReport(
+            orphanFilesRemoved = hygiene.sweepOrphanedFiles(nowEpochMs),
+            staleRowsRemoved = hygiene.compactStaleRows(nowEpochMs, activeIds)
+        )
+    }
+
     fun enforceCacheLimit() {
         val prefs = loadPreferences()
         val activeIds = setOfNotNull(getCurrentWallpaperId(), getPreviousWallpaperId())
         val (updated, report) = cacheManager.executeCleanupOnDisk(
             records = getAllWallpapers(),
             activeWallpaperIds = activeIds,
-            maxCacheBytes = prefs.maxCacheBytes
+            maxCacheBytes = prefs.maxCacheBytes,
+            // The limit is about bytes on disk, not the sizes rows recorded (Article X §3).
+            sizeOf = hygiene::diskBytes
         )
         if (report.evictedIds.isNotEmpty()) {
             val evictedSet = report.evictedIds.toSet()
