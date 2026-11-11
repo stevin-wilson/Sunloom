@@ -1,0 +1,41 @@
+name: Bug report
+description: Something in Sunloom does not work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. The more of this you can fill in, the faster it can be fixed. For a security problem, **do not
+        use this form**: see the security policy.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you saw, and what you expected.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Sunloom version
+      description: In Storage & About, at the top (for example `2.0.0 (github)`).
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: For example "Googlebook 14, built-in display plus one 4K monitor".
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: |
+        In Storage & About press **Copy diagnostics**, then paste here. It holds the version, your displays and recent
+        errors; it has no photos, location or personal information. Please look at it before you post.
+      render: text
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: A screenshot, or whether it happens every time.

@@ -1,5 +1,7 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.platform.scheduler.BackgroundDownloadPolicy
+import com.sunloom.app.platform.scheduler.DownloadBlock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sunloom.app.domain.matcher.ReserveBuffer
@@ -37,7 +39,10 @@ class MainViewModel(
     private val workDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val clockMs: () -> Long = System::currentTimeMillis,
     private val roundPauseMs: Long = 2_000L,
-    private val strings: UiStrings = UiStrings.English
+    private val strings: UiStrings = UiStrings.English,
+    private val appInfo: () -> com.sunloom.app.diagnostics.AppInfo = { com.sunloom.app.diagnostics.AppInfo.current() },
+    /** The update check, or null in a build that has none (the Play build). */
+    private val updateCheck: com.sunloom.app.update.UpdateCheckFeature? = com.sunloom.app.update.updateCheckFeature()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -53,6 +58,9 @@ class MainViewModel(
     companion object {
         /** Fetch rounds per top-up; each round polls up to three sources within their request budgets. */
         const val MAX_TOP_UP_ROUNDS = 4
+
+        /** The opt-in update check asks at most this often. */
+        private const val UPDATE_CHECK_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000
     }
 
     /** Preference edits whose save has not landed yet; their optimistic values must outlive other results. */
@@ -87,6 +95,7 @@ class MainViewModel(
                 }
             }
             replenishIfLow()
+            checkForUpdatesIfDue()
         }
     }
 
@@ -97,8 +106,13 @@ class MainViewModel(
     private suspend fun replenishIfLow(requireSetup: Boolean = true) {
         val state = _uiState.value
         if (requireSetup && !state.preferences.isSetupCompleted) return
-        if (state.preferences.wifiOnlyDownloads || state.isSyncingOnline) return
+        if (state.isSyncingOnline) return
         if (!state.reserveNeedsTopUp) return
+        // Unmetered-only (the default) means not over a metered network, not "never from here": at home this still runs.
+        val network = gateway.networkConditions()
+        if (BackgroundDownloadPolicy.networkBlock(state.preferences.wifiOnlyDownloads, network.unmetered, network.dataSaverRestricting) !=
+            DownloadBlock.NONE
+        ) return
         // Filters (resolution, near-duplicates, creator cap) can leave the count low after a fetch; do not
         // start another one on every launch or Next press.
         val now = clockMs()
@@ -154,7 +168,12 @@ class MainViewModel(
     ) {
         val newerEdits = pendingPreferenceEdits.get() - if (ownPreferenceEdit) 1 else 0
         _uiState.update { cur ->
-            var merged = next.copy(pendingDiscard = cur.pendingDiscard, isInitialLoading = false)
+            var merged = next.copy(
+                pendingDiscard = cur.pendingDiscard,
+                isSetupReopened = cur.isSetupReopened,
+                updateCheck = cur.updateCheck,
+                isInitialLoading = false
+            )
             if (preserveNavigation) {
                 merged = merged.copy(
                     activeTab = cur.activeTab,
@@ -183,7 +202,7 @@ class MainViewModel(
                         // Nothing above this scope handles exceptions, so a storage error (disk full, SQLite) would
                         // end the process. Keep the screen as it was and say so.
                         android.util.Log.w("MainViewModel", "action_failed", e)
-                        _uiState.value.copy(statusBannerMessage = strings.storageProblem)
+                        _uiState.value.copy(statusBannerMessage = strings.storageProblem, importProgress = null)
                     }
                     publish(next, preserveNavigation, ownPreferenceEdit = preferenceEdit)
                 }
@@ -235,13 +254,14 @@ class MainViewModel(
 
     fun completeFirstRunSetup(updatedPreferences: UserPreferences) {
         val completed = updatedPreferences.copy(isSetupCompleted = true)
+        _uiState.update { s -> s.copy(isSetupReopened = false) }
         val saved = launchGatewayMutation(preserveNavigation = false) {
             val newState = gateway.savePreferences(completed)
             newState.copy(
                 activeTab = DesktopNavTab.TODAY_CANVAS,
                 showLegibilityZonesOverlay = _uiState.value.showLegibilityZonesOverlay,
                 statusBannerMessage = if (completed.autoChangeEnabled) {
-                    strings.scheduleEnabled(completed.scheduleMode.label)
+                    strings.scheduleEnabled(completed.scheduleMode)
                 } else {
                     strings.manualModeEnabled
                 }
@@ -343,6 +363,93 @@ class MainViewModel(
         }
     }
 
+    /**
+     * The "Automatic switching" switch. Setup is the only other place this is chosen, so without this switch
+     * someone who turned it off there could never turn it back on.
+     */
+    fun setAutoChangeEnabled(enabled: Boolean) {
+        updatePreferences { it.copy(autoChangeEnabled = enabled) }
+    }
+
+    /**
+     * "Copy diagnostics": builds the report off the main thread (it reads the crash files) and hands it to [onReady],
+     * which puts it on the clipboard. Nothing is sent anywhere.
+     */
+    fun copyDiagnostics(onReady: (String) -> Unit) {
+        viewModelScope.launch(workDispatcher) {
+            val report = com.sunloom.app.diagnostics.DiagnosticsReport.build(appInfo(), _uiState.value, gateway.recentCrashes())
+            onReady(report)
+            _uiState.update { s -> s.copy(statusBannerMessage = strings.diagnosticsCopied) }
+        }
+    }
+
+    /** "Check for updates" (GitHub build): asks, shows that it is checking, then what was found. A no-op where there is none. */
+    fun checkForUpdates() {
+        val feature = updateCheck ?: return
+        if (!beginUpdateCheck()) return
+        viewModelScope.launch(workDispatcher) { finishUpdateCheck(feature) }
+    }
+
+    /** Marks a check as running; false if one already is. */
+    private fun beginUpdateCheck(): Boolean {
+        if (_uiState.value.updateCheck == UpdateCheckUiState.Checking) return false
+        _uiState.update { s -> s.copy(updateCheck = UpdateCheckUiState.Checking) }
+        return true
+    }
+
+    private suspend fun finishUpdateCheck(feature: com.sunloom.app.update.UpdateCheckFeature): com.sunloom.app.update.UpdateCheckResult {
+        val result = try {
+            feature.check(appInfo().versionName)
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            com.sunloom.app.update.UpdateCheckResult.Failed
+        }
+        _uiState.update { s -> s.copy(updateCheck = UpdateCheckUiState.Done(result)) }
+        return result
+    }
+
+    /**
+     * The opt-in weekly check (GitHub build): when the app is opened, if the person turned it on and the last successful
+     * check is a week old. The time is recorded only for a check that was actually made, so one that failed offline is
+     * tried again at the next opening. An available update is announced once; there is no background job, which would need a
+     * notification permission Sunloom never asks for.
+     */
+    private suspend fun checkForUpdatesIfDue() {
+        val feature = updateCheck ?: return
+        val prefs = _uiState.value.preferences
+        if (!prefs.isSetupCompleted || !prefs.weeklyUpdateCheck) return
+        val now = clockMs()
+        if (prefs.lastUpdateCheckEpochMs != 0L && now - prefs.lastUpdateCheckEpochMs < UPDATE_CHECK_INTERVAL_MS) return
+        if (!beginUpdateCheck()) return
+        val result = finishUpdateCheck(feature)
+        if (result is com.sunloom.app.update.UpdateCheckResult.Failed) return
+        stateMutex.withLock {
+            val saved = gateway.savePreferences(_uiState.value.preferences.copy(lastUpdateCheckEpochMs = now))
+            _uiState.update { s -> s.copy(preferences = saved.preferences) }
+        }
+        if (result is com.sunloom.app.update.UpdateCheckResult.Available) {
+            _uiState.update { s -> s.copy(statusBannerMessage = strings.updateAvailableNotice(result.version)) }
+        }
+    }
+
+    /** "Reset Sunloom": erase everything and start again from first-run setup. */
+    fun resetSunloom() {
+        // Whatever was waiting to be undone goes with the data it referred to.
+        _uiState.update { s -> s.copy(pendingDiscard = null, isSetupReopened = false) }
+        launchGatewayMutation(preserveNavigation = false) {
+            gateway.resetSunloom().copy(activeTab = DesktopNavTab.TODAY_CANVAS, statusBannerMessage = strings.resetDone)
+        }
+    }
+
+    /**
+     * "Setup Guide": show the first-run screen again, starting from the current choices. Nothing is saved until the
+     * person finishes it, so leaving mid-way or relaunching costs nothing and no reserve work runs.
+     */
+    fun reopenSetup() {
+        _uiState.update { s -> s.copy(isSetupReopened = true) }
+    }
+
     fun togglePauseAutomation() {
         updatePreferences { it.copy(isPaused = !it.isPaused) }
     }
@@ -365,12 +472,33 @@ class MainViewModel(
         }
     }
 
+    /** Set once a metered-network warning has been shown, so the next tap goes ahead; cleared on an unmetered network. */
+    @Volatile
+    private var meteredWarningShown = false
+
     fun triggerOnlineSync() {
         if (_uiState.value.isSyncingOnline) return
         viewModelScope.launch(workDispatcher) {
+            if (warnOnceOnMeteredNetwork()) return@launch
             // The user asked for fresh images: always fetch once, then keep going while the buffer is short.
             topUpReserve(MAX_TOP_UP_ROUNDS, forceFirstRound = true)
         }
+    }
+
+    /**
+     * An explicit Refresh is the person's own request, so it is never refused; but on a metered network the first tap
+     * says that it may use mobile data and waits for a second one. Returns true when it warned (and so did not fetch).
+     */
+    private suspend fun warnOnceOnMeteredNetwork(): Boolean {
+        val network = gateway.networkConditions()
+        if (network.unmetered) {
+            meteredWarningShown = false
+            return false
+        }
+        if (meteredWarningShown) return false
+        meteredWarningShown = true
+        _uiState.update { s -> s.copy(statusBannerMessage = strings.meteredFetchWarning) }
+        return true
     }
 
     /**
@@ -528,10 +656,12 @@ class MainViewModel(
         if (!syncMutex.tryLock()) return false
         val prevBanner = _uiState.value.statusBannerMessage
         val prevRetry = _uiState.value.retryApplyRecordId
+        val prevCanRetrySync = _uiState.value.canRetrySync
         _uiState.update { s -> s.copy(
             isSyncingOnline = true,
             statusBannerMessage = strings.fetchingCatalogs,
-            retryApplyRecordId = null
+            retryApplyRecordId = null,
+            canRetrySync = false
         ) }
         try {
             val refreshed = withContext(workDispatcher) {
@@ -544,14 +674,16 @@ class MainViewModel(
             _uiState.update { s -> s.copy(
                 isSyncingOnline = false,
                 statusBannerMessage = prevBanner,
-                retryApplyRecordId = prevRetry
+                retryApplyRecordId = prevRetry,
+                canRetrySync = prevCanRetrySync
             ) }
             throw cancel
         } catch (t: Exception) {
             _uiState.update { s -> s.copy(
                 isSyncingOnline = false,
                 statusBannerMessage = strings.syncInterrupted(t.message),
-                retryApplyRecordId = null
+                retryApplyRecordId = null,
+                canRetrySync = true
             ) }
         } finally {
             if (_uiState.value.isSyncingOnline) {
@@ -563,7 +695,12 @@ class MainViewModel(
     }
 
     fun importLocalUri(uriString: String, asBaselineRestore: Boolean) {
-        launchGatewayMutation { gateway.importLocalUri(uriString, asBaselineRestore) }
+        launchGatewayMutation {
+            _uiState.update { s -> s.copy(importProgress = ImportProgress(0, 1), statusBannerMessage = strings.importingPhoto(1, 1)) }
+            // Adding a photo must not change the wallpaper behind the person's back: it joins the reserve, and the
+            // banner offers Apply now.
+            gateway.importLocalUri(uriString, asBaselineRestore, applyAfterImport = false)
+        }
     }
 
     /**
@@ -577,16 +714,23 @@ class MainViewModel(
             return
         }
         launchGatewayMutation { current ->
+            val images = gateway.filterImageUris(uriStrings)
+            if (images.isEmpty()) return@launchGatewayMutation current
             var state = current
+            val total = images.size
             // One image behaves like the picker (imported and applied). A batch only fills the reserve:
             // changing the system wallpaper once per image would flash through all of them.
-            val applyAfterImport = uriStrings.size == 1
-            for (uri in uriStrings) {
+            val applyAfterImport = images.size == 1
+            for ((index, uri) in images.withIndex()) {
+                _uiState.update { s ->
+                    s.copy(importProgress = ImportProgress(index, total), statusBannerMessage = strings.importingPhoto(index + 1, total))
+                }
                 state = gateway.importLocalUri(uri, false, applyAfterImport)
             }
-            if (uriStrings.size > 1) {
+            if (images.size > 1) {
                 state = state.copy(
-                    statusBannerMessage = strings.batchChecked(uriStrings.size)
+                    statusBannerMessage = strings.batchChecked(images.size),
+                    applyOfferRecordId = null
                 )
             }
             state

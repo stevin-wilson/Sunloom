@@ -58,7 +58,7 @@ class SunloomComposeUiTest {
         composeTestRule.onNodeWithText("Preview-only mode").assertDoesNotExist()
         composeTestRule.onNodeWithText("Matched pair", substring = true).assertDoesNotExist()
         composeTestRule.onNodeWithText("Different images", substring = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("enable_sunloom_button").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("start_with_defaults_button").performScrollTo().performClick()
         assertTrue(setupCompleted)
     }
 
@@ -189,7 +189,7 @@ class SunloomComposeUiTest {
     }
 
     @Test
-    fun `All six desktop tabs and AndroidSunloomGateway render and handle actions cleanly`() {
+    fun `All five desktop tabs and AndroidSunloomGateway render and handle actions cleanly`() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val gateway = AndroidSunloomGateway(context)
         val afterApply = kotlinx.coroutines.runBlocking {
@@ -340,7 +340,7 @@ class SunloomComposeUiTest {
     }
 
     @Test
-    fun `Dislike button requires confirmation and AndroidSunloomGateway promotes fine art over active seed_reserve`() {
+    fun `Dislike acts at once with Undo, and AndroidSunloomGateway promotes fine art over active seed_reserve`() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val repo = com.sunloom.app.data.repository.LocalLibraryRepository(context)
         val gateway = AndroidSunloomGateway(context, repository = repo)

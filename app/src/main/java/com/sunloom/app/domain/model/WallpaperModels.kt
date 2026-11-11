@@ -44,7 +44,7 @@ enum class ScheduleMode(val label: String, val plainDescription: String) {
 }
 
 enum class DisplayPolicy(val label: String) {
-    SAME_ON_ALL_DISPLAYS("Share an envelope-fitted wallpaper across all connected displays (Recommended)"),
+    SAME_ON_ALL_DISPLAYS("One wallpaper that fits all connected displays (Recommended)"),
     OPTIMIZE_PRIMARY_SHARPEST("Optimize crop for the highest-resolution connected display"),
     INDEPENDENT_PER_DISPLAY("Different image per display (Unavailable: Android shares one system wallpaper surface)")
 }
@@ -55,9 +55,9 @@ enum class DisplayQualityTier(
     val shortLabel: String
 ) {
     /** Article IV §2 (v0.15): 98%, so a source a few pixels short of the display is enlarged by at most 2%. */
-    STANDARD_100(0.98, 0, "98% native floor (<120 PPI)"),
-    MID_80(0.80, 0, "80% mid-PPI floor (120–209 PPI)"),
-    HIGH_65(0.65, 1600, "65% Retina floor (≥210 PPI, ≥1600px)")
+    STANDARD_100(0.98, 0, "Standard screen: a picture must nearly fill it (98%)"),
+    MID_80(0.80, 0, "Sharp screen: a picture may be up to 20% smaller than it"),
+    HIGH_65(0.65, 1600, "Very sharp screen: a picture may be up to 35% smaller than it")
 }
 
 enum class LockWorkspacePolicy(val label: String) {
@@ -356,7 +356,6 @@ data class UserPreferences(
     val longitude: Double = -122.4194,
     val fixedLightHour: Int = 7,
     val fixedDarkHour: Int = 19,
-    val rotationIntervalHours: Int = 0,
     val enabledCategories: Set<SafeCategory> = setOf(
         SafeCategory.LANDSCAPES_NATURE,
         SafeCategory.SPACE_ASTRONOMY,
@@ -370,7 +369,12 @@ data class UserPreferences(
     val displayPolicy: DisplayPolicy = DisplayPolicy.SAME_ON_ALL_DISPLAYS,
     val lockWorkspacePolicy: LockWorkspacePolicy = LockWorkspacePolicy.SAME_ON_BOTH,
     val allowBlurredFrameFill: Boolean = false,
-    val wifiOnlyDownloads: Boolean = false,
+    /** Background downloads only on an unmetered network (a phone hotspot counts as metered). On unless the person turns it off. */
+    val wifiOnlyDownloads: Boolean = true,
+    /** GitHub build only: look for a newer release when the app is opened, at most once a week. Off unless turned on. */
+    val weeklyUpdateCheck: Boolean = false,
+    /** When the last successful update check was; 0 if there has not been one. */
+    val lastUpdateCheckEpochMs: Long = 0L,
     val deferOnBatterySaver: Boolean = true,
     val maxCacheBytes: Long = DEFAULT_MAX_CACHE_BYTES,
     val baselineRestorePath: String? = null,

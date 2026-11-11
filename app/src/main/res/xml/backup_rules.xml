@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!-- Only preferences and WAL-checkpointed SQLite DB are included; transient WAL/SHM files and image directories are excluded -->
+    <!-- Only preferences and the SQLite database file are included; the transient WAL/SHM files and the image
+         directories are excluded. The database is checkpointed (WAL folded into the main file) when the app stops
+         and at the end of every background run, so a backup taken while the app is closed holds the latest writes. -->
     <include domain="sharedpref" path="sunloom_preferences.xml" />
     <include domain="database" path="sunloom_library.db" />
     <exclude domain="database" path="sunloom_library.db-wal" />

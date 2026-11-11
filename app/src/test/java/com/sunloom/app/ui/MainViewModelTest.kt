@@ -14,6 +14,7 @@ import com.sunloom.app.domain.solar.SolarCalculator
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -56,6 +57,7 @@ class MainViewModelTest {
 
         var lastExcludeIds: Set<String>? = null
         val importApplyFlags = mutableListOf<Boolean>()
+        var duringImport: (() -> Unit)? = null
 
         var failNext: Throwable? = null
 
@@ -66,6 +68,20 @@ class MainViewModelTest {
         }
         override suspend fun applyPreviousWallpaper(): SunloomUiState = applyWallpaper(state.previousWallpaperId ?: "seed-1")
         override suspend fun restoreBaselineWallpaper(): SunloomUiState = applyWallpaper("seed-1")
+
+        /** Which picked or dropped items the platform recognises as images; null means all of them. */
+        var imageUris: Set<String>? = null
+        override suspend fun filterImageUris(uriStrings: List<String>) = uriStrings.filter { imageUris?.contains(it) ?: true }
+
+        var crashes: List<com.sunloom.app.diagnostics.CrashEntry> = emptyList()
+        override suspend fun recentCrashes() = crashes
+
+        var resetCount = 0
+        override suspend fun resetSunloom(): SunloomUiState {
+            resetCount++
+            state = SunloomUiState(preferences = UserPreferences(isSetupCompleted = false))
+            return state
+        }
 
         override suspend fun toggleKeepWallpaper(recordId: String): SunloomUiState {
             val cur = state.currentWallpaper ?: return state
@@ -99,7 +115,11 @@ class MainViewModelTest {
 
         override suspend fun importLocalUri(uriString: String, asBaselineRestore: Boolean, applyAfterImport: Boolean): SunloomUiState {
             importApplyFlags += applyAfterImport
-            state = state.copy(statusBannerMessage = "Imported $uriString")
+            duringImport?.invoke()
+            state = state.copy(
+                statusBannerMessage = "Imported $uriString",
+                applyOfferRecordId = if (applyAfterImport) null else "imported-$uriString"
+            )
             return state
         }
 
@@ -169,6 +189,97 @@ class MainViewModelTest {
     }
 
     @Test
+    fun `dropped or shared items that are not images are left out before importing`() {
+        fakeGateway.imageUris = setOf("content://a/1.jpg", "content://a/3.png")
+
+        viewModel.importLocalUris(listOf("content://a/1.jpg", "content://a/2.pdf", "content://a/3.png"))
+
+        assertEquals("two images imported, the pdf was not", 2, fakeGateway.importApplyFlags.size)
+    }
+
+    @Test
+    fun `nothing is imported, and the caller is told, when no item is an image`() {
+        fakeGateway.imageUris = emptySet()
+        var finished = false
+
+        viewModel.importLocalUris(listOf("content://a/1.pdf")) { finished = true }
+
+        assertTrue(fakeGateway.importApplyFlags.isEmpty())
+        assertTrue("a finished callback still fires so grants are released", finished)
+    }
+
+    @Test
+    fun `copying diagnostics hands over a report and says so`() {
+        fakeGateway.crashes = listOf(com.sunloom.app.diagnostics.CrashEntry("crash-1.txt", 1L, "RuntimeException: boom\nat x"))
+        var copied: String? = null
+
+        viewModel.copyDiagnostics { copied = it }
+
+        val text = copied!!
+        assertTrue(text.startsWith("Sunloom diagnostics"))
+        assertTrue("recent crashes are included", text.contains("RuntimeException: boom"))
+        assertEquals(UiStrings.English.diagnosticsCopied, viewModel.uiState.value.statusBannerMessage)
+    }
+
+    @Test
+    fun `resetting returns to first-run setup with a clean screen`() {
+        viewModel.completeFirstRunSetup(UserPreferences(autoChangeEnabled = true))
+        viewModel.selectTab(DesktopNavTab.DISPLAYS_AND_SCHEDULE)
+        viewModel.reopenSetup()
+        assertTrue(viewModel.uiState.value.preferences.isSetupCompleted)
+
+        viewModel.resetSunloom()
+
+        assertEquals(1, fakeGateway.resetCount)
+        val state = viewModel.uiState.value
+        assertFalse("setup is shown again", state.preferences.isSetupCompleted)
+        assertFalse(state.isSetupReopened)
+        assertEquals(DesktopNavTab.TODAY_CANVAS, state.activeTab)
+        assertNull(state.pendingDiscard)
+        assertFalse(state.isApplyingWallpaper)
+    }
+
+    @Test
+    fun `automatic switching can be turned back on after setup turned it off`() {
+        viewModel.completeFirstRunSetup(UserPreferences(scheduleMode = ScheduleMode.SUNRISE_SUNSET, autoChangeEnabled = false))
+        assertFalse(viewModel.uiState.value.preferences.autoChangeEnabled)
+
+        viewModel.setAutoChangeEnabled(true)
+
+        assertTrue(viewModel.uiState.value.preferences.autoChangeEnabled)
+        assertTrue("the choice is saved, not only shown", fakeGateway.state.preferences.autoChangeEnabled)
+    }
+
+    @Test
+    fun `reopening setup shows setup again without saving anything`() {
+        viewModel.completeFirstRunSetup(
+            UserPreferences(scheduleMode = ScheduleMode.FIXED_CLOCK, autoChangeEnabled = true)
+        )
+        assertFalse(viewModel.uiState.value.isSetupReopened)
+
+        viewModel.reopenSetup()
+
+        val state = viewModel.uiState.value
+        assertTrue("setup is shown again", state.isSetupReopened)
+        assertTrue("but it is only a screen, not a saved state", state.preferences.isSetupCompleted)
+        assertTrue("so a relaunch does not boot into first-run", fakeGateway.state.preferences.isSetupCompleted)
+        assertEquals(ScheduleMode.FIXED_CLOCK, state.preferences.scheduleMode)
+    }
+
+    @Test
+    fun `reopened setup stays open through other updates and closes when completed`() {
+        viewModel.completeFirstRunSetup(UserPreferences(autoChangeEnabled = true))
+        viewModel.reopenSetup()
+
+        viewModel.changeToNextWallpaper()
+        assertTrue("another update must not close setup under the person", viewModel.uiState.value.isSetupReopened)
+
+        viewModel.completeFirstRunSetup(UserPreferences(autoChangeEnabled = false))
+        assertFalse(viewModel.uiState.value.isSetupReopened)
+        assertFalse(viewModel.uiState.value.preferences.autoChangeEnabled)
+    }
+
+    @Test
     fun `completeFirstRunSetup marks setup completed and activates TODAY_CANVAS tab`() {
         assertFalse(viewModel.uiState.value.preferences.isSetupCompleted)
         viewModel.completeFirstRunSetup(
@@ -220,6 +331,27 @@ class MainViewModelTest {
         viewModel.syncOnlineCatalogNow()
         assertFalse(viewModel.uiState.value.isSyncingOnline)
         assertTrue(viewModel.uiState.value.statusBannerMessage.contains("Online sync interrupted"))
+    }
+
+    @Test
+    fun `a failed sync offers a retry, and a later good sync takes it away`() = runTest {
+        fakeGateway.shouldThrowOnSync = true
+        viewModel.syncOnlineCatalogNow()
+        assertTrue(viewModel.uiState.value.canRetrySync)
+
+        fakeGateway.shouldThrowOnSync = false
+        viewModel.syncOnlineCatalogNow()
+        assertFalse(viewModel.uiState.value.canRetrySync)
+    }
+
+    @Test
+    fun `a cancelled sync does not offer a retry`() = runTest {
+        fakeGateway.shouldCancelOnSync = true
+        try {
+            viewModel.syncOnlineCatalogNow()
+        } catch (_: kotlinx.coroutines.CancellationException) {
+        }
+        assertFalse(viewModel.uiState.value.canRetrySync)
     }
 
     @Test
@@ -330,6 +462,51 @@ class MainViewModelTest {
         viewModel.importLocalUris(listOf("content://a/1"))
         viewModel.importLocalUris(listOf("content://a/2", "content://a/3"))
         assertEquals(listOf(true, false, false), fakeGateway.importApplyFlags)
+    }
+
+    @Test
+    fun `adding a photo from the picker puts it in the reserve and offers to apply it`() {
+        viewModel.importLocalUri("content://a/1", asBaselineRestore = false)
+
+        assertEquals("the wallpaper is not changed behind the person's back", listOf(false), fakeGateway.importApplyFlags)
+        assertEquals("imported-content://a/1", viewModel.uiState.value.applyOfferRecordId)
+    }
+
+    @Test
+    fun `a batch has no single photo to apply, so no offer`() {
+        viewModel.importLocalUris(listOf("content://a/1", "content://a/2"))
+        assertNull(viewModel.uiState.value.applyOfferRecordId)
+    }
+
+    @Test
+    fun `a batch import reports how far it has got, and stops reporting when it ends`() {
+        val seen = mutableListOf<ImportProgress?>()
+        fakeGateway.duringImport = { seen += viewModel.uiState.value.importProgress }
+
+        viewModel.importLocalUris(listOf("content://a/1", "content://a/2", "content://a/3"))
+
+        assertEquals(listOf(ImportProgress(0, 3), ImportProgress(1, 3), ImportProgress(2, 3)), seen)
+        assertNull(viewModel.uiState.value.importProgress)
+    }
+
+    @Test
+    fun `a single import shows it is working too`() {
+        var seen: ImportProgress? = null
+        fakeGateway.duringImport = { seen = viewModel.uiState.value.importProgress }
+
+        viewModel.importLocalUris(listOf("content://a/1"))
+
+        assertEquals(ImportProgress(0, 1), seen)
+        assertNull(viewModel.uiState.value.importProgress)
+    }
+
+    @Test
+    fun `an import that fails does not leave the progress bar running`() {
+        fakeGateway.duringImport = { throw IllegalStateException("disk full") }
+
+        viewModel.importLocalUris(listOf("content://a/1", "content://a/2"))
+
+        assertNull(viewModel.uiState.value.importProgress)
     }
 
     @Test

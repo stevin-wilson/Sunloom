@@ -1,5 +1,7 @@
 package com.sunloom.app.platform.scheduler
 
+import com.sunloom.app.domain.model.BrightnessClass
+import com.sunloom.app.domain.model.FollowOsVerification
 import com.sunloom.app.domain.model.ScheduleMode
 import com.sunloom.app.domain.model.WallpaperStatus
 
@@ -42,6 +44,25 @@ internal object RefreshSchedulePolicy {
         mode == ScheduleMode.FOLLOW_OS_THEME && currentSuitsTarget == true
 
     const val FOLLOW_OS_POLL_MINUTES = 15L
+
+    /**
+     * What a Follow-OS poll last verified: the theme and the wallpaper on screen (or the system default). While both are
+     * still exactly that, nothing needs doing, and the poll can end without reading the library.
+     */
+    fun followOsVerifiedKey(target: BrightnessClass, currentId: String?): String = FollowOsVerification.key(target, currentId)
+
+    fun canSkipFollowOsPoll(mode: ScheduleMode, storedKey: String?, target: BrightnessClass, currentId: String?): Boolean =
+        mode == ScheduleMode.FOLLOW_OS_THEME && storedKey != null && storedKey == followOsVerifiedKey(target, currentId)
+
+    /**
+     * The inexact alarm backstops a delayed change job that Doze might hold for hours. Follow-OS has no transition to be
+     * late for - it looks every few minutes anyway - so the alarm would only add wake-ups.
+     */
+    fun usesBackstopAlarm(mode: ScheduleMode?): Boolean = mode != ScheduleMode.FOLLOW_OS_THEME
+
+    /** While the app is running, a change of the system theme is acted on at once instead of at the next poll. */
+    fun shouldReactToThemeChange(mode: ScheduleMode, previousNight: Boolean?, nowNight: Boolean): Boolean =
+        mode == ScheduleMode.FOLLOW_OS_THEME && previousNight != null && previousNight != nowNight
 
     /** How often a suspended automation checks whether the library store opens again (Article VII §6). */
     const val STORE_WATCH_INTERVAL_HOURS = 6L

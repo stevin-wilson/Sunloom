@@ -1,8 +1,13 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.labels.title
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.shape.CircleShape
 import com.sunloom.app.R
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -32,7 +37,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -64,6 +68,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -157,6 +162,12 @@ fun SunloomApp(
     val onDeleteManyFromReserve = actions.onDeleteManyFromReserve
     val onUndoDiscard = actions.onUndoDiscard
     val onCommitDiscard = actions.onCommitDiscard
+    val onToggleAutoSwitch = actions.onToggleAutoSwitch
+    val onReopenSetup = actions.onReopenSetup
+    val onResetSunloom = actions.onResetSunloom
+    val onCopyDiagnostics = actions.onCopyDiagnostics
+    val onReportProblem = actions.onReportProblem
+    val onCheckForUpdates = actions.onCheckForUpdates
     val snackbarHostState = remember { SnackbarHostState() }
     val colorScheme = if (darkTheme) SunloomDarkPalette else SunloomLightPalette
     val shortcutGate = remember { ShortcutGate() }
@@ -180,6 +191,9 @@ fun SunloomApp(
         { runCatching { rootFocusRequester.requestFocus() }; Unit }
     }
     val context = LocalContext.current
+    val singleKeyShortcuts = remember(context) {
+        SingleKeyShortcuts(UiPrefs.singleKeyShortcuts(context)) { UiPrefs.setSingleKeyShortcuts(context, it) }
+    }
     val scope = rememberCoroutineScope()
     val attributionCopiedMessage = stringResource(R.string.attribution_copied)
     val showMessage: (String) -> Unit = remember(scope, snackbarHostState) {
@@ -208,13 +222,15 @@ fun SunloomApp(
 
     CompositionLocalProvider(
         LocalShortcutGate provides shortcutGate,
+        LocalSingleKeyShortcuts provides singleKeyShortcuts,
         LocalRestoreRootFocus provides restoreRootFocus,
         LocalWallpaperActions provides wallpaperActions
     ) {
-    MaterialTheme(colorScheme = colorScheme) {
+    MaterialTheme(colorScheme = colorScheme, shapes = SunloomShapes) {
         Surface(
             modifier = Modifier
                 .fillMaxSize()
+                .testTag("workspace_root")
                 .busyCursor(uiState.isApplyingWallpaper || uiState.isSyncingOnline)
                 .focusRequester(rootFocusRequester)
                 .focusable()
@@ -267,7 +283,7 @@ fun SunloomApp(
                             true
                         }
                         // Single-key accelerators never fire while typing or before setup is complete.
-                        shortcutGate.isTextInputFocused || !workspaceReady -> false
+                        shortcutGate.isTextInputFocused || !workspaceReady || !singleKeyShortcuts.enabled -> false
                         else -> when (event.key) {
                             Key.N -> {
                                 onNextWallpaper()
@@ -317,7 +333,7 @@ fun SunloomApp(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(32.dp),
+                            .padding(Spacing.xxl),
                         contentAlignment = Alignment.Center
                     ) {
                         Card(
@@ -327,8 +343,8 @@ fun SunloomApp(
                             )
                         ) {
                             Column(
-                                modifier = Modifier.padding(24.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                modifier = Modifier.padding(Spacing.xl),
+                                verticalArrangement = Arrangement.spacedBy(Spacing.m)
                             ) {
                                 Text(
                                     text = stringResource(R.string.local_library_database_unavailable),
@@ -346,7 +362,7 @@ fun SunloomApp(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                OutlinedButton(onClick = onRestoreSystemDefault, modifier = Modifier.desktopControl(RoundedCornerShape(50))) {
+                                OutlinedButton(onClick = onRestoreSystemDefault, modifier = Modifier.desktopControl(CircleShape)) {
                                     Text(stringResource(R.string.restore_system_default_wallpaper))
                                 }
                             }
@@ -357,13 +373,13 @@ fun SunloomApp(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(32.dp),
+                            .padding(Spacing.xxl),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(
                             modifier = Modifier.width(360.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                            verticalArrangement = Arrangement.spacedBy(Spacing.m)
                         ) {
                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                             Text(
@@ -374,7 +390,7 @@ fun SunloomApp(
                         }
                     }
                 }
-                !uiState.preferences.isSetupCompleted -> {
+                !uiState.preferences.isSetupCompleted || uiState.isSetupReopened -> {
                     FirstRunSetupScreen(
                         uiState = uiState,
                         onCompleteSetup = onCompleteSetup
@@ -412,9 +428,12 @@ fun SunloomApp(
                     onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
                     onUpdateDisplayPolicy = onUpdateDisplayPolicy,
                     onForgetRememberedDisplay = onForgetRememberedDisplay,
-                    onReopenSetup = {
-                        onCompleteSetup(uiState.preferences.copy(isSetupCompleted = false))
-                    }
+                    onToggleAutoSwitch = onToggleAutoSwitch,
+                    onResetSunloom = onResetSunloom,
+                    onCopyDiagnostics = onCopyDiagnostics,
+                    onReportProblem = onReportProblem,
+                    onCheckForUpdates = onCheckForUpdates,
+                    onReopenSetup = onReopenSetup
                     )
                 }
             }
@@ -446,14 +465,15 @@ private fun UndoSnackbarEffect(
 ) {
     val latestUndo = rememberUpdatedState(onUndo)
     val latestCommit = rememberUpdatedState(onCommit)
+    val resources = LocalResources.current
     LaunchedEffect(pending?.token) {
         if (pending == null) return@LaunchedEffect
         val message = when (pending.kind) {
-            DiscardKind.DISLIKE -> "Disliked '${pending.title}'"
+            DiscardKind.DISLIKE -> resources.getString(R.string.undo_disliked, pending.title)
             DiscardKind.REMOVE -> if (pending.additionalRecordIds.isEmpty()) {
-                "Removed '${pending.title}' from reserve"
+                resources.getString(R.string.undo_removed_one, pending.title)
             } else {
-                "Removed ${pending.title} from reserve"
+                resources.getString(R.string.undo_removed_many, pending.title)
             }
         }
         val result = snackbarHostState.showSnackbar(
@@ -520,7 +540,7 @@ fun CityDropdownSelector(
                 selectedCityName.startsWith(it.cityName, ignoreCase = true)
         }
     }
-    val displayLabel = selectedCity?.dropdownLabel ?: "Custom: $selectedCityName"
+    val displayLabel = selectedCity?.dropdownLabel ?: stringResource(R.string.custom_city_label, selectedCityName)
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -590,216 +610,6 @@ fun CityDropdownSelector(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun FirstRunSetupScreen(
-    uiState: SunloomUiState,
-    onCompleteSetup: (UserPreferences) -> Unit
-) {
-    var draftPrefs by rememberSaveable(
-        uiState.preferences,
-        stateSaver = setupDraftSaver(uiState.preferences)
-    ) { mutableStateOf(uiState.preferences) }
-    val scrollState = rememberScrollState()
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .desktopScrollbar(scrollState)
-            .verticalScroll(scrollState)
-            // Keep setup a readable column on ultra-wide windows (UI_Secondary_Elements).
-            .wrapContentWidth(Alignment.CenterHorizontally)
-            .widthIn(max = 760.dp)
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = stringResource(R.string.welcome_to_sunloom),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                text = stringResource(R.string.daylight_and_evening_wallpapers_tailored),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.automatic_wallpaper_schedule), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.sectionHeading())
-                        Text(
-                            stringResource(R.string.switch_between_bright_wallpapers_during),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = draftPrefs.autoChangeEnabled,
-                        onCheckedChange = { draftPrefs = draftPrefs.copy(autoChangeEnabled = it) }, modifier = Modifier.desktopControl(RoundedCornerShape(50)).switchLabel(stringResource(R.string.automatic_wallpaper_schedule))
-                    )
-                }
-
-                if (draftPrefs.autoChangeEnabled) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-
-                    Text(stringResource(R.string.schedule), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ScheduleMode.entries.forEach { mode ->
-                            FilterChip(
-                                selected = draftPrefs.scheduleMode == mode,
-                                onClick = { draftPrefs = draftPrefs.copy(scheduleMode = mode) },
-                                label = { Text(mode.label) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
-                            )
-                        }
-                    }
-                    Text(
-                        text = draftPrefs.scheduleMode.plainDescription,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    if (draftPrefs.scheduleMode == ScheduleMode.SUNRISE_SUNSET) {
-                        CityDropdownSelector(
-                            selectedCityName = draftPrefs.selectedCityName,
-                            onSelectCity = { city ->
-                                draftPrefs = draftPrefs.copy(
-                                    selectedCityName = city.name,
-                                    latitude = city.latitude,
-                                    longitude = city.longitude
-                                )
-                            }
-                        )
-                    }
-                }
-            }
-        }
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(stringResource(R.string.categories), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.sectionHeading())
-                Text(
-                    stringResource(R.string.choose_the_themes_you_enjoy),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    SafeCategory.entries.filter { it != SafeCategory.USER_LOCAL }.forEach { cat ->
-                        val selected = cat in draftPrefs.enabledCategories
-                        FilterChip(
-                            selected = selected,
-                            onClick = {
-                                val next = if (selected && draftPrefs.enabledCategories.size > 1) {
-                                    draftPrefs.enabledCategories - cat
-                                } else {
-                                    draftPrefs.enabledCategories + cat
-                                }
-                                draftPrefs = draftPrefs.copy(enabledCategories = next)
-                            },
-                            label = { Text(cat.displayName) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
-                        )
-                    }
-                }
-            }
-        }
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.apply_wallpaper_to), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.sectionHeading())
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    LockWorkspacePolicy.entries.forEach { policy ->
-                        FilterChip(
-                            selected = draftPrefs.lockWorkspacePolicy == policy,
-                            onClick = { draftPrefs = draftPrefs.copy(lockWorkspacePolicy = policy) },
-                            label = { Text(policy.label) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
-                        )
-                    }
-                }
-            }
-        }
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = stringResource(R.string.initial_preview),
-                    modifier = Modifier.sectionHeading(),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    val sampleLight = uiState.libraryWallpapers.firstOrNull { it.evaluation.brightnessClass == BrightnessClass.LIGHT }
-                    val sampleDark = uiState.libraryWallpapers.firstOrNull { it.evaluation.brightnessClass == BrightnessClass.DARK }
-
-                    if (sampleLight != null) {
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            WallpaperPreviewSurface(record = sampleLight, showLegibilityZones = false, modifier = Modifier.height(130.dp), maxDecodeWidth = 640, maxDecodeHeight = 400)
-                            TruncatedTitleWithTooltip("Daytime: ${sampleLight.title}", style = MaterialTheme.typography.labelLarge)
-                        }
-                    }
-                    if (sampleDark != null) {
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            WallpaperPreviewSurface(record = sampleDark, showLegibilityZones = false, modifier = Modifier.height(130.dp), maxDecodeWidth = 640, maxDecodeHeight = 400)
-                            TruncatedTitleWithTooltip("Evening: ${sampleDark.title}", style = MaterialTheme.typography.labelLarge)
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Button(
-                        onClick = { onCompleteSetup(draftPrefs.copy(dryRunPreviewOnly = false)) },
-                        modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("enable_sunloom_button")
-                    ) {
-                        Icon(SunloomIcons.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            if (draftPrefs.autoChangeEnabled) stringResource(R.string.start_sunloom) else stringResource(R.string.open_sunloom),
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun DesktopWorkspaceScreen(
     uiState: SunloomUiState,
     onSelectTab: (DesktopNavTab) -> Unit,
@@ -831,6 +641,11 @@ fun DesktopWorkspaceScreen(
     onForgetRememberedDisplay: (String) -> Unit = {},
     isFullscreen: Boolean = false,
     onToggleFullscreen: () -> Unit = {},
+    onToggleAutoSwitch: (Boolean) -> Unit = {},
+    onResetSunloom: () -> Unit = {},
+    onCopyDiagnostics: () -> Unit = {},
+    onReportProblem: () -> Unit = {},
+    onCheckForUpdates: () -> Unit = {},
     onReopenSetup: () -> Unit
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -839,12 +654,14 @@ fun DesktopWorkspaceScreen(
         val workspace: @Composable (Modifier) -> Unit = { paneModifier ->
             Column(
                 modifier = paneModifier.padding(contentPadding),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(Spacing.m)
             ) {
                 TopStatusBanner(
                     uiState = uiState,
                     onTogglePause = onTogglePause,
-                    onRetryApply = { uiState.retryApplyRecordId?.let(onApplySpecific) }
+                    onRetryApply = { uiState.retryApplyRecordId?.let(onApplySpecific) },
+                    onRetrySync = onSyncOnline,
+                    onApplyNow = { uiState.applyOfferRecordId?.let(onApplySpecific) }
                 )
 
                 when (uiState.activeTab) {
@@ -889,13 +706,18 @@ fun DesktopWorkspaceScreen(
                             onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
                             onUpdateDisplayPolicy = onUpdateDisplayPolicy,
                             onForgetRememberedDisplay = onForgetRememberedDisplay,
+                            onToggleAutoSwitch = onToggleAutoSwitch,
                             onRestoreSystemDefault = onRestoreSystemDefault,
                             onReopenSetup = onReopenSetup
                         )
                         DesktopNavTab.SAFETY_AND_DECISION_LOG -> DiagnosticsPane(
                             uiState = uiState,
                             onToggleLegibilityOverlay = onToggleLegibilityOverlay,
-                            onUpdateMaxCacheBytes = onUpdateMaxCacheBytes
+                            onUpdateMaxCacheBytes = onUpdateMaxCacheBytes,
+                            onResetSunloom = onResetSunloom,
+                            onCopyDiagnostics = onCopyDiagnostics,
+                            onReportProblem = onReportProblem,
+                            onCheckForUpdates = onCheckForUpdates
                         )
                 
                             else -> Unit
@@ -913,13 +735,16 @@ fun DesktopWorkspaceScreen(
                     windowInsets = WindowInsets(0, 0, 0, 0),
                     modifier = Modifier.testTag("workspace_nav_bar")
                 ) {
+                    val labelsVisible = navLabelsAlwaysVisible(LocalDensity.current.fontScale)
                     DesktopNavTab.entries.forEach { tab ->
                         NavigationBarItem(
                             selected = uiState.activeTab == tab,
                             onClick = { onSelectTab(tab) },
-                            modifier = Modifier.desktopControl(RoundedCornerShape(16.dp)).testTag("nav_${tab.name}"),
-                            icon = { Icon(navIcon(tab), contentDescription = null) }, // the visible label names it
-                            label = { Text(tab.label, fontSize = 12.sp, maxLines = 1) }
+                            modifier = Modifier.desktopControl(MaterialTheme.shapes.large).testTag("nav_${tab.name}"),
+                            // The visible label names it; when labels give way to large text the icon must.
+                            icon = { Icon(navIcon(tab), contentDescription = if (labelsVisible) null else tab.title()) },
+                            label = { Text(tab.title(), fontSize = 12.sp, maxLines = 1) },
+                            alwaysShowLabel = labelsVisible
                         )
                     }
                 }
@@ -941,18 +766,22 @@ fun DesktopWorkspaceScreen(
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
                     DesktopNavTab.entries.forEach { tab ->
-                        NavigationRailItem(
-                            selected = uiState.activeTab == tab,
-                            onClick = { onSelectTab(tab) },
-                            modifier = Modifier.desktopControl(RoundedCornerShape(16.dp)).testTag("nav_${tab.name}"),
-                            icon = { Icon(navIcon(tab), contentDescription = if (showLabels) null else tab.label) },
-                            label = if (showLabels) {
-                                { Text(tab.label, fontSize = 12.sp) }
-                            } else {
-                                null
-                            },
-                            alwaysShowLabel = showLabels
-                        )
+                        // Without text beside the icon, hover or long-press names the section.
+                        val railItem: @Composable () -> Unit = {
+                            NavigationRailItem(
+                                selected = uiState.activeTab == tab,
+                                onClick = { onSelectTab(tab) },
+                                modifier = Modifier.desktopControl(MaterialTheme.shapes.large).testTag("nav_${tab.name}"),
+                                icon = { Icon(navIcon(tab), contentDescription = if (showLabels) null else tab.title()) },
+                                label = if (showLabels) {
+                                    { Text(tab.title(), fontSize = 12.sp) }
+                                } else {
+                                    null
+                                },
+                                alwaysShowLabel = showLabels
+                            )
+                        }
+                        if (showLabels) railItem() else ShortcutTooltip(tab.title()) { railItem() }
                     }
                 }
                 workspace(Modifier.weight(1f).fillMaxHeight())
@@ -983,19 +812,34 @@ private val ReadableContentMaxWidth = 1100.dp
 private fun TopStatusBanner(
     uiState: SunloomUiState,
     onTogglePause: () -> Unit,
-    onRetryApply: () -> Unit = {}
+    onRetryApply: () -> Unit = {},
+    onRetrySync: () -> Unit = {},
+    onApplyNow: () -> Unit = {}
 ) {
-    val solarNote = when {
-        uiState.daylightWindow.isPolarDay -> "24h Daylight"
-        uiState.daylightWindow.isPolarNight -> "24h Night"
-        else -> "Sunrise ${uiState.daylightWindow.sunriseTime} • Sunset ${uiState.daylightWindow.sunsetTime}"
+    val prefs = uiState.preferences
+    val brightnessName = uiState.targetBrightnessNow.title()
+    val scheduleNote = when (prefs.scheduleMode) {
+        ScheduleMode.SUNRISE_SUNSET -> {
+            val solarNote = when {
+                uiState.daylightWindow.isPolarDay -> stringResource(R.string.solar_24h_daylight)
+                uiState.daylightWindow.isPolarNight -> stringResource(R.string.solar_24h_night)
+                else -> stringResource(
+                    R.string.solar_sunrise_sunset, uiState.daylightWindow.sunriseTime, uiState.daylightWindow.sunsetTime
+                )
+            }
+            stringResource(R.string.banner_note_solar, brightnessName, solarNote)
+        }
+        ScheduleMode.FOLLOW_OS_THEME -> stringResource(R.string.banner_note_follow_os, brightnessName)
+        ScheduleMode.FIXED_CLOCK ->
+            stringResource(R.string.banner_note_fixed, brightnessName, prefs.fixedLightHour, prefs.fixedDarkHour)
+        ScheduleMode.MANUAL_ONLY -> stringResource(R.string.banner_note_manual, brightnessName)
     }
     val isDaytime = uiState.targetBrightnessNow == BrightnessClass.LIGHT
     val showPauseResume = uiState.preferences.autoChangeEnabled &&
         uiState.preferences.scheduleMode != ScheduleMode.MANUAL_ONLY
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.medium,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -1008,7 +852,7 @@ private fun TopStatusBanner(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.m),
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(
@@ -1016,29 +860,27 @@ private fun TopStatusBanner(
                         contentDescription = null,
                         tint = if (isDaytime) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.tertiary
                     )
-                    Column(modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
-                        Text(
-                            text = uiState.statusBannerMessage,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "${uiState.targetBrightnessNow.displayName} • $solarNote",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    BannerMessage(uiState.statusBannerMessage, scheduleNote)
                 }
                 if (uiState.retryApplyRecordId != null) {
                     OutlinedButton(
                         onClick = onRetryApply,
                         enabled = !uiState.isApplyingWallpaper,
                         modifier = Modifier.desktopControl().testTag("retry_apply_button")
+                    ) { Text(stringResource(R.string.try_again)) }
+                }
+                if (uiState.applyOfferRecordId != null) {
+                    OutlinedButton(
+                        onClick = onApplyNow,
+                        enabled = !uiState.isApplyingWallpaper,
+                        modifier = Modifier.desktopControl().testTag("apply_now_button")
+                    ) { Text(stringResource(R.string.apply_now)) }
+                }
+                if (uiState.canRetrySync) {
+                    OutlinedButton(
+                        onClick = onRetrySync,
+                        enabled = !uiState.isSyncingOnline,
+                        modifier = Modifier.desktopControl().testTag("retry_sync_button")
                     ) { Text(stringResource(R.string.try_again)) }
                 }
                 if (showPauseResume) {
@@ -1060,10 +902,62 @@ private fun TopStatusBanner(
                     }
                 }
             }
-            if (uiState.isSyncingOnline || uiState.isApplyingWallpaper) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            }
+            BannerProgress(uiState)
         }
+    }
+}
+
+@Composable
+private fun BannerProgress(uiState: SunloomUiState) {
+    val importing = uiState.importProgress
+    if (importing != null && importing.total > 1) {
+        LinearProgressIndicator(
+            progress = { importing.done.toFloat() / importing.total },
+            modifier = Modifier.fillMaxWidth().testTag("import_progress")
+        )
+    } else if (importing != null || uiState.isSyncingOnline || uiState.isApplyingWallpaper) {
+        LinearProgressIndicator(modifier = Modifier.fillMaxWidth().testTag("import_progress"))
+    }
+}
+
+@Composable
+private fun BannerMessage(message: String, scheduleNote: String) {
+    var expanded by remember(message) { mutableStateOf(false) }
+    var cutOff by remember(message) { mutableStateOf(false) }
+    val expandedLabel = stringResource(R.string.show_less)
+    val collapsedLabel = stringResource(R.string.show_more)
+    Column(modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = if (expanded) Int.MAX_VALUE else 1,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { if (!expanded) cutOff = it.hasVisualOverflow },
+            modifier = Modifier
+                .testTag("status_banner_message")
+                .semantics {
+                    stateDescription = if (expanded) expandedLabel else collapsedLabel
+                }
+                .clickable { expanded = !expanded }
+        )
+        if (cutOff || expanded) {
+            Text(
+                text = stringResource(if (expanded) R.string.show_less else R.string.show_more),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.testTag("status_banner_expand_hint")
+            )
+        }
+        Text(
+            text = scheduleNote,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.testTag("status_banner_note")
+        )
     }
 }
 

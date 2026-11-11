@@ -55,7 +55,24 @@ class SunloomWallpaperScheduler(
         return Constraints.Builder()
             .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
             .setRequiresBatteryNotLow(deferBatterySaver)
+            // A download into a nearly full disk only makes things worse; wait until there is room.
+            .setRequiresStorageNotLow(true)
             .build()
+    }
+
+    /**
+     * Cancels everything, then waits (up to [timeoutMs]) for an attempt that is already running to stop: cancelling the
+     * queue does not stop it, and it holds its own repository and could still write. Reset needs this before it erases.
+     * Returns false if something was still running at the timeout.
+     */
+    fun cancelAllScheduledWorkAndWait(timeoutMs: Long = 5_000L): Boolean {
+        cancelAllScheduledWork()
+        val workManager = runCatching { WorkManager.getInstance(context) }.getOrNull() ?: return true
+        val names = listOf(WORK_NAME, WORK_NAME_CHANGE, WORK_NAME_REFRESH, WORK_NAME_STORE_WATCH)
+        return WorkIdle.awaitIdle(
+            isBusy = { names.any { name -> workManager.getWorkInfosForUniqueWork(name).get().any { it.state == WorkInfo.State.RUNNING } } },
+            timeoutMs = timeoutMs
+        )
     }
 
     fun cancelAllScheduledWork() {
@@ -116,7 +133,8 @@ class SunloomWallpaperScheduler(
         val pending = runCatching {
             workManager.getWorkInfosForUniqueWork(WORK_NAME_CHANGE).get().any { !it.state.isFinished }
         }.getOrDefault(true)
-        if (plan.scheduleChanges && pending && ChangeAlarm.isScheduled(context)) {
+        val alarmInPlace = !RefreshSchedulePolicy.usesBackstopAlarm(preferences.scheduleMode) || ChangeAlarm.isScheduled(context)
+        if (plan.scheduleChanges && pending && alarmInPlace) {
             // The change is armed; the periodic refresh uses KEEP, so re-syncing it is harmless and restores it too.
             syncRefreshOnly(preferences)
             return
@@ -211,7 +229,11 @@ class SunloomWallpaperScheduler(
             ExistingWorkPolicy.REPLACE,
             changeRequest
         )
-        ChangeAlarm.schedule(context, delayMs = delayMs)
+        if (RefreshSchedulePolicy.usesBackstopAlarm(effectivePrefs?.scheduleMode)) {
+            ChangeAlarm.schedule(context, delayMs = delayMs)
+        } else {
+            ChangeAlarm.cancel(context) // Follow-OS looks every few minutes; an alarm would only add wake-ups
+        }
 
         scheduleRefreshWork(workManager, schedulePrefs, wifiOnly, deferBatterySaver, rescheduleRefreshWork)
     }
@@ -227,7 +249,7 @@ class SunloomWallpaperScheduler(
         if (!rescheduleRefreshWork) {
             return
         }
-        val constraintsSig = "$wifiOnly:$deferBatterySaver:${RefreshSchedulePolicy.REFRESH_INTERVAL_HOURS}h"
+        val constraintsSig = refreshConstraintsSignature(wifiOnly, deferBatterySaver)
         val prevSig = schedulePrefs.getString(PREF_REFRESH_CONSTRAINTS_SIG, null)
         // A changed constraint set or cadence (the signature includes the interval) replaces the enqueued request.
         val periodicPolicy = if (prevSig != null && prevSig != constraintsSig) {
@@ -254,6 +276,13 @@ class SunloomWallpaperScheduler(
         const val WORK_NAME_REFRESH = "sunloom_refresh_work"
         const val WORK_NAME_STORE_WATCH = "sunloom_store_watch_work"
         private const val PREF_REFRESH_CONSTRAINTS_SIG = "scheduled_refresh_constraints_sig"
+
+        /**
+         * Identifies the refresh job's constraints and cadence. A different signature replaces the queued request, so
+         * adding the storage need (":storage") reaches installs that queued the job without it.
+         */
+        internal fun refreshConstraintsSignature(wifiOnly: Boolean, deferBatterySaver: Boolean): String =
+            "$wifiOnly:$deferBatterySaver:storage:${RefreshSchedulePolicy.REFRESH_INTERVAL_HOURS}h"
 
         /**
          * Executes the local wallpaper transition logic for [ChangeWorker], walking up to 3
@@ -285,10 +314,19 @@ class SunloomWallpaperScheduler(
             // Follow-OS mode polls every few minutes. When the wallpaper on screen already suits the theme there is
             // nothing to do, and the library pass below (healing, revalidation, reconcile) would only cost battery.
             if (prefs.scheduleMode == ScheduleMode.FOLLOW_OS_THEME) {
-                val current = repo.getCurrentWallpaperId()?.let { repo.getWallpaperById(it) }
+                val currentId = repo.getCurrentWallpaperId()
+                // The theme and the wallpaper are exactly what the last poll verified (or the person chose the system
+                // default for this theme): nothing to read, nothing to do.
+                val verified = repo.getFollowOsVerifiedKey()
+                if (RefreshSchedulePolicy.canSkipFollowOsPoll(prefs.scheduleMode, verified, targetBrightness, currentId)) {
+                    rearmChange(appContext, prefs, nowZoned)
+                    return null
+                }
+                val current = currentId?.let { repo.getWallpaperById(it) }
                 val suits = current?.takeIf { it.localFilePath.isNotBlank() && File(it.localFilePath).exists() }
                     ?.let { BrightnessFit.accepts(it.evaluation, targetBrightness) }
                 if (RefreshSchedulePolicy.isRedundantFollowOsChange(prefs.scheduleMode, suits)) {
+                    repo.setFollowOsVerified(targetBrightness, currentId)
                     rearmChange(appContext, prefs, nowZoned)
                     return null
                 }
@@ -413,23 +451,39 @@ class SunloomWallpaperScheduler(
             val prefs = repo.loadPreferences()
             // Fetching is independent of automatic wallpaper changes: manual-mode users want fresh images too.
             if (prefs.isPaused) return 0
+            // The cheap checks first: a run that cannot download anyway touches nothing (no probing, no file scans).
+            val budget = BackgroundDataBudget(appContext.getSharedPreferences("sunloom_preferences", Context.MODE_PRIVATE))
+            fun blocked() = BackgroundDownloadPolicy.blockedBy(
+                unmeteredOnly = prefs.wifiOnlyDownloads,
+                deferOnBatterySaver = prefs.deferOnBatterySaver,
+                unmeteredNetwork = gateway.isUnmeteredNetwork(),
+                dataSaverRestricting = gateway.isDataSaverRestricting(),
+                batterySaverActive = gateway.isBatterySaverActive(),
+                bytesUsedToday = budget.usedToday(System.currentTimeMillis())
+            )
+            if (blocked() != DownloadBlock.NONE) return 0
             val connectedDisplays = platform.getConnectedDisplays()
             val display = platform.getPrimaryOrSharpestDisplayOrNull(connectedDisplays) ?: return 0
             repo.healMissingFiles()
+            repo.runStorageHygieneIfDue()
             repo.ensureSeedReserveLoadedForDisplays(connectedDisplays, prefs.displayPolicy)
-
-            val canDownload = (!prefs.wifiOnlyDownloads || gateway.isWifiConnected()) &&
-                (!prefs.deferOnBatterySaver || !gateway.isBatterySaverActive())
-            if (!canDownload) return 0
+            // A reserve that is already full needs no request at all; checked before the first round, not after it.
+            if (!repo.needsTopUp(prefs)) return 0
 
             // One round polls at most three sources within their request budgets, so keep going while images
             // arrive and the buffer is still short (a few rounds at most).
             var total = 0
             return try {
                 repeat(RefreshSchedulePolicy.MAX_BACKGROUND_ROUNDS) {
-                    val added = repo.refreshOnlineCatalog(display, connectedDisplays = connectedDisplays)
+                    val added = try {
+                        repo.refreshOnlineCatalog(display, connectedDisplays = connectedDisplays)
+                    } finally {
+                        // What was downloaded counts toward today's budget even if the round was cut short.
+                        budget.record(repo.lastSyncBytesDownloaded, System.currentTimeMillis())
+                    }
                     total += added
-                    if (added <= 0 || !repo.needsTopUp(prefs)) return total
+                    // Another round only while it is still wanted and the day's budget has room.
+                    if (added <= 0 || !repo.needsTopUp(prefs) || blocked() != DownloadBlock.NONE) return total
                 }
                 total
             } catch (cancel: CancellationException) {
@@ -441,6 +495,16 @@ class SunloomWallpaperScheduler(
     }
 }
 
+/**
+ * Folds the database's write-ahead log into the main file at the end of a background run. Auto Backup copies
+ * `sunloom_library.db` but not the `-wal` file, and a run can finish while the app is closed, so without this a
+ * backup taken afterwards would miss the run's last writes (blocklist and rejection rows especially).
+ */
+internal fun checkpointAfterRun() {
+    // No repository is built for this: a poll that wrote nothing must stay cheap, and a store that is down stays untouched.
+    com.sunloom.app.data.repository.SqliteLibraryStore.checkpointSharedIfWritten()
+}
+
 class ChangeWorker(
     appContext: Context,
     params: WorkerParameters
@@ -449,6 +513,7 @@ class ChangeWorker(
         runAttemptCount = runAttemptCount,
         execute = { SunloomWallpaperScheduler.executeScheduledWallpaperChange(applicationContext) },
         onGiveUp = { SunloomWallpaperScheduler.rearmAfterGivingUp(applicationContext) },
+        afterRun = { checkpointAfterRun() },
         onStoreUnavailable = { SunloomWallpaperScheduler(applicationContext).suspendForUnavailableStore() }
     )
 }
@@ -471,15 +536,31 @@ class RefreshWorker(
     override suspend fun doWork(): Result = mapRefreshWorkResult(
         runAttemptCount = runAttemptCount,
         execute = { SunloomWallpaperScheduler.executeScheduledCatalogRefresh(applicationContext) },
+        afterRun = { checkpointAfterRun() },
         onStoreUnavailable = { SunloomWallpaperScheduler(applicationContext).suspendForUnavailableStore() }
     )
 }
 
-/** Maps a change execution outcome to a WorkManager [ListenableWorker.Result]. */
+/**
+ * Maps a change execution outcome to a WorkManager [ListenableWorker.Result]. [afterRun] runs once the attempt ends,
+ * whatever its outcome (see [checkpointAfterRun]); it cannot change the result.
+ */
 internal suspend fun mapChangeWorkResult(
     runAttemptCount: Int,
     execute: suspend () -> WallpaperStatus?,
     onGiveUp: () -> Unit = {},
+    afterRun: () -> Unit = {},
+    onStoreUnavailable: () -> Unit
+): ListenableWorker.Result = try {
+    mapChangeOutcome(runAttemptCount, execute, onGiveUp, onStoreUnavailable)
+} finally {
+    runCatching(afterRun)
+}
+
+private suspend fun mapChangeOutcome(
+    runAttemptCount: Int,
+    execute: suspend () -> WallpaperStatus?,
+    onGiveUp: () -> Unit,
     onStoreUnavailable: () -> Unit
 ): ListenableWorker.Result {
     return try {
@@ -508,8 +589,19 @@ internal suspend fun mapChangeWorkResult(
     }
 }
 
-/** Maps a catalog refresh execution outcome to a WorkManager [ListenableWorker.Result]. */
+/** Maps a catalog refresh execution outcome to a WorkManager [ListenableWorker.Result]; see [mapChangeWorkResult]. */
 internal suspend fun mapRefreshWorkResult(
+    runAttemptCount: Int,
+    execute: suspend () -> Int,
+    afterRun: () -> Unit = {},
+    onStoreUnavailable: () -> Unit
+): ListenableWorker.Result = try {
+    mapRefreshOutcome(runAttemptCount, execute, onStoreUnavailable)
+} finally {
+    runCatching(afterRun)
+}
+
+private suspend fun mapRefreshOutcome(
     runAttemptCount: Int,
     execute: suspend () -> Int,
     onStoreUnavailable: () -> Unit

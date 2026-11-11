@@ -1,0 +1,23 @@
+# Minimum line coverage (%) per package, enforced in CI by :app:coverageFloors (never part of `check`:
+# the aarch64 dev box skips the real-SQLite and WorkManager tests, so local numbers sit below CI's).
+# Raised 2026-11-11 to one point under what the aarch64 dev box measures (CI runs more tests, so it sits higher).
+# Ratchet upward only: when a PR raises a package's coverage, raise its floor in the same PR.
+# package,minLinePercent
+# (update: 91 - what is left is the default-argument glue that opens a real connection to GitHub, which a hermetic test cannot call)
+com.sunloom.app,97
+com.sunloom.app.data.cache,87
+com.sunloom.app.data.repository,83
+com.sunloom.app.data.sources,92
+com.sunloom.app.domain.attribution,94
+com.sunloom.app.domain.evaluator,93
+com.sunloom.app.domain.matcher,97
+com.sunloom.app.domain.model,97
+com.sunloom.app.domain.renderer,90
+com.sunloom.app.domain.safety,92
+com.sunloom.app.domain.solar,90
+com.sunloom.app.platform,73
+com.sunloom.app.platform.display,86
+com.sunloom.app.platform.export,85
+com.sunloom.app.platform.scheduler,63
+com.sunloom.app.ui,84
+com.sunloom.app.update,91

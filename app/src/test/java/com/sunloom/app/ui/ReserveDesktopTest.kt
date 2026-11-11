@@ -7,6 +7,8 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -83,12 +85,18 @@ class ReserveDesktopTest {
         )
     }
 
+    /**
+     * The window's own root. A hover tooltip or a menu is a second Compose root while it is showing, and `onRoot()` insists on
+     * exactly one; key input belongs to the window, so ask for the first.
+     */
+    private fun mainRoot() = composeTestRule.onAllNodes(isRoot()).onFirst()
+
     private fun ctrlClick(tag: String) {
         // The test input dispatcher shares one meta state between key and pointer injection, so a held
         // Ctrl key shows up in the pointer event's keyboardModifiers.
-        composeTestRule.onRoot().performKeyInput { keyDown(Key.CtrlLeft) }
+        mainRoot().performKeyInput { keyDown(Key.CtrlLeft) }
         composeTestRule.onNodeWithTag(tag).performScrollTo().performMouseInput { click() }
-        composeTestRule.onRoot().performKeyInput { keyUp(Key.CtrlLeft) }
+        mainRoot().performKeyInput { keyUp(Key.CtrlLeft) }
         composeTestRule.waitForIdle()
     }
 
@@ -130,6 +138,26 @@ class ReserveDesktopTest {
     }
 
     @Test
+    fun `a screen reader can select and unselect a card with a custom action`() {
+        content(reserveState())
+        fun action(label: String) = composeTestRule.onNodeWithTag("reserve_card_${ids[0]}").performScrollTo()
+            .fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.CustomActions]
+            .firstOrNull { it.label == label }
+
+        val select = action("Select")
+        assertTrue("a Select action is offered", select != null)
+        composeTestRule.runOnUiThread { select!!.action() }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("reserve_selection_bar").assertExists()
+
+        val deselect = action("Unselect")
+        assertTrue("then an Unselect action", deselect != null)
+        composeTestRule.runOnUiThread { deselect!!.action() }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("reserve_selection_bar").assertDoesNotExist()
+    }
+
+    @Test
     fun `clear button and Escape both drop the selection`() {
         content(reserveState())
         ctrlClick("reserve_card_${ids[0]}")
@@ -140,7 +168,7 @@ class ReserveDesktopTest {
         ctrlClick("reserve_card_${ids[0]}")
         composeTestRule.onNodeWithTag("reserve_card_${ids[0]}").assertIsFocused()
         // Ctrl+click moves keyboard focus to the clicked card, so Esc reaches the Reserve pane.
-        composeTestRule.onRoot().performKeyInput { pressKey(Key.Escape) }
+        mainRoot().performKeyInput { pressKey(Key.Escape) }
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("reserve_selection_bar").assertDoesNotExist()
     }
@@ -149,11 +177,11 @@ class ReserveDesktopTest {
     fun `space toggles selection and arrow down moves focus to the next card`() {
         content(reserveState())
         composeTestRule.onNodeWithTag("reserve_card_${ids[0]}").performScrollTo().requestFocus()
-        composeTestRule.onRoot().performKeyInput { pressKey(Key.Spacebar) }
+        mainRoot().performKeyInput { pressKey(Key.Spacebar) }
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("reserve_selection_bar").assertExists()
 
-        composeTestRule.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+        mainRoot().performKeyInput { pressKey(Key.DirectionDown) }
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("reserve_card_${ids[1]}").assertIsFocused()
     }
@@ -163,7 +191,7 @@ class ReserveDesktopTest {
         content(reserveState())
         ctrlClick("reserve_card_${ids[0]}")
         ctrlClick("reserve_card_${ids[1]}")
-        composeTestRule.onRoot().performKeyInput { pressKey(Key.Delete) }
+        mainRoot().performKeyInput { pressKey(Key.Delete) }
         composeTestRule.waitForIdle()
         assertEquals(1, removedMany.size)
         assertEquals(setOf(ids[0], ids[1]), removedMany.single().toSet())
@@ -188,7 +216,7 @@ class ReserveDesktopTest {
     fun `ctrl z undoes a pending dislike from the keyboard`() {
         val pending = PendingDiscard(1L, "x", "Alpine", DiscardKind.DISLIKE, wasCurrent = false)
         content(reserveState(pending))
-        composeTestRule.onRoot().performKeyInput {
+        mainRoot().performKeyInput {
             keyDown(Key.CtrlLeft)
             pressKey(Key.Z)
             keyUp(Key.CtrlLeft)

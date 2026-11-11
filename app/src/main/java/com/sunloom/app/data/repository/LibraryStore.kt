@@ -53,6 +53,9 @@ interface LibraryStore {
     fun getAllBlocklistEntries(): List<BlocklistEntry>
 
     fun checkpoint() {}
+
+    /** Deletes the whole store - library, rejections and blocklist - so the app can start again from nothing. */
+    fun wipe()
 }
 
 /**
@@ -304,6 +307,8 @@ internal object KeepCorruptDatabaseHandler : android.database.DatabaseErrorHandl
 }
 
 class SqliteLibraryStore(context: Context) : LibraryStore {
+    private val appContext: Context = context.applicationContext
+
     companion object {
         const val DATABASE_NAME = "sunloom_library.db"
         const val DATABASE_VERSION = 3
@@ -311,6 +316,23 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
 
         @Volatile
         private var sharedInstance: Pair<String, SqliteLibraryStore>? = null
+
+        /** Whether anything was written since the last checkpoint; shared by every handle in the process. */
+        private val writes = WriteTracker()
+
+        /**
+         * Folds the write-ahead log into the main file if, and only if, something was written. A background run that
+         * wrote nothing (a Follow-OS poll with nothing to do) neither opens the database nor builds a repository.
+         */
+        fun checkpointSharedIfWritten() {
+            val store = sharedInstance?.second ?: return
+            writes.runIfWritten { store.checkpoint() }
+        }
+
+        /** Forgets the shared instance, so the next [getInstance] opens (and creates) the database afresh. */
+        internal fun forgetSharedInstance() {
+            synchronized(this) { sharedInstance = null }
+        }
 
         fun getInstance(context: Context): SqliteLibraryStore {
             val appCtx = context.applicationContext
@@ -339,6 +361,7 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
         override fun onDowngrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
 
         override fun onCreate(db: SQLiteDatabase) {
+            writes.markWritten()
             db.execSQL(
                 """
                 CREATE TABLE IF NOT EXISTS wallpapers (
@@ -415,95 +438,30 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
                 )
                 """.trimIndent()
             )
-            db.execSQL(
-                """
-                CREATE TABLE IF NOT EXISTS blocklist (
-                    entry_id TEXT PRIMARY KEY,
-                    asset_id TEXT NOT NULL DEFAULT '',
-                    sha256 TEXT NOT NULL DEFAULT '',
-                    perceptual_hash TEXT NOT NULL DEFAULT '',
-                    source_id TEXT NOT NULL DEFAULT '',
-                    reason_code TEXT NOT NULL,
-                    timestamp_ms INTEGER NOT NULL
-                )
-                """.trimIndent()
-            )
+            db.execSQL(LibraryMigrations.CREATE_BLOCKLIST.trimIndent())
             createIndexes(db)
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-            if (oldVersion < 3) {
-                // Per-image features for variety (lightness, label contrast, warmth, hue); unknown on old rows.
-                val featureColumns = listOf(
-                    "lightness_p50 REAL NOT NULL DEFAULT -1.0",
-                    "label_contrast REAL NOT NULL DEFAULT -1.0",
-                    "warmth REAL NOT NULL DEFAULT 0.0",
-                    "hue_bucket INTEGER NOT NULL DEFAULT -1"
-                )
-                for (columnSpec in featureColumns) {
-                    runCatching { db.execSQL("ALTER TABLE wallpapers ADD COLUMN $columnSpec") }
-                }
-            }
-            if (oldVersion < 2) {
-                val wallpaperColumnsToAdd = listOf(
-                    "description TEXT NOT NULL DEFAULT ''",
-                    "raw_categories_tags TEXT NOT NULL DEFAULT ''",
-                    "license_url TEXT NOT NULL DEFAULT ''",
-                    "license_version TEXT NOT NULL DEFAULT ''",
-                    "perceptual_hash TEXT NOT NULL DEFAULT ''",
-                    "adapter_version TEXT NOT NULL DEFAULT '1.0.0'",
-                    "safety_gate_version TEXT NOT NULL DEFAULT 'v0.1.0'",
-                    "gate_layer_outcomes TEXT NOT NULL DEFAULT 'L1:PASS;L2:PASS;L3:PASS;L4:PASS'",
-                    "rejection_reason_code TEXT",
-                    "crop_x INTEGER NOT NULL DEFAULT 0",
-                    "crop_y INTEGER NOT NULL DEFAULT 0",
-                    "crop_w INTEGER NOT NULL DEFAULT 0",
-                    "crop_h INTEGER NOT NULL DEFAULT 0",
-                    "focal_x REAL NOT NULL DEFAULT 0.5",
-                    "focal_y REAL NOT NULL DEFAULT 0.5",
-                    "uses_blurred_fill INTEGER NOT NULL DEFAULT 0",
-                    "native_coverage REAL NOT NULL DEFAULT 1.0"
-                )
-                for (columnSpec in wallpaperColumnsToAdd) {
-                    runCatching { db.execSQL("ALTER TABLE wallpapers ADD COLUMN $columnSpec") }
-                }
-
-                val rejectionColumnsToAdd = listOf(
-                    "is_permanent INTEGER NOT NULL DEFAULT 1",
-                    "display_signature TEXT NOT NULL DEFAULT ''"
-                )
-                for (columnSpec in rejectionColumnsToAdd) {
-                    runCatching { db.execSQL("ALTER TABLE rejections ADD COLUMN $columnSpec") }
-                }
-
-                db.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS blocklist (
-                        entry_id TEXT PRIMARY KEY,
-                        asset_id TEXT NOT NULL DEFAULT '',
-                        sha256 TEXT NOT NULL DEFAULT '',
-                        perceptual_hash TEXT NOT NULL DEFAULT '',
-                        source_id TEXT NOT NULL DEFAULT '',
-                        reason_code TEXT NOT NULL,
-                        timestamp_ms INTEGER NOT NULL
-                    )
-                    """.trimIndent()
-                )
-                createIndexes(db)
-            }
+            writes.markWritten()
+            // SQLiteOpenHelper runs this in a transaction: if a statement throws, nothing is applied, the version
+            // stays where it was, and the open fails (storage unavailable) instead of half-migrating.
+            for (sql in LibraryMigrations.statements(oldVersion) { table -> columnNames(db, table) }) db.execSQL(sql)
         }
 
+        private fun columnNames(db: SQLiteDatabase, table: String): Set<String> =
+            db.rawQuery("PRAGMA table_info($table)", null).use { c ->
+                val nameIndex = c.getColumnIndexOrThrow("name")
+                buildSet { while (c.moveToNext()) add(c.getString(nameIndex)) }
+            }
+
         private fun createIndexes(db: SQLiteDatabase) {
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_wallpapers_retrieved_at ON wallpapers(retrieved_at DESC)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_wallpapers_source_id ON wallpapers(source_id)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_rejections_timestamp ON rejections(timestamp_ms DESC)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_blocklist_sha256 ON blocklist(sha256)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_blocklist_phash ON blocklist(perceptual_hash)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_blocklist_asset ON blocklist(asset_id)")
+            LibraryMigrations.INDEXES.forEach(db::execSQL)
         }
     }
 
     override fun upsertWallpaper(record: WallpaperRecord) {
+        writes.markWritten()
         val db = dbHelper.writableDatabase
         db.transaction {
             val cv = WallpaperRowMapper.toContentValues(record)
@@ -530,11 +488,13 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
     }
 
     override fun deleteWallpaper(id: String) {
+        writes.markWritten()
         val db = dbHelper.writableDatabase
         db.delete("wallpapers", "id = ?", arrayOf(id))
     }
 
     override fun recordRejection(rejection: RejectionRecord) {
+        writes.markWritten()
         val db = dbHelper.writableDatabase
         db.transaction {
             val cv = ContentValues().apply {
@@ -559,10 +519,12 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
     }
 
     override fun clearTransientRejections() {
+        writes.markWritten()
         dbHelper.writableDatabase.execSQL("DELETE FROM rejections WHERE is_permanent = 0")
     }
 
     override fun removeSoftSafetyRecords(reasonCodes: Set<String>) {
+        writes.markWritten()
         if (reasonCodes.isEmpty()) return
         val marks = reasonCodes.joinToString(",") { "?" }
         val args = reasonCodes.toTypedArray()
@@ -596,6 +558,7 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
     }
 
     override fun addBlocklistEntry(entry: BlocklistEntry) {
+        writes.markWritten()
         val db = dbHelper.writableDatabase
         val key = entry.assetId.ifBlank { entry.sha256.ifBlank { entry.dHash.ifBlank { "blk_${entry.createdAtEpochMs}" } } }
         val cv = ContentValues().apply {
@@ -629,6 +592,13 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
             }
         }
         return out
+    }
+
+    override fun wipe() {
+        runCatching { dbHelper.close() }
+        // Removes the database and its -wal, -shm and -journal files.
+        appContext.deleteDatabase(DATABASE_NAME)
+        forgetSharedInstance()
     }
 
     override fun checkpoint() {

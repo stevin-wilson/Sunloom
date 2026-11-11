@@ -64,8 +64,9 @@ android {
         applicationId = "com.sunloom.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "1.7.0"
+        // Release builds pass the values derived from the git tag (scripts/release_version.py); local builds keep these.
+        versionCode = providers.gradleProperty("sunloom.versionCode").orNull?.toInt() ?: 13
+        versionName = providers.gradleProperty("sunloom.versionName").orNull ?: "1.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -76,6 +77,14 @@ android {
         }
 
         base.archivesName.set(appName)
+    }
+
+    // Two distributions of one app (Article XVIII §1): "github" (sideloaded APK) may check GitHub for a newer
+    // release; "play" contains no update code at all. Same applicationId and signing key, so one can replace the other.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("github") { dimension = "distribution" }
+        create("play") { dimension = "distribution" }
     }
 
     signingConfigs {
@@ -176,9 +185,10 @@ tasks.matching { it.name.contains("ComposeMapping", ignoreCase = true) }.configu
     enabled = false
 }
 
-tasks.matching { it.name == "packageReleaseBundle" }.configureEach {
+// Only the Play flavor ships a bundle; the GitHub flavor ships an APK.
+tasks.matching { it.name == "packagePlayReleaseBundle" }.configureEach {
     doFirst {
-        val mappingDir = layout.buildDirectory.dir("outputs/mapping/release").get().asFile
+        val mappingDir = layout.buildDirectory.dir("outputs/mapping/playRelease").get().asFile
         val prtFile = File(mappingDir, "mapping.prt")
         val txtFile = File(mappingDir, "mapping.txt")
         if (!txtFile.exists() && prtFile.exists()) {
@@ -215,10 +225,16 @@ dependencies {
     testImplementation(libs.androidx.work.testing)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    // On-device smoke tests (src/androidTest), run on emulators in CI.
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.work.runtime.ktx)
 }
 
 tasks.register<JacocoReport>("jacocoTestReport") {
-    dependsOn("testDebugUnitTest")
+    dependsOn("testGithubDebugUnitTest")
     reports {
         xml.required.set(true)
         html.required.set(true)
@@ -233,7 +249,7 @@ tasks.register<JacocoReport>("jacocoTestReport") {
         "android/**/*.*",
         "**/ComposableSingletons*.*"
     )
-    val kotlinClasses = fileTree("${project.layout.buildDirectory.get()}/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes") {
+    val kotlinClasses = fileTree("${project.layout.buildDirectory.get()}/intermediates/built_in_kotlinc/githubDebug/compileGithubDebugKotlin/classes") {
         exclude(fileFilter)
     }
     classDirectories.setFrom(files(kotlinClasses))
@@ -241,9 +257,38 @@ tasks.register<JacocoReport>("jacocoTestReport") {
     executionData.setFrom(
         fileTree(project.layout.buildDirectory.get()) {
             include(
-                "outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec",
-                "jacoco/testDebugUnitTest.exec"
+                "outputs/unit_test_code_coverage/githubDebugUnitTest/testGithubDebugUnitTest.exec",
+                "jacoco/testGithubDebugUnitTest.exec"
             )
         }
     )
+}
+
+// Coverage gate (Article XVI). Reads per-package line-coverage floors from coverage-floors.csv and fails when the
+// jacocoTestReport CSV falls below any of them. Run by CI only: it is deliberately not wired into `check`.
+tasks.register("coverageFloors") {
+    dependsOn("jacocoTestReport")
+    val report = layout.buildDirectory.file("reports/jacoco/jacocoTestReport/jacocoTestReport.csv")
+    val floors = layout.projectDirectory.file("coverage-floors.csv")
+    doLast {
+        val covered = mutableMapOf<String, LongArray>()
+        report.get().asFile.readLines().drop(1).filter { it.isNotBlank() }.forEach { line ->
+            val c = line.split(',')
+            val pkg = c[1]
+            val missed = c[7].toLong()
+            val hit = c[8].toLong()
+            val acc = covered.getOrPut(pkg) { LongArray(2) }
+            acc[0] += missed
+            acc[1] += hit
+        }
+        val failures = mutableListOf<String>()
+        floors.asFile.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.forEach { line ->
+            val (pkg, min) = line.split(',').map { it.trim() }
+            val acc = covered[pkg] ?: run { failures += "$pkg: no coverage data"; return@forEach }
+            val pct = 100.0 * acc[1] / (acc[0] + acc[1]).coerceAtLeast(1)
+            if (pct + 1e-9 < min.toDouble()) failures += "%s: %.1f%% is below the %s%% floor".format(pkg, pct, min)
+        }
+        if (failures.isNotEmpty()) throw GradleException("Coverage fell below its floor:\n  " + failures.joinToString("\n  "))
+        println("Coverage floors met for ${floors.asFile.readLines().count { it.isNotBlank() && !it.startsWith("#") }} packages.")
+    }
 }

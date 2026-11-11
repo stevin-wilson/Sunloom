@@ -2,6 +2,7 @@ package com.sunloom.app
 
 import android.app.Application
 import android.content.Context
+import kotlinx.coroutines.launch
 import com.sunloom.app.data.repository.LocalLibraryRepository
 
 /**
@@ -10,6 +11,53 @@ import com.sunloom.app.data.repository.LocalLibraryRepository
  */
 class SunloomApplication : Application() {
     val container: AppContainer by lazy { AppContainer(this) }
+
+    /** The system theme as last seen, to tell a real change from any other configuration change. */
+    @Volatile
+    private var lastNight: Boolean? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        lastNight = isNight(resources.configuration)
+        com.sunloom.app.ui.UiPrefs.warm(this) // only starts the background load of a small file
+        // Only installs a handler (no I/O): an uncaught crash is written to a small local file the person can share.
+        com.sunloom.app.diagnostics.CrashLog.install(this)
+    }
+
+    /**
+     * In Follow-OS mode the wallpaper follows the system theme. While the app is running the change is acted on at
+     * once, not at the next 15-minute poll.
+     */
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val now = isNight(newConfig)
+        val previous = lastNight
+        lastNight = now
+        if (previous == null || previous == now) return
+        reactionScope.launch {
+            runCatching {
+                val prefs = container.newRepository().loadPreferences()
+                val reacts = prefs.autoChangeEnabled && !prefs.isPaused &&
+                    com.sunloom.app.platform.scheduler.RefreshSchedulePolicy.shouldReactToThemeChange(prefs.scheduleMode, previous, now)
+                if (reacts) runChangeNow(this@SunloomApplication)
+            }
+        }
+    }
+
+    /** Where a theme change is reacted to (off the main thread); tests run it inline. */
+    internal var reactionScope: kotlinx.coroutines.CoroutineScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
+
+    /** What "react" means; tests replace it to see that it happened. */
+    internal var runChangeNow: (Context) -> Unit = { com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler(it).runChangeNow() }
+
+    private fun isNight(config: android.content.res.Configuration): Boolean =
+        (config.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+
+    /** The system wants memory back: empty the caches it can spare (they rebuild on demand). */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        MemoryTrim.trim(level)
+    }
 }
 
 /**

@@ -15,12 +15,13 @@ import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.solar.DaylightWindow
 import java.time.LocalTime
 
-enum class DesktopNavTab(val label: String) {
-    TODAY_CANVAS("Home"),
-    RESERVE_AND_HISTORY("Reserve"),
-    SOURCES_AND_CATEGORIES("Sources"),
-    DISPLAYS_AND_SCHEDULE("Schedule"),
-    SAFETY_AND_DECISION_LOG("Storage & About")
+/** The five sections. Their names are in strings.xml (see `labels/Labels.kt`). */
+enum class DesktopNavTab {
+    TODAY_CANVAS,
+    RESERVE_AND_HISTORY,
+    SOURCES_AND_CATEGORIES,
+    DISPLAYS_AND_SCHEDULE,
+    SAFETY_AND_DECISION_LOG
 }
 
 enum class DiscardKind { DISLIKE, REMOVE }
@@ -44,7 +45,11 @@ data class PendingDiscard(
 data class SunloomUiState(
     val activeTab: DesktopNavTab = DesktopNavTab.TODAY_CANVAS,
     val isInitialLoading: Boolean = false,
+    /** "Setup Guide" was pressed: show first-run setup again. A screen, not a saved state (a relaunch starts normally). */
+    val isSetupReopened: Boolean = false,
     val isStorageUnavailable: Boolean = false,
+    /** The result of the last "Check for updates" (GitHub build only); shown in About. */
+    val updateCheck: UpdateCheckUiState = UpdateCheckUiState.Idle,
     val preferences: UserPreferences = UserPreferences(),
     val capabilities: PlatformCapabilities = PlatformCapabilities(
         isWallpaperSupported = true,
@@ -52,7 +57,7 @@ data class SunloomUiState(
         supportsIndependentLockWallpaper = true,
         supportsPerDisplayWallpaper = false,
         connectedDisplays = emptyList(),
-        capabilityDisclosureNote = "Probing connected displays…"
+        capabilityDisclosureNote = "" // the Schedule pane shows "Probing connected displays…" until the first probe
     ),
     val currentWallpaper: WallpaperRecord? = null,
     val isCurrentWallpaperAppliedToSystem: Boolean = true,
@@ -73,7 +78,13 @@ data class SunloomUiState(
     val isApplyingWallpaper: Boolean = false,
     val statusBannerMessage: String = "Ready",
     /** Set when the last apply failed in a way that may succeed on a second try; drives the banner's Retry. */
-    val retryApplyRecordId: String? = null
+    val retryApplyRecordId: String? = null,
+    /** Set when the last online sync failed; drives the banner's Try again. */
+    val canRetrySync: Boolean = false,
+    /** Set while photos are being checked and added; null otherwise. */
+    val importProgress: ImportProgress? = null,
+    /** The photo that was just added to the reserve without being applied; drives the banner's Apply now. */
+    val applyOfferRecordId: String? = null
 ) {
     val totalCacheBytesUsed: Long
         get() = if (allCachedBytesUsed >= 0L) allCachedBytesUsed else libraryWallpapers.sumOf { it.fileSizeBytes }
@@ -124,3 +135,13 @@ private val WallpaperRecord.hasImage: Boolean get() = fileSizeBytes > 0L
 
 /** An image the user can be shown from the reserve: it has a file and is neither rejected nor the restore point. */
 private val WallpaperRecord.isReserveImage: Boolean get() = hasImage && !isRejected && !isBaselineRestore
+
+/** Where "Check for updates" is: not asked, running, or answered. */
+sealed interface UpdateCheckUiState {
+    data object Idle : UpdateCheckUiState
+    data object Checking : UpdateCheckUiState
+    data class Done(val result: com.sunloom.app.update.UpdateCheckResult) : UpdateCheckUiState
+}
+
+/** [done] of [total] photos have been checked so far. */
+data class ImportProgress(val done: Int, val total: Int)

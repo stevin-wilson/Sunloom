@@ -26,10 +26,11 @@ class BoundedCacheManager(
     fun selectEvictions(
         records: List<WallpaperRecord>,
         activeWallpaperIds: Set<String>,
-        maxCacheBytes: Long
+        maxCacheBytes: Long,
+        sizeOf: (WallpaperRecord) -> Long = { it.fileSizeBytes }
     ): CacheCleanupReport {
         val cachedRecords = records.filter { it.fileSizeBytes > 0L && !it.isRejected }
-        val bytesBefore = cachedRecords.sumOf { it.fileSizeBytes }
+        val bytesBefore = cachedRecords.sumOf(sizeOf)
 
         // Always protect:
         // 1. Active wallpapers
@@ -106,7 +107,7 @@ class BoundedCacheManager(
         for (candidate in evictable) {
             if (currentBytes <= maxCacheBytes) break
             evictedIds.add(candidate.id)
-            currentBytes -= candidate.fileSizeBytes
+            currentBytes -= sizeOf(candidate)
         }
 
         return CacheCleanupReport(
@@ -120,9 +121,10 @@ class BoundedCacheManager(
     fun executeCleanupOnDisk(
         records: List<WallpaperRecord>,
         activeWallpaperIds: Set<String>,
-        maxCacheBytes: Long
+        maxCacheBytes: Long,
+        sizeOf: (WallpaperRecord) -> Long = { it.fileSizeBytes }
     ): Pair<List<WallpaperRecord>, CacheCleanupReport> {
-        val report = selectEvictions(records, activeWallpaperIds, maxCacheBytes)
+        val report = selectEvictions(records, activeWallpaperIds, maxCacheBytes, sizeOf)
         val evictedSet = report.evictedIds.toSet()
 
         val updatedRecords = records.map { record ->

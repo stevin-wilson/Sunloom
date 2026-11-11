@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.labels.title
 import com.sunloom.app.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.getValue
@@ -33,7 +34,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -41,6 +41,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.OutlinedButton
@@ -152,7 +154,7 @@ internal fun TodayCanvasPane(
         val previewColumn: @Composable (Modifier) -> Unit = { columnModifier ->
             Column(
                 modifier = columnModifier,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(Spacing.m)
             ) {
                 if (restricted) {
                     HostRestrictionNotice()
@@ -160,7 +162,7 @@ internal fun TodayCanvasPane(
                 val actions = LocalWallpaperActions.current
                 ContextMenuHost(
                     modifier = Modifier.fillMaxWidth(),
-                    focusShape = RoundedCornerShape(16.dp),
+                    focusShape = MaterialTheme.shapes.large,
                     menuContent = { dismiss ->
                         if (current != null) {
                             if (!restricted) {
@@ -173,7 +175,7 @@ internal fun TodayCanvasPane(
                                 if (current.isFavorite) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
                                 "ctx_keep"
                             ) { dismiss(); onToggleKeep() }
-                            ContextMenuItem("About this image\u2026", "ctx_about") { dismiss(); showAbout = true }
+                            ContextMenuItem(stringResource(R.string.about_this_image), "ctx_about") { dismiss(); showAbout = true }
                             ContextMenuItem(stringResource(R.string.copy_attribution), "ctx_copy_attribution") {
                                 dismiss(); actions.copyAttribution(current)
                             }
@@ -193,17 +195,28 @@ internal fun TodayCanvasPane(
                 ) {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = MaterialTheme.shapes.large,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
                             Column(modifier = Modifier.fillMaxWidth()) {
-                                TruncatedTitleWithTooltip(
-                                    title = current?.title ?: "No Wallpaper Selected",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        TruncatedTitleWithTooltip(
+                                            title = current?.title ?: stringResource(R.string.no_wallpaper_selected),
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                    if (current != null) {
+                                        MoreMenuButton(
+                                            onAbout = { showAbout = true },
+                                            onCopyAttribution = { actions.copyAttribution(current) },
+                                            onSaveAs = { actions.saveAs(current) }
+                                        )
+                                    }
+                                }
                                 if (current == null) {
                                     Text(
                                         text = stringResource(R.string.nothing_is_showing_yet_fetch_a_batch_of),
@@ -218,7 +231,7 @@ internal fun TodayCanvasPane(
                                 }
                                 if (current != null) {
                                     Text(
-                                        text = "${current.category.displayName} • ${current.provenance.sourceName}",
+                                        text = "${current.category.title()} • ${current.provenance.sourceName}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.primary,
                                         maxLines = 1,
@@ -235,7 +248,7 @@ internal fun TodayCanvasPane(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .aspectRatio(previewAspect)
-                                        .clip(RoundedCornerShape(12.dp))
+                                        .clip(MaterialTheme.shapes.medium)
                                         .zoomablePreview(zoomState)
                                         .semantics { contentDescription = previewDescription }
                                         .testTag("today_preview")
@@ -248,16 +261,17 @@ internal fun TodayCanvasPane(
                                 }
                             }
 
-                            Row(
+                            FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalArrangement = Arrangement.spacedBy(Spacing.s),
+                                itemVerticalAlignment = Alignment.CenterVertically
                             ) {
                                 FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                                    verticalArrangement = Arrangement.spacedBy(Spacing.s)
                                 ) {
-                                    ShortcutTooltip(if (restricted) HostRestrictedTooltip else "Next wallpaper", if (restricted) null else "N") {
+                                    ShortcutTooltip(if (restricted) stringResource(R.string.host_restricted_tooltip) else stringResource(R.string.next_wallpaper), if (restricted) null else "N") {
                                         Button(
                                             onClick = onNextWallpaper,
                                             enabled = !restricted,
@@ -273,7 +287,7 @@ internal fun TodayCanvasPane(
                                         }
                                     }
 
-                                    ShortcutTooltip(if (restricted) HostRestrictedTooltip else "Previous wallpaper", if (restricted) null else "P") {
+                                    ShortcutTooltip(if (restricted) stringResource(R.string.host_restricted_tooltip) else stringResource(R.string.previous_wallpaper), if (restricted) null else "P") {
                                         OutlinedButton(
                                             onClick = onPreviousWallpaper,
                                             enabled = uiState.previousWallpaperId != null && !restricted,
@@ -304,10 +318,10 @@ internal fun TodayCanvasPane(
                                 }
 
                                 FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                                    verticalArrangement = Arrangement.spacedBy(Spacing.s)
                                 ) {
-                                    ShortcutTooltip(if (restricted) HostRestrictedTooltip else "Restore original wallpaper") {
+                                    ShortcutTooltip(if (restricted) stringResource(R.string.host_restricted_tooltip) else stringResource(R.string.restore_original_wallpaper)) {
                                         OutlinedButton(
                                             onClick = onRestoreOriginal,
                                             enabled = !restricted,
@@ -356,14 +370,14 @@ internal fun TodayCanvasPane(
         val provenanceCard: @Composable (Modifier) -> Unit = { cardModifier ->
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(16.dp),
+                shape = MaterialTheme.shapes.large,
                 modifier = cardModifier
             ) {
                 Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.padding(Spacing.l),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.m)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
                         Icon(SunloomIcons.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Text(
                             text = stringResource(R.string.about_this_wallpaper),
@@ -394,7 +408,7 @@ internal fun TodayCanvasPane(
             if (stacked) {
                 Column(
                     modifier = contentModifier,
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    verticalArrangement = Arrangement.spacedBy(Spacing.m)
                 ) {
                     previewColumn(Modifier.fillMaxWidth())
                     provenanceCard(Modifier.fillMaxWidth())
@@ -402,7 +416,7 @@ internal fun TodayCanvasPane(
             } else {
                 Row(
                     modifier = contentModifier.testTag("today_side_by_side"),
-                    horizontalArrangement = Arrangement.spacedBy(18.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.l)
                 ) {
                     previewColumn(Modifier.weight(1.35f))
                     provenanceCard(Modifier.weight(1f))
@@ -419,35 +433,39 @@ internal fun TodayCanvasPane(
 /** Creator, source, license, origin and fit details for one wallpaper. */
 @Composable
 internal fun ProvenanceDetails(current: WallpaperRecord) {
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    ProvenanceRow("Creator", current.provenance.creatorName)
-    ProvenanceRow("Source", current.provenance.sourceName)
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
+    ProvenanceRow(stringResource(R.string.prov_creator), current.provenance.creatorName)
+    ProvenanceRow(stringResource(R.string.prov_source), current.provenance.sourceName)
     val licenseLabel = if (current.provenance.licenseVersion.isNotBlank()) {
-        "${current.provenance.licenseType.label} (v${current.provenance.licenseVersion})"
+        stringResource(R.string.prov_license_version, current.provenance.licenseType.title(), current.provenance.licenseVersion)
     } else {
-        current.provenance.licenseType.label
+        current.provenance.licenseType.title()
     }
     if (current.provenance.licenseUrl.isNotBlank()) {
         ProvenanceLinkRow(
-            label = "License",
+            label = stringResource(R.string.prov_license),
             displayText = licenseLabel,
             url = current.provenance.licenseUrl
         )
     } else {
-        ProvenanceRow("License", licenseLabel)
+        ProvenanceRow(stringResource(R.string.prov_license), licenseLabel)
     }
     if (current.provenance.originalPageUrl.isNotBlank()) {
         ProvenanceLinkRow(
-            label = "Source page",
+            label = stringResource(R.string.prov_source_page),
             displayText = current.provenance.originalPageUrl,
             url = current.provenance.originalPageUrl
         )
     } else {
-        ProvenanceRow("Origin", "On-device")
+        ProvenanceRow(stringResource(R.string.prov_origin), stringResource(R.string.prov_on_device))
     }
     ProvenanceRow(
-        "Fit & Resolution",
-        "Cropped without stretching (${current.provenance.originalWidth} × ${current.provenance.originalHeight} → ${current.provenance.renditionWidth} × ${current.provenance.renditionHeight})"
+        stringResource(R.string.prov_fit),
+        stringResource(
+            R.string.prov_fit_value,
+            current.provenance.originalWidth, current.provenance.originalHeight,
+            current.provenance.renditionWidth, current.provenance.renditionHeight
+        )
     )
     }
 }
@@ -474,15 +492,16 @@ internal fun ProvenanceLinkRow(label: String, displayText: String, url: String) 
     val uriHandler = LocalUriHandler.current
     val actions = LocalWallpaperActions.current
     val noBrowserMessage = stringResource(R.string.no_browser_for_link)
+    val openSourcePageLabel = stringResource(R.string.prov_open_source_page)
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         TooltipBox(
             positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-            tooltip = { PlainTooltip { Text("Open in browser: $url") } },
+            tooltip = { PlainTooltip { Text(stringResource(R.string.prov_open_in_browser, url)) } },
             state = rememberTooltipState()
         ) {
             Text(
-                text = displayText.ifBlank { "Local / Offline Asset" },
+                text = displayText.ifBlank { stringResource(R.string.prov_local_asset) },
                 style = MaterialTheme.typography.bodySmall.copy(
                     color = MaterialTheme.colorScheme.primary,
                     textDecoration = if (url.startsWith("https://")) TextDecoration.Underline else TextDecoration.None,
@@ -496,12 +515,12 @@ internal fun ProvenanceLinkRow(label: String, displayText: String, url: String) 
                     // The 48dp target IS the visual: the focus ring and hover tint are drawn by modifiers
                     // OUTSIDE minimumInteractiveComponentSize, so they wrap the whole hit area and the
                     // cursor target matches what the user sees (Cursor_Target_Size).
-                    .desktopFocusRing(RoundedCornerShape(8.dp))
-                    .then(if (url.startsWith("https://")) Modifier.desktopHover(RoundedCornerShape(8.dp)) else Modifier)
+                    .desktopFocusRing(MaterialTheme.shapes.small)
+                    .then(if (url.startsWith("https://")) Modifier.desktopHover(MaterialTheme.shapes.small) else Modifier)
                     .minimumInteractiveComponentSize()
                     .clickable(
                         enabled = url.startsWith("https://"),
-                        onClickLabel = "Open source page in browser",
+                        onClickLabel = openSourcePageLabel,
                         role = androidx.compose.ui.semantics.Role.Button
                     ) {
                         if (url.startsWith("https://")) {
@@ -545,9 +564,9 @@ fun WallpaperPreviewSurface(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(MaterialTheme.shapes.medium)
             .background(fallbackBrush)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium)
     ) {
         val safeBmp = bitmap
         if (safeBmp != null && !safeBmp.isRecycled) {
@@ -588,11 +607,15 @@ fun WallpaperPreviewSurface(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 24.dp)
-                    .background(SunloomColors.ZoneCaptionBackdrop, RoundedCornerShape(8.dp))
+                    .background(SunloomColors.ZoneCaptionBackdrop, MaterialTheme.shapes.small)
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Text(
-                    text = "Legibility Zones (Clock Y=${"%.2f".format(record.evaluation.lockClockZoneLuminance)} • Shelf Y=${"%.2f".format(record.evaluation.desktopZoneLuminance)})",
+                    text = stringResource(
+                        R.string.legibility_zones_caption,
+                        "%.2f".format(record.evaluation.lockClockZoneLuminance),
+                        "%.2f".format(record.evaluation.desktopZoneLuminance)
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White
                 )
@@ -605,12 +628,6 @@ fun WallpaperPreviewSurface(
 internal val SunloomUiState.isWallpaperChangeRestricted: Boolean
     get() = !isInitialLoading && (!capabilities.isWallpaperSupported || !capabilities.isSetWallpaperAllowed)
 
-internal const val HostRestrictedTooltip = "Unavailable: system wallpaper changes are restricted on this device"
-
-internal const val HostRestrictionMessage =
-    "System wallpaper changes are restricted by this device's host environment. " +
-        "You can still browse and preview wallpapers in your reserve."
-
 /** Aspect ratio (w/h) of the largest connected display, defaulting to 16:10, clamped to [min, max]. */
 internal fun primaryDisplayAspect(uiState: SunloomUiState, min: Float, max: Float): Float {
     val display = uiState.capabilities.connectedDisplays
@@ -622,12 +639,12 @@ internal fun primaryDisplayAspect(uiState: SunloomUiState, min: Float, max: Floa
 internal fun HostRestrictionNotice() {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.medium,
         modifier = Modifier.fillMaxWidth().testTag("host_restriction_notice")
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(Spacing.m),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.s),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -636,10 +653,37 @@ internal fun HostRestrictionNotice() {
                 tint = MaterialTheme.colorScheme.onErrorContainer
             )
             Text(
-                text = HostRestrictionMessage,
+                text = stringResource(R.string.host_restriction_message),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
+        }
+    }
+}
+
+/** A visible button for what the right-click menu offers, for touch, keyboard and screen-reader users. */
+@Composable
+private fun MoreMenuButton(onAbout: () -> Unit, onCopyAttribution: () -> Unit, onSaveAs: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        ShortcutTooltip(stringResource(R.string.more_actions)) {
+            IconButton(
+                onClick = { open = true },
+                modifier = Modifier.desktopControl(CircleShape).testTag("today_more_button")
+            ) {
+                Icon(SunloomIcons.MoreVert, contentDescription = stringResource(R.string.more_actions))
+            }
+        }
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            modifier = Modifier.dismissOnEscape { open = false }
+        ) {
+            ContextMenuItem(stringResource(R.string.about_this_image), "more_about") { open = false; onAbout() }
+            ContextMenuItem(stringResource(R.string.copy_attribution), "more_copy_attribution") {
+                open = false; onCopyAttribution()
+            }
+            ContextMenuItem(stringResource(R.string.save_wallpaper_as), "more_save_as") { open = false; onSaveAs() }
         }
     }
 }

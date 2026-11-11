@@ -1,5 +1,7 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.labels.title
+import com.sunloom.app.domain.model.ScheduleMode
 import android.content.Context
 import com.sunloom.app.R
 
@@ -12,12 +14,17 @@ interface UiStrings {
     val manualModeEnabled: String
     val settingNotSaved: String
     val storageProblem: String
+    val resetDone: String
+    val meteredFetchWarning: String
+    fun updateAvailableNotice(version: String): String
+    val diagnosticsCopied: String
     val fetchingCatalogs: String
-    fun scheduleEnabled(modeLabel: String): String
+    fun scheduleEnabled(mode: ScheduleMode): String
 
     /** [reason] is the failure text, or null when there is none to show. */
     fun syncInterrupted(reason: String?): String
     fun batchChecked(count: Int): String
+    fun importingPhoto(current: Int, total: Int): String
     fun wallpaperCount(count: Int): String
 
     companion object {
@@ -27,10 +34,17 @@ interface UiStrings {
             override val manualModeEnabled = "Manual mode enabled — click Next Wallpaper whenever you'd like a change"
             override val settingNotSaved = "Couldn't save that setting. Your previous choice was kept."
             override val storageProblem = "Couldn't finish that. Check free space and your connection, then try again."
+            override val diagnosticsCopied = "Diagnostics copied. Paste them into your report."
+            override fun updateAvailableNotice(version: String) = "Sunloom $version is available. Find the link in Storage & About."
+            override val meteredFetchWarning =
+                "You're on a metered connection, so fetching may use mobile data. Tap Refresh again to go ahead."
+            override val resetDone = "Sunloom was reset. Set it up again whenever you like."
             override val fetchingCatalogs = "Fetching high-resolution wallpapers from online catalogs…"
-            override fun scheduleEnabled(modeLabel: String) = "Automatic wallpaper schedule enabled ($modeLabel)"
+            override fun scheduleEnabled(mode: ScheduleMode) = "Automatic wallpaper schedule enabled (${mode.label})"
             override fun syncInterrupted(reason: String?) = "Online sync interrupted: ${reason ?: "check connection"}"
             override fun batchChecked(count: Int) = if (count == 1) "Checked 1 image — approved ones are in your reserve." else "Checked $count images — approved ones are in your reserve."
+            override fun importingPhoto(current: Int, total: Int) =
+                if (total == 1) "Checking your photo…" else "Checking photo $current of $total…"
             override fun wallpaperCount(count: Int) = if (count == 1) "1 wallpaper" else "$count wallpapers"
         }
     }
@@ -41,11 +55,18 @@ class AndroidUiStrings(private val context: Context) : UiStrings {
     override val manualModeEnabled: String get() = context.getString(R.string.msg_manual_mode_enabled)
     override val settingNotSaved: String get() = context.getString(R.string.msg_setting_not_saved)
     override val storageProblem: String get() = context.getString(R.string.msg_storage_problem)
+    override val diagnosticsCopied: String get() = context.getString(R.string.msg_diagnostics_copied)
+    override fun updateAvailableNotice(version: String): String = context.getString(R.string.msg_update_available_notice, version)
+    override val meteredFetchWarning: String get() = context.getString(R.string.msg_metered_fetch_warning)
+    override val resetDone: String get() = context.getString(R.string.msg_reset_done)
     override val fetchingCatalogs: String get() = context.getString(R.string.msg_fetching_catalogs)
-    override fun scheduleEnabled(modeLabel: String): String = context.getString(R.string.msg_schedule_enabled, modeLabel)
+    override fun scheduleEnabled(mode: ScheduleMode): String =
+        context.getString(R.string.msg_schedule_enabled, mode.title(context.resources))
     override fun syncInterrupted(reason: String?): String =
         context.getString(R.string.msg_sync_interrupted, reason ?: context.getString(R.string.msg_check_connection))
     override fun batchChecked(count: Int): String = context.resources.getQuantityString(R.plurals.msg_batch_checked, count, count)
+    override fun importingPhoto(current: Int, total: Int): String =
+        context.resources.getQuantityString(R.plurals.msg_importing_photo, total, current, total)
     override fun wallpaperCount(count: Int): String =
         context.resources.getQuantityString(R.plurals.msg_wallpaper_count, count, count)
 }

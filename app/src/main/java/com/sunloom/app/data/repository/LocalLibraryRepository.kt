@@ -21,6 +21,7 @@ import com.sunloom.app.data.sources.WikimediaFeaturedSourceAdapter
 import com.sunloom.app.domain.evaluator.ImageEvaluator
 import com.sunloom.app.domain.model.BlocklistEntry
 import com.sunloom.app.domain.model.BrightnessClass
+import com.sunloom.app.domain.model.FollowOsVerification
 import com.sunloom.app.domain.model.CandidateAsset
 import com.sunloom.app.domain.model.DisplayPolicy
 import com.sunloom.app.domain.model.DisplayProfile
@@ -80,7 +81,20 @@ class LocalLibraryRepository(
         private const val KEY_SOFT_SWEEP_VERSION = "soft_rejections_denylist_version"
         private val LIBRARY_WRITE_LOCK = Any()
         private val SYNC_MUTEX = kotlinx.coroutines.sync.Mutex()
-        private val HEAL_EXEMPT_SOURCES = setOf(SourceIds.SEED_RESERVE, SourceIds.USER_LOCAL)
+        // Seeds are re-rendered rather than healed.
+        private val HEAL_EXEMPT_SOURCES = setOf(SourceIds.SEED_RESERVE)
+        private const val KEY_LOST_IMPORTS = "lost_imports_notice"
+        private const val SEED_RENDER_CACHE_DIR = "seed_renders"
+        private const val KEY_FOLLOW_OS_VERIFIED = "follow_os_verified"
+
+        /**
+         * Derived state: things the app worked out about this device and this moment. It is deliberately not in
+         * `sunloom_preferences`, the file Auto Backup restores - a restored "verified" claim would vouch for images the
+         * restore did not bring back. The backup rules list the files they include, and this is not one of them.
+         */
+        private const val STATE_FILE = "sunloom_state"
+        private const val KEY_LAST_HYGIENE = "last_storage_hygiene_ms"
+        private const val HYGIENE_INTERVAL_MS = 24L * 60 * 60 * 1000
 
         @Volatile
         internal var testStoreFactoryOverride: ((Context) -> LibraryStore)? = null
@@ -90,6 +104,13 @@ class LocalLibraryRepository(
 
         @Volatile
         private var sharedDefaultStore: Pair<String, LibraryStore>? = null
+
+        /** The preference files the app writes; a reset empties all of them. */
+        private val PREFERENCE_FILES = listOf("sunloom_preferences", "sunloom_display_history", "sunloom_ui", STATE_FILE)
+
+        private fun forgetDefaultStore() {
+            synchronized(this) { sharedDefaultStore = null }
+        }
 
         internal fun clearCachedDefaultStoreForTests() {
             synchronized(this) {
@@ -132,13 +153,17 @@ class LocalLibraryRepository(
 
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences("sunloom_preferences", Context.MODE_PRIVATE)
+    private val statePrefs = appContext.getSharedPreferences(STATE_FILE, Context.MODE_PRIVATE)
     private val sourceHealth = SourceHealthStore(prefs, random)
     private val preferencesStore = PreferencesStore(prefs)
     private val displayReconciler = DisplayReconciler(envelopePlanner, cropRenderer)
     private val blocklist = Blocklist(store)
     val wallpaperDir: File = File(appContext.filesDir, "wallpapers").apply { mkdirs() }
 
-    private val seedReserve = SeedReserve(wallpaperDir, safetyGate, imageEvaluator, maxSeedRenderPixels)
+    private val seedReserve = SeedReserve(
+        wallpaperDir, safetyGate, imageEvaluator, maxSeedRenderPixels,
+        renderCacheDir = File(appContext.cacheDir, SEED_RENDER_CACHE_DIR)
+    )
 
     val quarantineDir: File = File(appContext.noBackupFilesDir, "quarantine").apply { mkdirs() }
 
@@ -169,6 +194,13 @@ class LocalLibraryRepository(
         override fun recordSourceFailure(sourceId: String, error: Throwable) = sourceHealth.recordFailure(sourceId, error)
     }
 
+    private val hygiene = StorageHygiene(
+        wallpaperDir = wallpaperDir,
+        records = { store.getAllWallpapers() },
+        deleteRow = { store.deleteWallpaper(it) },
+        writeLock = LIBRARY_WRITE_LOCK
+    )
+
     private val ingestor = CandidateIngestor(safetyGate, imageEvaluator, envelopePlanner, wallpaperDir, quarantineDir, libraryHost)
     private val revalidator = Revalidator(safetyGate, imageEvaluator, libraryHost)
     private val userImportPipeline = UserImportPipeline(
@@ -183,7 +215,6 @@ class LocalLibraryRepository(
     init {
         migrateLegacyPerceptualHashesToStore()
         sweepStaleQuarantineFiles()
-        healCancelledSourceDiagnostics()
     }
 
     /**
@@ -287,8 +318,22 @@ class LocalLibraryRepository(
         }
     }
 
+    /** What the last Follow-OS poll verified (see [FollowOsVerification.key]); null when nothing is. */
+    fun getFollowOsVerifiedKey(): String? = statePrefs.getString(KEY_FOLLOW_OS_VERIFIED, null)
+
+    fun setFollowOsVerified(target: BrightnessClass, currentId: String?) {
+        statePrefs.edit { putString(KEY_FOLLOW_OS_VERIFIED, FollowOsVerification.key(target, currentId)) }
+    }
+
+    /**
+     * The person put the system's own wallpaper back. A Follow-OS poll must not cover it up with one of ours until the
+     * theme changes, so this is recorded as verified for the current theme.
+     */
+    fun markSystemDefaultChosen(target: BrightnessClass) = setFollowOsVerified(target, null)
+
     fun recordWallpaperApplied(wallpaperId: String) {
         val current = getCurrentWallpaperId()
+        statePrefs.edit { remove(KEY_FOLLOW_OS_VERIFIED) } // a new wallpaper (or leaving the system default) must be verified afresh
         prefs.edit {
             if (current != null && current != wallpaperId) {
                 putString("previous_wallpaper_id", current)
@@ -490,7 +535,6 @@ class LocalLibraryRepository(
         maxSourcesPerSync: Int = DEFAULT_MAX_SOURCES_PER_SYNC,
         display: DisplayProfile? = null
     ): List<WallpaperSourceAdapter> {
-        healCancelledSourceDiagnostics()
         val baseEligible = sourceAdapters.filter { adapter ->
             !adapter.isBuiltInOffline &&
                 SourceRegistry.isSourceAdmitted(adapter.sourceId) &&
@@ -533,6 +577,11 @@ class LocalLibraryRepository(
     var lastSyncFailedSources: Int = 0
         private set
 
+    /** Bytes the most recent [refreshOnlineCatalog] downloaded, counting pictures it then rejected. */
+    @Volatile
+    var lastSyncBytesDownloaded: Long = 0L
+        private set
+
     /**
      * One sync at a time per process. The app and the background worker each build their own repository, so without
      * this they can poll the same sources together (doubling the request rate the register budgets) and race on the
@@ -549,6 +598,11 @@ class LocalLibraryRepository(
         maxSourcesPerSync: Int,
         connectedDisplays: List<DisplayProfile>
     ): Int {
+        // First thing once the lock is held: the figures describe this sync only. A step below that fails must not leave the
+        // previous sync's totals behind for a caller (the background data budget) to count a second time.
+        lastSyncAttemptedSources = 0
+        lastSyncFailedSources = 0
+        lastSyncBytesDownloaded = 0L
         val activeDisplaySet = connectedDisplays.filter { it.widthPx > 0 && it.heightPx > 0 }
             .ifEmpty { listOf(display) }
         val currentSetSignature = displaySetSignature(activeDisplaySet)
@@ -629,6 +683,7 @@ class LocalLibraryRepository(
 
         lastSyncAttemptedSources = selectedAdapters.size
         lastSyncFailedSources = 0
+        lastSyncBytesDownloaded = 0L
         for (adapter in selectedAdapters) {
             coroutineContext.ensureActive()
             newlyAdded += syncSource(adapter, state, effectiveTargetWidthPx)
@@ -647,6 +702,20 @@ class LocalLibraryRepository(
             maxRequests = reg?.maxRequestsPerSync ?: 6,
             minSpacingMs = reg?.minRequestSpacingMs ?: 150L
         )
+        try {
+            return syncSourceWith(adapter, budgetedClient, state, targetWidthPx)
+        } finally {
+            // Data used counts even when the sync is cancelled or the pictures are then rejected.
+            lastSyncBytesDownloaded += budgetedClient.bytesDownloaded
+        }
+    }
+
+    private suspend fun syncSourceWith(
+        adapter: WallpaperSourceAdapter,
+        budgetedClient: BudgetedSourceHttpClient,
+        state: SyncState,
+        targetWidthPx: Int
+    ): Int {
         val cursor = sourceHealth.fetchCursor(adapter.sourceId)
         val candidates = fetchPage(adapter, budgetedClient, state.preferences, cursor, targetWidthPx) ?: return 0
         sourceHealth.advanceCursor(adapter.sourceId, cursor)
@@ -774,14 +843,17 @@ class LocalLibraryRepository(
     /**
      * Auto Backup restores the library database but not the image files (Article IX §3), and the cache
      * manager evicts files too. Rows left without a file are marked evicted so counts are honest and the
-     * next sync downloads them again. Seeds are re-rendered by [ensureSeedReserveLoaded]; the baseline
-     * restore copy is left untouched. Returns how many rows changed.
+     * next sync downloads them again. Seeds are re-rendered by [ensureSeedReserveLoaded].
+     *
+     * A personal photo or the baseline copy cannot be fetched again, but its row is healed the same way: left with a
+     * size and a path to a file that is gone, it would count as bytes on disk, push real images out of the cache and
+     * hold back top-ups. The row and its provenance stay. Each lost personal photo is counted for a one-time notice
+     * ([takeLostImportsNotice]). Returns how many rows changed.
      */
     fun healMissingFiles(): Int {
         var healed = 0
         for (record in getAllWallpapers()) {
-            // Seeds are re-rendered, the baseline copy is kept, and a missing personal photo cannot be fetched again.
-            if (record.isRejected || record.isBaselineRestore || record.provenance.sourceId in HEAL_EXEMPT_SOURCES) continue
+            if (record.isRejected || record.provenance.sourceId in HEAL_EXEMPT_SOURCES) continue
             if (record.localFilePath.isBlank() && record.fileSizeBytes == 0L) continue
             if (hasUsableFile(record)) continue
             // Re-read the row: a sync may have re-downloaded it since the list was read, and blanking a fresh
@@ -790,14 +862,61 @@ class LocalLibraryRepository(
             // check and the blanking write cannot interleave with a fresh download.
             synchronized(LIBRARY_WRITE_LOCK) {
                 val current = getWallpaperById(record.id) ?: return@synchronized
-                if (current.isRejected || current.isBaselineRestore || current.provenance.sourceId in HEAL_EXEMPT_SOURCES ||
-                    hasUsableFile(current)
-                ) return@synchronized
+                if (current.isRejected || current.provenance.sourceId in HEAL_EXEMPT_SOURCES || hasUsableFile(current)) {
+                    return@synchronized
+                }
+                if (current.localFilePath.isBlank() && current.fileSizeBytes == 0L) return@synchronized
                 upsertWallpaper(current.copy(localFilePath = "", croppedFilePath = "", fileSizeBytes = 0L))
+                if (current.provenance.sourceId == SourceIds.USER_LOCAL && !current.isBaselineRestore) {
+                    prefs.edit { putInt(KEY_LOST_IMPORTS, prefs.getInt(KEY_LOST_IMPORTS, 0) + 1) }
+                }
                 healed++
             }
         }
         return healed
+    }
+
+    /** How many personal photos were found missing since the last call, then forgets them: the notice is shown once. */
+    fun takeLostImportsNotice(): Int = synchronized(LIBRARY_WRITE_LOCK) {
+        val count = prefs.getInt(KEY_LOST_IMPORTS, 0)
+        if (count != 0) prefs.edit { remove(KEY_LOST_IMPORTS) }
+        count
+    }
+
+    /**
+     * Removes orphaned image files and long-forgotten rows, at most once a day (opening the app and every worker run
+     * may call this freely). Returns what was removed, or null when it is not yet due.
+     */
+    fun runStorageHygieneIfDue(nowEpochMs: Long = System.currentTimeMillis()): StorageHygieneReport? {
+        val last = prefs.getLong(KEY_LAST_HYGIENE, 0L)
+        if (last != 0L && nowEpochMs - last < HYGIENE_INTERVAL_MS) return null
+        // Recorded first: a pass that fails must not retry on every launch.
+        prefs.edit { putLong(KEY_LAST_HYGIENE, nowEpochMs) }
+        val activeIds = setOfNotNull(getCurrentWallpaperId(), getPreviousWallpaperId())
+        return StorageHygieneReport(
+            orphanFilesRemoved = hygiene.sweepOrphanedFiles(nowEpochMs),
+            staleRowsRemoved = hygiene.compactStaleRows(nowEpochMs, activeIds)
+        )
+    }
+
+    /**
+     * "Reset Sunloom": removes everything the app keeps - library, blocklist, settings, images, staging and export
+     * files - so it starts again as if freshly installed. Waits for a running sync and blocks library writers while
+     * it works. The caller restores the wallpaper and cancels scheduled work first, and drops this repository
+     * afterwards (its store is gone).
+     */
+    suspend fun wipeAllData() {
+        SYNC_MUTEX.withLock {
+            synchronized(LIBRARY_WRITE_LOCK) {
+                store.wipe()
+                forgetDefaultStore()
+                PREFERENCE_FILES.forEach { appContext.getSharedPreferences(it, Context.MODE_PRIVATE).edit(commit = true) { clear() } }
+                listOf(wallpaperDir, quarantineDir).forEach { dir -> dir.listFiles().orEmpty().forEach { it.deleteRecursively() } }
+                appContext.cacheDir.listFiles { f -> f.name.startsWith("export-") }.orEmpty().forEach { it.delete() }
+                File(appContext.cacheDir, SEED_RENDER_CACHE_DIR).deleteRecursively()
+                SeedReserve.clearSeedRenderCache()
+            }
+        }
     }
 
     fun enforceCacheLimit() {
@@ -806,7 +925,9 @@ class LocalLibraryRepository(
         val (updated, report) = cacheManager.executeCleanupOnDisk(
             records = getAllWallpapers(),
             activeWallpaperIds = activeIds,
-            maxCacheBytes = prefs.maxCacheBytes
+            maxCacheBytes = prefs.maxCacheBytes,
+            // The limit is about bytes on disk, not the sizes rows recorded (Article X §3).
+            sizeOf = hygiene::diskBytes
         )
         if (report.evictedIds.isNotEmpty()) {
             val evictedSet = report.evictedIds.toSet()
@@ -854,13 +975,9 @@ class LocalLibraryRepository(
 
     // --- Source health, backoff and fetch cursor: see SourceHealthStore ---
 
-    fun healCancelledSourceDiagnostics() =
-        sourceHealth.healCancelledDiagnostics(SourceRegistry.admittedSources().map { it.sourceId })
-
     fun clearTransientSourceFailureOnReenable(sourceId: String) = sourceHealth.clearTransientFailureOnReenable(sourceId)
 
     fun getSourceDiagnostics(nowEpochMs: Long = System.currentTimeMillis()): List<SourceDiagnostics> {
-        healCancelledSourceDiagnostics()
         val enabled = loadPreferences().enabledSources
         return SourceRegistry.admittedSources().map { entry ->
             val sid = entry.sourceId

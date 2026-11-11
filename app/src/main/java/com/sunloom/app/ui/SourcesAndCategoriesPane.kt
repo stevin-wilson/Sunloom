@@ -1,5 +1,9 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.labels.summary
+import com.sunloom.app.labels.title
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.foundation.shape.CircleShape
 import com.sunloom.app.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
@@ -15,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -54,9 +57,10 @@ internal fun SourcesAndCategoriesPane(
     val admittedRegistrations = remember {
         com.sunloom.app.data.sources.SourceRegistry.admittedSources()
     }
-    val sourceCatalog = remember(admittedRegistrations) {
+    val labels = LocalResources.current
+    val sourceCatalog = remember(admittedRegistrations, labels) {
         admittedRegistrations.map { reg ->
-            Triple(reg.sourceId, reg.sourceName, reg.plainDescription)
+            Triple(reg.sourceId, reg.title(labels), reg.summary(labels))
         }
     }
 
@@ -65,14 +69,14 @@ internal fun SourcesAndCategoriesPane(
             .fillMaxSize()
             .desktopScrollbar(scrollState)
             .verticalScroll(scrollState),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(Spacing.m)
     ) {
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
+            shape = MaterialTheme.shapes.large,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
                 Text(stringResource(R.string.wallpaper_sources), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())
                 Text(
                     stringResource(R.string.online_and_user_sources_always_take_prio),
@@ -93,12 +97,12 @@ internal fun SourcesAndCategoriesPane(
                         Column(modifier = Modifier.weight(1f)) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.s)
                             ) {
                                 Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                 if (isUnhealthy) {
                                     Text(
-                                        text = "• ${diag.healthState.label}",
+                                        text = "• ${diag.healthState.title()}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.error
                                     )
@@ -107,7 +111,7 @@ internal fun SourcesAndCategoriesPane(
                             Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (diag != null && diag.lastSyncSummary.isNotBlank()) {
                                 Text(
-                                    text = "Last sync: ${diag.lastSyncSummary}",
+                                    text = stringResource(R.string.last_sync, diag.lastSyncSummary),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -122,7 +126,7 @@ internal fun SourcesAndCategoriesPane(
                         }
                         Switch(
                             checked = id in uiState.preferences.enabledSources,
-                            onCheckedChange = { onToggleSource(id) }, modifier = Modifier.desktopControl(RoundedCornerShape(50)).switchLabel(title)
+                            onCheckedChange = { onToggleSource(id) }, modifier = Modifier.desktopControl(CircleShape).switchLabel(title)
                         )
                     }
                 }
@@ -140,7 +144,7 @@ internal fun SourcesAndCategoriesPane(
                     }
                     Switch(
                         checked = uiState.preferences.wifiOnlyDownloads,
-                        onCheckedChange = onToggleWifiOnly, modifier = Modifier.desktopControl(RoundedCornerShape(50)).switchLabel(stringResource(R.string.unmetered_wi_fi_or_ethernet_only))
+                        onCheckedChange = onToggleWifiOnly, modifier = Modifier.desktopControl(CircleShape).switchLabel(stringResource(R.string.unmetered_wi_fi_or_ethernet_only))
                     )
                 }
 
@@ -160,7 +164,9 @@ internal fun SourcesAndCategoriesPane(
                     Switch(
                         checked = uiState.preferences.deferOnBatterySaver,
                         onCheckedChange = onToggleBatterySaverDeferral,
-                        modifier = Modifier.desktopControl(RoundedCornerShape(50)).switchLabel(stringResource(R.string.pause_downloads_on_battery_saver)).testTag("defer_battery_saver_switch")
+                        modifier = Modifier.desktopControl(CircleShape)
+                            .switchLabel(stringResource(R.string.pause_downloads_on_battery_saver))
+                            .testTag("defer_battery_saver_switch")
                     )
                 }
             }
@@ -168,24 +174,24 @@ internal fun SourcesAndCategoriesPane(
 
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
+            shape = MaterialTheme.shapes.large,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
                 Text(stringResource(R.string.categories), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.s)
                 ) {
                     SafeCategory.entries.forEach { cat ->
                         FilterChip(
                             selected = cat in uiState.preferences.enabledCategories,
                             onClick = { onToggleCategory(cat) },
-                            label = { Text(cat.displayName) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                            label = { Text(cat.title()) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                         )
                     }
                 }
-                Button(onClick = onSyncOnline, enabled = !uiState.isSyncingOnline, modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("sync_online_button")) {
+                Button(onClick = onSyncOnline, enabled = !uiState.isSyncingOnline, modifier = Modifier.desktopControl(CircleShape).testTag("sync_online_button")) {
                     Icon(SunloomIcons.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(if (uiState.isSyncingOnline) stringResource(R.string.syncing) else stringResource(R.string.sync_catalog_now))

@@ -1,0 +1,65 @@
+name: Emulator smoke tests
+
+# On-device smoke tests (app/src/androidTest) on x86_64 emulators: the real SQLite, WorkManager and activity that
+# the JVM/Robolectric suite replaces or fakes (Constitution Article XVI).
+#
+# While the repository is private these cost private Actions minutes, so they run only on main, on release tags and
+# on demand. When the repository goes public, add `pull_request:` below so every PR gets them (free for public repos).
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: emulator-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Android API ${{ matrix.api-level }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [30, 36]
+    steps:
+      - uses: actions/checkout@v4
+
+      # The hosted runner needs KVM opened up for the emulator to run at a usable speed.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Run the smoke tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: >
+            ./gradlew :app:connectedGithubDebugAndroidTest --stacktrace
+            -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+            -Pkotlin.daemon.jvmargs="-Xmx3g"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-reports-api${{ matrix.api-level }}
+          path: app/build/reports/androidTests
+          if-no-files-found: ignore

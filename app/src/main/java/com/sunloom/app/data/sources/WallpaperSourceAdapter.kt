@@ -3,8 +3,13 @@ package com.sunloom.app.data.sources
 import com.sunloom.app.BuildConfig
 import com.sunloom.app.domain.model.CandidateAsset
 import com.sunloom.app.domain.model.SafeCategory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
@@ -110,6 +115,10 @@ class BudgetedSourceHttpClient(
     var successfulRequestCount: Int = 0
         private set
 
+    /** Bytes received so far in this sync (images and pages), for the background's daily data budget. */
+    var bytesDownloaded: Long = 0L
+        private set
+
     private var lastRequestEpochMs: Long = 0L
 
     private suspend fun <T> acquireAndRun(url: String, block: suspend () -> T): T {
@@ -141,11 +150,11 @@ class BudgetedSourceHttpClient(
     }
 
     override suspend fun getText(url: String): String = acquireAndRun(url) {
-        tracked { scopedDelegate.getText(url) }
+        tracked { scopedDelegate.getText(url) }.also { bytesDownloaded += it.encodeToByteArray().size }
     }
 
     override suspend fun getBytes(url: String, maxBytes: Int): ByteArray = acquireAndRun(url) {
-        tracked { scopedDelegate.getBytes(url, maxBytes) }
+        tracked { scopedDelegate.getBytes(url, maxBytes) }.also { bytesDownloaded += it.size }
     }
 }
 
@@ -158,6 +167,13 @@ class DefaultHttpsClient(
         val lastModified: String?,
         val body: String
     )
+
+    /** Forgets the saved responses (called when the system asks the app to give memory back). */
+    fun clearCaches() {
+        synchronized(conditionalTextCache) { conditionalTextCache.clear() }
+    }
+
+    internal fun cachedResponseCount(): Int = synchronized(conditionalTextCache) { conditionalTextCache.size }
 
     private val conditionalTextCache = object : LinkedHashMap<String, CachedTextResponse>(32, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedTextResponse>?): Boolean {
@@ -207,12 +223,45 @@ class DefaultHttpsClient(
         }
     }
 
-    private suspend fun fetchBytes(url: String, maxBytes: Int, scopeSourceId: String?): ByteArray = withContext(Dispatchers.IO) {
+    /**
+     * The blocking download runs on a worker so that cancelling the caller tears the connection down at once: a read
+     * stalled on a dead network would otherwise keep running until its timeout, holding the sync (and its memory).
+     */
+    private suspend fun fetchBytes(url: String, maxBytes: Int, scopeSourceId: String?): ByteArray = coroutineScope {
+        val active = java.util.concurrent.atomic.AtomicReference<HttpURLConnection?>(null)
+        val worker = async(Dispatchers.IO) {
+            try {
+                downloadBytes(url, maxBytes, scopeSourceId, active) { ensureActive() }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (failure: Exception) {
+                // Tearing the connection down makes the blocked read fail ("Socket closed"). That failure is the cancellation
+                // working, not a download error: a real exception would otherwise replace the cancellation.
+                if (!isActive) throw CancellationException("Download cancelled").apply { initCause(failure) }
+                throw failure
+            }
+        }
+        try {
+            worker.await()
+        } catch (cancel: CancellationException) {
+            active.get()?.disconnect()
+            throw cancel
+        }
+    }
+
+    private fun downloadBytes(
+        url: String,
+        maxBytes: Int,
+        scopeSourceId: String?,
+        active: java.util.concurrent.atomic.AtomicReference<HttpURLConnection?>,
+        stopIfCancelled: () -> Unit
+    ): ByteArray {
         val deadline = System.nanoTime() + REQUEST_DEADLINE_NANOS
-        executeFollowingValidatedRedirects(
+        return executeFollowingValidatedRedirects(
             initialUrl = url,
             scopeSourceId = scopeSourceId,
-            acceptHeader = "image/jpeg,image/png,image/webp,*/*;q=0.8"
+            acceptHeader = "image/jpeg,image/png,image/webp,*/*;q=0.8",
+            track = { active.set(it) }
         ) { conn, _ ->
             val contentLength = conn.contentLengthLong
             if (contentLength > maxBytes) {
@@ -223,20 +272,14 @@ class DefaultHttpsClient(
                 throw IllegalStateException("Unexpected HTML Content-Type '$contentType' when downloading image asset")
             }
             BufferedInputStream(conn.inputStream).use { input ->
-                val buffer = ByteArrayOutputStream(
-                    if (contentLength in 1..maxBytes.toLong()) contentLength.toInt() else 64 * 1024
-                )
+                val buffer = DownloadBuffer(contentLength, maxBytes)
                 val chunk = ByteArray(16_384)
-                var total = 0
                 while (true) {
                     val read = input.read(chunk)
                     if (read <= 0) break
+                    stopIfCancelled()
                     if (System.nanoTime() > deadline) throw java.io.IOException("Download exceeded its deadline")
-                    total += read
-                    if (total > maxBytes) {
-                        throw IllegalArgumentException("Asset exceeds maximum permitted download size ($maxBytes bytes)")
-                    }
-                    buffer.write(chunk, 0, read)
+                    buffer.append(chunk, 0, read)
                 }
                 buffer.toByteArray()
             }
@@ -249,6 +292,7 @@ class DefaultHttpsClient(
         acceptHeader: String,
         ifNoneMatch: String? = null,
         ifModifiedSince: String? = null,
+        track: (HttpURLConnection) -> Unit = {},
         reader: (HttpURLConnection, Int) -> T
     ): T {
         var currentUrl = initialUrl
@@ -266,6 +310,7 @@ class DefaultHttpsClient(
                     if (!ifModifiedSince.isNullOrBlank()) setRequestProperty("If-Modified-Since", ifModifiedSince)
                 }
             }
+            track(conn)
             try {
                 val code = conn.responseCode
                 if (code in REDIRECT_STATUS_CODES) {
@@ -336,10 +381,10 @@ class DefaultHttpsClient(
         private val REDIRECT_STATUS_CODES = setOf(301, 302, 303, 307, 308)
 
         /**
-         * Article VI §7 [v0.5]: Standard identifying User-Agent header derived from BuildConfig.VERSION_NAME.
+         * Article VI §7: the app and its version, with the project page as the way to reach us (no mailbox needed).
          */
         val USER_AGENT: String =
-            "Sunloom/${BuildConfig.VERSION_NAME} (com.sunloom.app; mailto:maintainers@sunloom.app)"
+            "Sunloom/${BuildConfig.VERSION_NAME} (+https://github.com/stevin-wilson/Sunloom)"
 
         fun parseRetryAfterSeconds(rawHeader: String?, nowEpochMs: Long = System.currentTimeMillis()): Long {
             val trimmed = rawHeader?.trim().orEmpty()

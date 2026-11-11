@@ -9,6 +9,7 @@ import com.sunloom.app.Requirement
 import com.sunloom.app.data.sources.HttpClient
 import com.sunloom.app.data.sources.WallpaperSourceAdapter
 import com.sunloom.app.data.sources.fetchTextOrNull
+import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.model.CandidateAsset
 import com.sunloom.app.domain.model.DisplayProfile
 import com.sunloom.app.domain.model.LicenseType
@@ -114,12 +115,13 @@ class LocalLibrarySyncTest {
     )
 
     private var downloads = 0
+    private var servedBytes = 0L
 
     private val okClient = object : HttpClient {
         override suspend fun getText(url: String): String = "{}"
         override suspend fun getBytes(url: String, maxBytes: Int): ByteArray {
             downloads++
-            return jpegFor(imageKey(url))
+            return jpegFor(imageKey(url)).also { servedBytes += it.size }
         }
     }
 
@@ -692,7 +694,7 @@ class LocalLibrarySyncTest {
             override fun isSetWallpaperAllowed() = true
             override fun getConnectedDisplays() = displays.toList()
             override fun applyBitmapToDestination(bitmap: Bitmap, flags: Int) = true
-            override fun isWifiConnected() = true
+            override fun isUnmeteredNetwork() = true
             override fun isBatterySaverActive() = false
         }
     )
@@ -703,13 +705,171 @@ class LocalLibrarySyncTest {
         val repo = repo(EndlessAdapter("artic_cc0", { candidate(it, creator = "Artist $it") }, rounds))
         repo.savePreferences(repo.loadPreferences().copy(autoChangeEnabled = false))
 
-        val added = com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler.executeScheduledCatalogRefresh(
-            appContext = context, repo = repo, platform = platformFor(display)
-        )
+        val added = backgroundRefresh(repo, gatewayWith())
 
         assertTrue("manual mode must still fetch ($added added)", added > 0)
         assertTrue("several rounds expected, got $rounds", rounds.size >= 2)
         assertTrue(rounds.size <= com.sunloom.app.platform.scheduler.RefreshSchedulePolicy.MAX_BACKGROUND_ROUNDS)
+    }
+
+    private fun gatewayWith(
+        wifi: Boolean = true,
+        batterySaver: Boolean = false,
+        dataSaver: Boolean = false
+    ) = object : com.sunloom.app.platform.SystemWallpaperGateway {
+        override fun isWallpaperSupported() = true
+        override fun isSetWallpaperAllowed() = true
+        override fun getConnectedDisplays() = listOf(display)
+        override fun applyBitmapToDestination(bitmap: Bitmap, flags: Int) = true
+        override fun isUnmeteredNetwork() = wifi
+        override fun isDataSaverRestricting() = dataSaver
+        override fun isBatterySaverActive() = batterySaver
+    }
+
+    @Test
+    fun `the background refresh makes no request while the reserve is already full`() = kotlinx.coroutines.test.runTest {
+        val rounds = mutableListOf<Int>()
+        val repo = repo(EndlessAdapter("artic_cc0", { candidate(it, creator = "Artist $it") }, rounds))
+        repo.refreshOnlineCatalog(display)
+        // A cache at its cap needs nothing more (Article X section 4: fetching pauses at 90% of the limit).
+        repo.savePreferences(repo.loadPreferences().copy(maxCacheBytes = 1L))
+        assertFalse("setup: nothing more is needed", repo.needsTopUp())
+        rounds.clear()
+
+        val added = com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler.executeScheduledCatalogRefresh(
+            appContext = context, repo = repo, platform = platformFor(display), gateway = gatewayWith(wifi = true)
+        )
+
+        assertEquals(0, added)
+        assertTrue("a full reserve must not cost a single request, but asked for $rounds", rounds.isEmpty())
+    }
+
+    @Test
+    fun `the background refresh leaves housekeeping alone when it cannot download anyway`() = kotlinx.coroutines.test.runTest {
+        val rounds = mutableListOf<Int>()
+        val repo = repo(EndlessAdapter("artic_cc0", { candidate(it, creator = "Artist $it") }, rounds))
+        repo.refreshOnlineCatalog(display)
+        val victim = repo.getAllWallpapers().first { it.provenance.sourceId == "artic_cc0" }
+        File(victim.localFilePath).delete()
+        repo.savePreferences(repo.loadPreferences().copy(wifiOnlyDownloads = true))
+        rounds.clear()
+
+        com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler.executeScheduledCatalogRefresh(
+            appContext = context, repo = repo, platform = platformFor(display), gateway = gatewayWith(wifi = false)
+        )
+
+        assertTrue("no download without Wi-Fi", rounds.isEmpty())
+        assertEquals("the missing file was not looked into", victim.localFilePath, repo.getWallpaperById(victim.id)!!.localFilePath)
+    }
+
+    @Test
+    fun `the background refresh still downloads, and mends a missing file, when it may`() = kotlinx.coroutines.test.runTest {
+        val rounds = mutableListOf<Int>()
+        val repo = repo(EndlessAdapter("artic_cc0", { candidate(it, creator = "Artist $it") }, rounds))
+        repo.refreshOnlineCatalog(display)
+        val victim = repo.getAllWallpapers().first { it.provenance.sourceId == "artic_cc0" }
+        File(victim.localFilePath).delete()
+        rounds.clear()
+
+        val added = com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler.executeScheduledCatalogRefresh(
+            appContext = context, repo = repo, platform = platformFor(display), gateway = gatewayWith(wifi = true)
+        )
+
+        assertTrue("it fetched ($added added)", rounds.isNotEmpty())
+        // Mended: the row was marked gone (and, being old and never kept, dropped) or the picture came back; it is never
+        // left pointing at a file that is not there.
+        repo.getWallpaperById(victim.id)?.let { after ->
+            assertTrue(after.localFilePath.isBlank() || File(after.localFilePath).exists())
+        }
+    }
+
+    private fun budget() = com.sunloom.app.platform.scheduler.BackgroundDataBudget(
+        context.getSharedPreferences("sunloom_preferences", Context.MODE_PRIVATE)
+    )
+
+    private suspend fun backgroundRefresh(repo: LocalLibraryRepository, gateway: com.sunloom.app.platform.SystemWallpaperGateway) =
+        com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler.executeScheduledCatalogRefresh(
+            appContext = context, repo = repo, platform = platformFor(display), gateway = gateway
+        )
+
+    @Test
+    fun `a sync that fails before it starts does not report the previous sync's bytes`() = kotlinx.coroutines.test.runTest {
+        val base = InMemoryLibraryStore()
+        var failReads = false
+        val flaky = object : LibraryStore by base {
+            override fun getAllWallpapers(): List<WallpaperRecord> {
+                if (failReads) throw java.io.IOException("disk error")
+                return base.getAllWallpapers()
+            }
+        }
+        val repo = LocalLibraryRepository(
+            context = context, httpClient = okClient, store = flaky,
+            sourceAdapters = listOf(FixedAdapter("artic_cc0", (1..2).map { candidate("flaky-$it") }))
+        )
+        repo.refreshOnlineCatalog(display)
+        assertTrue("setup: the first sync downloaded something", repo.lastSyncBytesDownloaded > 0)
+
+        failReads = true
+        try {
+            repo.refreshOnlineCatalog(display)
+        } catch (_: java.io.IOException) {
+        }
+
+        // The background budget adds this number after every round, success or not: it must not be the old round's.
+        assertEquals(0L, repo.lastSyncBytesDownloaded)
+    }
+
+    @Test
+    fun `a sync reports the bytes it downloaded`() = kotlinx.coroutines.test.runTest {
+        val repo = repo(FixedAdapter("artic_cc0", (1..3).map { candidate("bytes-$it") }))
+        servedBytes = 0L
+
+        repo.refreshOnlineCatalog(display)
+
+        assertTrue("it downloaded something", servedBytes > 0)
+        assertTrue("and counted at least the images (${repo.lastSyncBytesDownloaded} of $servedBytes)", repo.lastSyncBytesDownloaded >= servedBytes)
+    }
+
+    @Test
+    fun `the background refresh stays off a metered network, a hotspot included`() = kotlinx.coroutines.test.runTest {
+        val rounds = mutableListOf<Int>()
+        val repo = repo(EndlessAdapter("artic_cc0", { candidate(it, creator = "Artist $it") }, rounds))
+        assertTrue("setup: a top-up is wanted", repo.needsTopUp())
+
+        assertEquals(0, backgroundRefresh(repo, gatewayWith(wifi = false)))
+
+        assertTrue("no request on a metered network, asked for $rounds", rounds.isEmpty())
+    }
+
+    @Test
+    fun `a person who allows metered networks still gets none while Data Saver is on`() = kotlinx.coroutines.test.runTest {
+        val rounds = mutableListOf<Int>()
+        val repo = repo(EndlessAdapter("artic_cc0", { candidate(it, creator = "Artist $it") }, rounds))
+        repo.savePreferences(repo.loadPreferences().copy(wifiOnlyDownloads = false))
+
+        assertEquals(0, backgroundRefresh(repo, gatewayWith(wifi = false, dataSaver = true)))
+        assertTrue(rounds.isEmpty())
+
+        val added = backgroundRefresh(repo, gatewayWith(wifi = false, dataSaver = false))
+        assertTrue("without Data Saver the allowed metered network is used ($added)", added > 0)
+    }
+
+    @Test
+    fun `the background refresh counts what it downloads against the day and stops at the budget`() = kotlinx.coroutines.test.runTest {
+        val rounds = mutableListOf<Int>()
+        val repo = repo(EndlessAdapter("artic_cc0", { candidate(it, creator = "Artist $it") }, rounds))
+        val before = budget().usedToday(System.currentTimeMillis())
+
+        val added = backgroundRefresh(repo, gatewayWith())
+
+        assertTrue("it fetched ($added)", added > 0)
+        assertTrue("and the day's total grew", budget().usedToday(System.currentTimeMillis()) > before)
+
+        // The day's budget is used up: not one more request.
+        budget().record(com.sunloom.app.platform.scheduler.BackgroundDownloadPolicy.DAILY_BUDGET_BYTES, System.currentTimeMillis())
+        rounds.clear()
+        assertEquals(0, backgroundRefresh(repo, gatewayWith()))
+        assertTrue("a spent budget costs no request, asked for $rounds", rounds.isEmpty())
     }
 
     @Test
@@ -775,15 +935,74 @@ class LocalLibrarySyncTest {
         assertTrue(repo.getAllRejections().any { it.assetId == "tall-1" && it.reasonCode == "COMPOSITION_CROPS_TOO_MUCH" && !it.isPermanent })
     }
 
-    @Test
-    fun `healMissingFiles leaves the users own photos alone`() = kotlinx.coroutines.test.runTest {
-        val repo = repo(FixedAdapter("artic_cc0", listOf(candidate("mine-1"))))
+    private suspend fun importedRow(repo: LocalLibraryRepository, id: String, baseline: Boolean = false): WallpaperRecord {
         repo.refreshOnlineCatalog(display)
-        val row = repo.getWallpaperById("mine-1")!!
-        File(row.localFilePath).delete()
-        repo.upsertWallpaper(row.copy(provenance = row.provenance.copy(sourceId = "user_local")))
+        val row = repo.getWallpaperById(id)!!
+        val mine = row.copy(provenance = row.provenance.copy(sourceId = "user_local"), isBaselineRestore = baseline)
+        repo.upsertWallpaper(mine)
+        return mine
+    }
+
+    @Test
+    fun `a personal photo whose file is gone is marked gone so its size stops counting`() = kotlinx.coroutines.test.runTest {
+        val repo = repo(FixedAdapter("artic_cc0", listOf(candidate("mine-1"))))
+        val mine = importedRow(repo, "mine-1")
+        File(mine.localFilePath).delete()
+        val before = repo.getAllWallpapers().sumOf { it.fileSizeBytes }
+        assertTrue("the missing file still counts as bytes until healed", before >= mine.fileSizeBytes && mine.fileSizeBytes > 0)
+
+        assertEquals(1, repo.healMissingFiles())
+
+        val healed = repo.getWallpaperById("mine-1")!!
+        assertEquals("", healed.localFilePath)
+        assertEquals(0L, healed.fileSizeBytes)
+        assertEquals("the row and its provenance are kept", "user_local", healed.provenance.sourceId)
+        assertEquals(before - mine.fileSizeBytes, repo.getAllWallpapers().sumOf { it.fileSizeBytes })
+        assertEquals("a second pass has nothing left to heal", 0, repo.healMissingFiles())
+    }
+
+    @Test
+    fun `lost personal photos are reported once`() = kotlinx.coroutines.test.runTest {
+        val repo = repo(FixedAdapter("artic_cc0", listOf(candidate("mine-1"), candidate("mine-2"))))
+        repo.refreshOnlineCatalog(display)
+        for (id in listOf("mine-1", "mine-2")) {
+            val row = repo.getWallpaperById(id)!!
+            File(row.localFilePath).delete()
+            repo.upsertWallpaper(row.copy(provenance = row.provenance.copy(sourceId = "user_local")))
+        }
+        assertEquals(0, repo.takeLostImportsNotice())
+
+        repo.healMissingFiles()
+
+        assertEquals(2, repo.takeLostImportsNotice())
+        assertEquals("taking the notice clears it", 0, repo.takeLostImportsNotice())
+        repo.healMissingFiles()
+        assertEquals("nothing new was lost", 0, repo.takeLostImportsNotice())
+    }
+
+    @Test
+    fun `a healthy personal photo is left alone and not reported`() = kotlinx.coroutines.test.runTest {
+        val repo = repo(FixedAdapter("artic_cc0", listOf(candidate("mine-1"))))
+        val mine = importedRow(repo, "mine-1")
+
         assertEquals(0, repo.healMissingFiles())
-        assertEquals(row.localFilePath, repo.getWallpaperById("mine-1")!!.localFilePath)
+
+        assertEquals(mine.localFilePath, repo.getWallpaperById("mine-1")!!.localFilePath)
+        assertEquals(0, repo.takeLostImportsNotice())
+    }
+
+    @Test
+    fun `a missing baseline copy stops counting its size but is not reported as a lost import`() = kotlinx.coroutines.test.runTest {
+        val repo = repo(FixedAdapter("artic_cc0", listOf(candidate("base-1"))))
+        val baseline = importedRow(repo, "base-1", baseline = true)
+        File(baseline.localFilePath).delete()
+
+        assertEquals(1, repo.healMissingFiles())
+
+        val healed = repo.getWallpaperById("base-1")!!
+        assertEquals(0L, healed.fileSizeBytes)
+        assertTrue("it is still the baseline row", healed.isBaselineRestore)
+        assertEquals(0, repo.takeLostImportsNotice())
     }
 
     @Test

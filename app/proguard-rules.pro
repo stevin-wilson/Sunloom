@@ -5,3 +5,11 @@
 -keep class * extends androidx.work.CoroutineWorker {
     public <init>(android.content.Context, androidx.work.WorkerParameters);
 }
+
+# Release builds drop verbose, debug and info logging so it never reaches a person's logcat. Warnings and errors stay:
+# they are what a bug report needs.
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}

@@ -1,5 +1,11 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.labels.title
+import androidx.compose.ui.platform.LocalResources
+import android.content.res.Resources
+import androidx.compose.material3.Switch
+import androidx.compose.foundation.shape.CornerSize
+import androidx.compose.foundation.shape.CircleShape
 import com.sunloom.app.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
@@ -16,7 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -33,7 +38,12 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.platform.testTag
 import com.sunloom.app.domain.matcher.SourceRejectionGroup
 import com.sunloom.app.domain.matcher.SourceStockRow
 import com.sunloom.app.domain.model.SourceDiagnostics
@@ -45,11 +55,30 @@ import com.sunloom.app.domain.safety.SafetyGate
 internal fun DiagnosticsPane(
     uiState: SunloomUiState,
     onToggleLegibilityOverlay: () -> Unit = {},
-    onUpdateMaxCacheBytes: (Long) -> Unit = {}
+    onUpdateMaxCacheBytes: (Long) -> Unit = {},
+    onResetSunloom: () -> Unit = {},
+    onCopyDiagnostics: () -> Unit = {},
+    onReportProblem: () -> Unit = {},
+    onCheckForUpdates: () -> Unit = {}
 ) {
+    var showResetConfirm by remember { mutableStateOf(false) }
+    if (showResetConfirm) {
+        ConfirmDestructiveDialog(
+            title = stringResource(R.string.reset_sunloom),
+            message = stringResource(R.string.reset_sunloom_message),
+            confirmLabel = stringResource(R.string.reset_sunloom_confirm),
+            confirmTestTag = "confirm_reset_sunloom_button",
+            onConfirm = {
+                showResetConfirm = false
+                onResetSunloom()
+            },
+            onDismiss = { showResetConfirm = false }
+        )
+    }
     val usedMb = uiState.totalCacheBytesUsed.toDouble() / (1024.0 * 1024.0)
     val maxMb = uiState.preferences.maxCacheBytes.toDouble() / (1024.0 * 1024.0)
 
+    val resources = LocalResources.current
     val stockRows = remember(uiState.libraryWallpapers, uiState.preferences.enabledCategories, uiState.sourceDiagnostics) {
         uiState.reserveBySource
     }
@@ -61,13 +90,15 @@ internal fun DiagnosticsPane(
         modifier = Modifier.fillMaxSize().desktopScrollbar(listState),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
+        aboutItems(uiState.updateCheck, onCheckForUpdates)
+
         item(key = "diag_header") {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp).testTag("diag_header")
             ) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -76,7 +107,12 @@ internal fun DiagnosticsPane(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(stringResource(R.string.internal_storage_display_diagnostics), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())
                             Text(
-                                text = "Reserve: ${uiState.lightReserveCount} Light + ${uiState.darkReserveCount} Dark (${uiState.disabledReserveCount} disabled) • Cache Used: ${"%.1f".format(usedMb)} MB / ${"%.0f".format(maxMb)} MB cap",
+                                text = stringResource(
+                                    R.string.diag_reserve_line,
+                                    uiState.lightReserveCount.toString(), uiState.darkReserveCount.toString(),
+                                    uiState.disabledReserveCount.toString(),
+                                    "%.1f".format(usedMb), "%.0f".format(maxMb)
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -86,26 +122,34 @@ internal fun DiagnosticsPane(
                             onClick = onToggleLegibilityOverlay,
                             leadingIcon = { Icon(SunloomIcons.Visibility, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             label = { Text(stringResource(R.string.legibility_overlay)) },
-                            modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                            modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                         )
                     }
                     LinearProgressIndicator(
                         progress = { (usedMb / maxMb.coerceAtLeast(1.0)).toFloat().coerceIn(0f, 1f) },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
                         listOf(100L, 250L, 500L, 1024L).forEach { mb ->
                             val bytes = mb * 1024L * 1024L
                             FilterChip(
                                 selected = uiState.preferences.maxCacheBytes == bytes,
                                 onClick = { onUpdateMaxCacheBytes(bytes) },
-                                label = { Text(if (mb >= 1024L) "${mb / 1024L} GB cap" else "$mb MB cap") }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                                label = {
+                                    Text(
+                                        if (mb >= 1024L) stringResource(R.string.cache_cap_gb, mb / 1024L)
+                                        else stringResource(R.string.cache_cap_mb, mb)
+                                    )
+                                }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                             )
                         }
                     }
                     uiState.capabilities.connectedDisplays.forEach { disp ->
                         Text(
-                            text = "Display: ${disp.name} (${disp.resolutionLabel}, ${"%.2f".format(disp.aspectRatio)}:1, ${disp.densityDpi} dpi)",
+                            text = stringResource(
+                                R.string.diag_display_line, disp.name, disp.resolutionLabel,
+                                "%.2f".format(disp.aspectRatio), disp.densityDpi.toString()
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -114,18 +158,124 @@ internal fun DiagnosticsPane(
             }
         }
 
+        item(key = "diag_help") {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
+            ) {
+                Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
+                    Text(
+                        stringResource(R.string.problem_help_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.sectionHeading()
+                    )
+                    Text(
+                        stringResource(R.string.problem_help_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.s)
+                    ) {
+                        OutlinedButton(
+                            onClick = onCopyDiagnostics,
+                            modifier = Modifier.desktopControl(CircleShape).testTag("copy_diagnostics_button")
+                        ) { Text(stringResource(R.string.copy_diagnostics)) }
+                        OutlinedButton(
+                            onClick = onReportProblem,
+                            modifier = Modifier.desktopControl(CircleShape).testTag("report_problem_button")
+                        ) { Text(stringResource(R.string.report_a_problem)) }
+                    }
+                }
+            }
+        }
+
+        item(key = "diag_keyboard") {
+            val singleKeys = LocalSingleKeyShortcuts.current
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth().padding(bottom = Spacing.m)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(Spacing.l),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = Spacing.m)) {
+                        Text(
+                            stringResource(R.string.single_key_shortcuts),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.sectionHeading()
+                        )
+                        Text(
+                            stringResource(R.string.single_key_shortcuts_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = singleKeys.enabled,
+                        onCheckedChange = singleKeys::set,
+                        modifier = Modifier
+                            .desktopControl(CircleShape)
+                            .switchLabel(stringResource(R.string.single_key_shortcuts))
+                            .testTag("single_key_shortcuts_switch")
+                    )
+                }
+            }
+        }
+
+        item(key = "diag_reset") {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(Spacing.l),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            stringResource(R.string.reset_sunloom),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.sectionHeading()
+                        )
+                        Text(
+                            stringResource(R.string.reset_sunloom_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = { showResetConfirm = true },
+                        modifier = Modifier.desktopControl(CircleShape).testTag("reset_sunloom_button")
+                    ) {
+                        Text(stringResource(R.string.reset_sunloom), color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        }
+
         if (stockRows.isNotEmpty()) {
             item(key = "diag_sources_header") {
                 DiagnosticsListHeader(
-                    text = "Reserve by source",
+                    text = stringResource(R.string.diag_reserve_by_source),
                     color = MaterialTheme.colorScheme.primary
                 )
             }
             items(stockRows.size, key = { "diag_src_${stockRows[it].sourceId}" }) { index ->
                 val row = stockRows[index]
                 val diag = uiState.sourceDiagnostics.firstOrNull { it.sourceId == row.sourceId }
-                DiagnosticsListRow(text = sourceStockLine(row), monospace = false)
-                sourceSyncLine(diag)?.let { DiagnosticsListRow(text = "    $it", monospace = false, secondary = true) }
+                DiagnosticsListRow(text = sourceStockLine(row, resources), monospace = false)
+                sourceSyncLine(diag, resources)?.let { DiagnosticsListRow(text = "    $it", monospace = false, secondary = true) }
             }
             item(key = "diag_sources_gap") { Spacer(Modifier.height(14.dp)) }
         }
@@ -133,7 +283,7 @@ internal fun DiagnosticsPane(
         if (rejectionGroups.isNotEmpty()) {
             item(key = "diag_rejection_groups_header") {
                 DiagnosticsListHeader(
-                    text = "Skipped by source and reason (latest ${uiState.rejectionLog.size})",
+                    text = stringResource(R.string.diag_skipped_groups, uiState.rejectionLog.size),
                     color = MaterialTheme.colorScheme.error
                 )
             }
@@ -143,10 +293,20 @@ internal fun DiagnosticsPane(
             item(key = "diag_rejection_groups_gap") { Spacer(Modifier.height(14.dp)) }
         }
 
+        item(key = "diag_technical_header") {
+            Column(modifier = Modifier.fillMaxWidth().testTag("diag_technical_header")) {
+                DiagnosticsListHeader(
+                    text = stringResource(R.string.technical_details),
+                    color = MaterialTheme.colorScheme.primary
+                )
+                DiagnosticsListRow(text = stringResource(R.string.technical_details_hint), monospace = false, secondary = true)
+            }
+        }
+
         if (uiState.rejectionLog.isNotEmpty()) {
             item(key = "diag_rejections_header") {
                 DiagnosticsListHeader(
-                    text = "Skipped Candidates (${uiState.rejectionLog.size})",
+                    text = stringResource(R.string.diag_skipped_candidates, uiState.rejectionLog.size),
                     color = MaterialTheme.colorScheme.error
                 )
             }
@@ -159,7 +319,9 @@ internal fun DiagnosticsPane(
                     else -> "DISPLAY:${rej.displaySignature}"
                 }
                 DiagnosticsListRow(
-                    text = "• [${rej.reasonCode} / $scopeTag] Asset ${rej.assetId} (${rej.sourceId}): ${rej.explanation}",
+                    text = stringResource(
+                        R.string.diag_rejection_line, rej.reasonCode, scopeTag, rej.assetId, rej.sourceId, rej.explanation
+                    ),
                     monospace = true
                 )
             }
@@ -168,7 +330,9 @@ internal fun DiagnosticsPane(
 
         item(key = "diag_prepared_header") {
             DiagnosticsListHeader(
-                text = "Prepared Reserve (${uiState.libraryWallpapers.size}) • Gate ${SafetyGate.COMPOSITE_GATE_VERSION}",
+                text = stringResource(
+                    R.string.diag_prepared_header, uiState.libraryWallpapers.size, SafetyGate.COMPOSITE_GATE_VERSION
+                ),
                 color = MaterialTheme.colorScheme.primary
             )
         }
@@ -179,32 +343,6 @@ internal fun DiagnosticsPane(
             )
         }
         item(key = "diag_prepared_gap") { Spacer(Modifier.height(14.dp)) }
-
-        item(key = "diag_about_privacy_card") {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
-            ) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        stringResource(R.string.privacy_open_source_attribution),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        stringResource(R.string.privacy_sunloom_operates_locally_on_your),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        stringResource(R.string.licensing_every_remote_wallpaper_is_veri),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -212,7 +350,7 @@ internal fun DiagnosticsPane(
 private fun DiagnosticsListHeader(text: String, color: androidx.compose.ui.graphics.Color) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = MaterialTheme.shapes.large.copy(bottomStart = CornerSize(0.dp), bottomEnd = CornerSize(0.dp)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Text(
@@ -239,21 +377,22 @@ private fun DiagnosticsListRow(text: String, monospace: Boolean, secondary: Bool
 }
 
 /** "Wikimedia: 14 images (9 Light, 3 Dark, 2 Balanced), 10 unseen" - what one source holds. */
-internal fun sourceStockLine(row: SourceStockRow): String {
-    if (row.total == 0) return "${row.sourceName}: nothing in the reserve"
-    val noun = if (row.total == 1) "image" else "images"
-    val base = "${row.sourceName}: ${row.total} $noun (${row.light} Light, ${row.dark} Dark, ${row.balanced} Balanced), ${row.unseen} unseen"
-    return if (row.isFallback) "$base, fallback, not counted towards the reserve target" else base
+internal fun sourceStockLine(row: SourceStockRow, r: Resources): String {
+    if (row.total == 0) return r.getString(R.string.diag_stock_empty, row.sourceName)
+    val base = r.getQuantityString(
+        R.plurals.diag_stock_line, row.total, row.sourceName, row.total, row.light, row.dark, row.balanced, row.unseen
+    )
+    return if (row.isFallback) r.getString(R.string.diag_stock_fallback, base) else base
 }
 
 /** Health, last sync and last error for a source on one line, or null when there is nothing to report. */
-internal fun sourceSyncLine(diag: SourceDiagnostics?): String? {
+internal fun sourceSyncLine(diag: SourceDiagnostics?, r: Resources): String? {
     if (diag == null) return null
     val unhealthy = diag.healthState != SourceHealthState.HEALTHY
     if (!unhealthy && diag.lastSyncSummary.isBlank() && diag.lastError.isBlank()) return null
     return listOfNotNull(
-        diag.healthState.label,
-        diag.lastSyncSummary.takeIf { it.isNotBlank() }?.let { "Last sync: $it" },
+        diag.healthState.title(r),
+        diag.lastSyncSummary.takeIf { it.isNotBlank() }?.let { r.getString(R.string.last_sync, it) },
         diag.lastError.takeIf { it.isNotBlank() }
     ).joinToString(" • ")
 }

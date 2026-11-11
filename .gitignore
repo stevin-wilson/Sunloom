@@ -18,3 +18,7 @@ app/build/
 
 # Internal review notes
 .notes/
+
+# Python bytecode (release scripts)
+__pycache__/
+*.pyc

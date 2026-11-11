@@ -50,6 +50,12 @@ internal fun SunloomApp(
     onDeleteManyFromReserve: (Collection<String>) -> Unit = { ids -> ids.forEach(onDeleteFromReserve) },
     onUndoDiscard: () -> Unit = {},
     onCommitDiscard: () -> Unit = {},
+    onToggleAutoSwitch: (Boolean) -> Unit = {},
+    onReopenSetup: () -> Unit = {},
+    onResetSunloom: () -> Unit = {},
+    onCopyDiagnostics: () -> Unit = {},
+    onReportProblem: () -> Unit = {},
+    onCheckForUpdates: () -> Unit = {},
     isFullscreen: Boolean = false,
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
@@ -89,7 +95,13 @@ internal fun SunloomApp(
             onSaveAs = onSaveAs,
             onDeleteManyFromReserve = onDeleteManyFromReserve,
             onUndoDiscard = onUndoDiscard,
-            onCommitDiscard = onCommitDiscard
+            onCommitDiscard = onCommitDiscard,
+            onToggleAutoSwitch = onToggleAutoSwitch,
+            onReopenSetup = onReopenSetup,
+            onResetSunloom = onResetSunloom,
+            onCopyDiagnostics = onCopyDiagnostics,
+            onReportProblem = onReportProblem,
+            onCheckForUpdates = onCheckForUpdates
         ),
         isFullscreen = isFullscreen,
         darkTheme = darkTheme

@@ -1,5 +1,10 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.labels.summary
+import com.sunloom.app.labels.title
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import com.sunloom.app.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.getValue
@@ -18,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
@@ -44,8 +48,20 @@ import androidx.compose.ui.unit.dp
 import com.sunloom.app.domain.model.DisplayPolicy
 import com.sunloom.app.domain.model.LockWorkspacePolicy
 import com.sunloom.app.domain.model.ScheduleMode
+import com.sunloom.app.domain.model.UserPreferences
 import com.sunloom.app.domain.solar.CityCoordinates
 import kotlin.math.roundToInt
+
+/**
+ * Why a switched-on "Automatic switching" will still not change anything, or null when it really runs. Saying so
+ * beats leaving the switch looking broken.
+ */
+internal fun automaticSwitchingNote(prefs: UserPreferences): Int? = when {
+    !prefs.autoChangeEnabled -> null
+    prefs.isPaused -> R.string.automatic_switching_paused_note
+    prefs.scheduleMode == ScheduleMode.MANUAL_ONLY -> R.string.automatic_switching_manual_note
+    else -> null
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -60,6 +76,7 @@ internal fun DisplaysAndSchedulePane(
     onToggleBatterySaverDeferral: (Boolean) -> Unit,
     onUpdateDisplayPolicy: (DisplayPolicy) -> Unit = {},
     onForgetRememberedDisplay: (String) -> Unit = {},
+    onToggleAutoSwitch: (Boolean) -> Unit = {},
     onRestoreSystemDefault: () -> Unit,
     onReopenSetup: () -> Unit
 ) {
@@ -78,29 +95,64 @@ internal fun DisplaysAndSchedulePane(
             .fillMaxSize()
             .desktopScrollbar(scrollState)
             .verticalScroll(scrollState),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(Spacing.m)
     ) {
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
+            shape = MaterialTheme.shapes.large,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
                 Text(stringResource(R.string.schedule), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.automatic_switching),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            stringResource(R.string.automatic_switching_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        val note = automaticSwitchingNote(uiState.preferences)
+                        if (note != null) {
+                            Text(
+                                stringResource(note),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = uiState.preferences.autoChangeEnabled,
+                        onCheckedChange = onToggleAutoSwitch,
+                        modifier = Modifier
+                            .desktopControl(CircleShape)
+                            .switchLabel(stringResource(R.string.automatic_switching))
+                            .testTag("auto_switch")
+                    )
+                }
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.s)
                 ) {
                     ScheduleMode.entries.forEach { mode ->
                         FilterChip(
                             selected = uiState.preferences.scheduleMode == mode,
                             onClick = { onUpdateScheduleMode(mode) },
-                            label = { Text(mode.label) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                            label = { Text(mode.title()) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                         )
                     }
                 }
                 Text(
-                    text = uiState.preferences.scheduleMode.plainDescription,
+                    text = uiState.preferences.scheduleMode.summary(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -113,15 +165,17 @@ internal fun DisplaysAndSchedulePane(
                     FilterChip(
                         selected = showCustomCoords,
                         onClick = { showCustomCoords = !showCustomCoords },
-                        label = { Text(stringResource(R.string.custom_coordinates)) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                        label = { Text(stringResource(R.string.custom_coordinates)) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                     )
                     if (showCustomCoords) {
+                        val resources = LocalResources.current
                         val latError = coordinateError(customLatText, -90.0, 90.0)
                         val lonError = coordinateError(customLonText, -180.0, 180.0)
-                        Row(
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                            verticalArrangement = Arrangement.spacedBy(Spacing.s),
+                            itemVerticalAlignment = Alignment.CenterVertically
                         ) {
                             OutlinedTextField(
                                 value = customLatText,
@@ -129,9 +183,10 @@ internal fun DisplaysAndSchedulePane(
                                 label = { Text(stringResource(R.string.latitude_90_90)) },
                                 singleLine = true,
                                 isError = latError != null,
-                                supportingText = { latError?.let { Text(it) } },
+                                supportingText = { latError?.let { Text(it.message(resources)) } },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 modifier = Modifier
+                                    .widthIn(min = 140.dp)
                                     .weight(1f)
                                     .suppressShortcutsWhileFocused()
                                     .testTag("custom_lat_input")
@@ -142,9 +197,10 @@ internal fun DisplaysAndSchedulePane(
                                 label = { Text(stringResource(R.string.longitude_180_180)) },
                                 singleLine = true,
                                 isError = lonError != null,
-                                supportingText = { lonError?.let { Text(it) } },
+                                supportingText = { lonError?.let { Text(it.message(resources)) } },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 modifier = Modifier
+                                    .widthIn(min = 140.dp)
                                     .weight(1f)
                                     .suppressShortcutsWhileFocused()
                                     .testTag("custom_lon_input")
@@ -154,12 +210,14 @@ internal fun DisplaysAndSchedulePane(
                                     val lat = customLatText.toDoubleOrNull()
                                     val lon = customLonText.toDoubleOrNull()
                                     if (lat != null && lon != null) {
-                                        onUpdateCustomCoordinates(lat, lon, "Custom (${"%.2f".format(lat)}, ${"%.2f".format(lon)})")
+                                        // Stored as the city name, not shown as text.
+                                        val name = "Custom (${"%.2f".format(lat)}, ${"%.2f".format(lon)})"
+                                        onUpdateCustomCoordinates(lat, lon, name)
                                     }
                                 },
                                 enabled = latError == null && lonError == null &&
                                     customLatText.isNotBlank() && customLonText.isNotBlank(),
-                                modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("apply_custom_coords_button")
+                                modifier = Modifier.desktopControl(CircleShape).testTag("apply_custom_coords_button")
                             ) {
                                 Text(stringResource(R.string.apply))
                             }
@@ -169,15 +227,20 @@ internal fun DisplaysAndSchedulePane(
 
                 if (uiState.preferences.scheduleMode == ScheduleMode.FIXED_CLOCK) {
                     Text(
-                        text = "Transition hours (Daytime ${uiState.preferences.fixedLightHour}:00 • Evening ${uiState.preferences.fixedDarkHour}:00)",
+                        text = stringResource(
+                            R.string.transition_hours,
+                            uiState.preferences.fixedLightHour,
+                            uiState.preferences.fixedDarkHour
+                        ),
                         style = MaterialTheme.typography.labelLarge
                     )
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
                         listOf(6 to 18, 7 to 19, 8 to 20, 9 to 21, 20 to 6).forEach { (lHour, dHour) ->
                             FilterChip(
                                 selected = uiState.preferences.fixedLightHour == lHour && uiState.preferences.fixedDarkHour == dHour,
                                 onClick = { onUpdateFixedHours(lHour, dHour) },
-                                label = { Text("${lHour}:00 / ${dHour}:00") }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                                label = { Text("${lHour}:00 / ${dHour}:00") },
+                                modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                             )
                         }
                     }
@@ -187,29 +250,33 @@ internal fun DisplaysAndSchedulePane(
 
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
+            shape = MaterialTheme.shapes.large,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
                 Text(stringResource(R.string.display_preferences), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("connected_displays_summary"),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     uiState.capabilities.connectedDisplays.forEach { disp ->
-                        val roleTag = if (disp.isPrimary) "Built-in" else "External"
-                        val ppiLabel = disp.physicalPpi?.let { "${it.roundToInt()} PPI" } ?: "${disp.densityDpi} dpi"
+                        val roleTag = stringResource(if (disp.isPrimary) R.string.display_role_built_in else R.string.display_role_external)
+                        val ppiLabel = disp.physicalPpi?.let { stringResource(R.string.pixels_per_inch, it.roundToInt().toString()) }
+                            ?: stringResource(R.string.dpi_density, disp.densityDpi.toString())
                         Text(
-                            text = "$roleTag: ${disp.name} (${disp.resolutionLabel}, ${"%.2f".format(disp.aspectRatio)}:1 • $ppiLabel • ${disp.qualityTier.shortLabel})",
+                            text = stringResource(
+                                R.string.display_line, roleTag, disp.name, disp.resolutionLabel,
+                                "%.2f".format(disp.aspectRatio), ppiLabel, disp.qualityTier.title()
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                     Text(
-                        text = uiState.capabilities.capabilityDisclosureNote,
+                        text = uiState.capabilities.capabilityDisclosureNote.ifBlank { stringResource(R.string.probing_displays) },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -226,17 +293,17 @@ internal fun DisplaysAndSchedulePane(
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                     Text(stringResource(R.string.multi_display_fitting_mode), style = MaterialTheme.typography.labelLarge)
                     FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.s)
                     ) {
                         listOf(
-                            DisplayPolicy.SAME_ON_ALL_DISPLAYS to "Shared envelope across displays",
-                            DisplayPolicy.OPTIMIZE_PRIMARY_SHARPEST to "Optimize sharpest display only"
+                            DisplayPolicy.SAME_ON_ALL_DISPLAYS to stringResource(R.string.policy_short_same_on_all),
+                            DisplayPolicy.OPTIMIZE_PRIMARY_SHARPEST to stringResource(R.string.policy_short_sharpest)
                         ).forEach { (policy, shortText) ->
                             FilterChip(
                                 selected = uiState.preferences.displayPolicy == policy,
                                 onClick = { onUpdateDisplayPolicy(policy) },
-                                label = { Text(shortText) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                                label = { Text(shortText) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                             )
                         }
                     }
@@ -250,7 +317,8 @@ internal fun DisplaysAndSchedulePane(
                         style = MaterialTheme.typography.labelLarge
                     )
                     disconnectedHistory.forEach { rec ->
-                        val recPpi = rec.physicalPpi?.let { "${it.roundToInt()} PPI" } ?: "${rec.densityDpi} dpi"
+                        val recPpi = rec.physicalPpi?.let { stringResource(R.string.pixels_per_inch, it.roundToInt().toString()) }
+                            ?: stringResource(R.string.dpi_density, rec.densityDpi.toString())
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -264,7 +332,7 @@ internal fun DisplaysAndSchedulePane(
                             )
                             TextButton(
                                 onClick = { onForgetRememberedDisplay(rec.key) },
-                                modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("forget_display_${rec.key}")
+                                modifier = Modifier.desktopControl(CircleShape).testTag("forget_display_${rec.key}")
                             ) {
                                 Text(stringResource(R.string.forget))
                             }
@@ -274,14 +342,14 @@ internal fun DisplaysAndSchedulePane(
                 HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                 Text(stringResource(R.string.apply_wallpaper_to), style = MaterialTheme.typography.labelLarge)
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.s)
                 ) {
                     LockWorkspacePolicy.entries.forEach { policy ->
                         FilterChip(
                             selected = uiState.preferences.lockWorkspacePolicy == policy,
                             onClick = { onUpdateLockPolicy(policy) },
-                            label = { Text(policy.label) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                            label = { Text(policy.title()) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                         )
                     }
                 }
@@ -303,17 +371,20 @@ internal fun DisplaysAndSchedulePane(
                     }
                     Switch(
                         checked = uiState.preferences.allowBlurredFrameFill,
-                        onCheckedChange = onToggleBlurredFill, modifier = Modifier.desktopControl(RoundedCornerShape(50)).switchLabel(stringResource(R.string.blurred_frame_fill_for_smaller_images))
+                        onCheckedChange = onToggleBlurredFill, modifier = Modifier.desktopControl(CircleShape).switchLabel(stringResource(R.string.blurred_frame_fill_for_smaller_images))
                     )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = onReopenSetup, modifier = Modifier.desktopControl(RoundedCornerShape(50))) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.m),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.s)
+                ) {
+                    OutlinedButton(onClick = onReopenSetup, modifier = Modifier.desktopControl(CircleShape)) {
                         Text(stringResource(R.string.setup_guide))
                     }
                     OutlinedButton(
                         onClick = { showResetConfirm = true },
-                        modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("restore_system_default_button")
+                        modifier = Modifier.desktopControl(CircleShape).testTag("restore_system_default_button")
                     ) {
                         Icon(SunloomIcons.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
@@ -343,12 +414,23 @@ internal fun DisplaysAndSchedulePane(
  * Validation message for a coordinate text field, or null when [text] is empty (not yet typed) or a
  * number within [min]..[max]. Shown inline so bad input is explained instead of silently ignored.
  */
-internal fun coordinateError(text: String, min: Double, max: Double): String? {
+internal fun coordinateError(text: String, min: Double, max: Double): CoordinateError? {
     if (text.isBlank()) return null
     val value = text.trim().toDoubleOrNull()
-        ?: return "Enter a number, e.g. 37.77"
+        ?: return CoordinateError.NotANumber
     if (!value.isFinite() || value < min || value > max) {
-        return "Must be between ${min.toInt()} and ${max.toInt()}"
+        return CoordinateError.OutOfRange(min.toInt(), max.toInt())
     }
     return null
+}
+
+/** Why a typed coordinate is not accepted; the words come from strings.xml. */
+internal sealed interface CoordinateError {
+    data object NotANumber : CoordinateError
+    data class OutOfRange(val min: Int, val max: Int) : CoordinateError
+
+    fun message(r: android.content.res.Resources): String = when (this) {
+        NotANumber -> r.getString(R.string.coordinate_not_a_number)
+        is OutOfRange -> r.getString(R.string.coordinate_out_of_range, min.toString(), max.toString())
+    }
 }

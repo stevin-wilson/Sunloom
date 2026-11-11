@@ -71,7 +71,7 @@ object SourceRegistry {
                 SafeCategory.AERIAL_EARTH
             ),
             sourceName = "Wikimedia Commons Featured Photography",
-            plainDescription = "Key-free MediaWiki API — Curated Featured Pictures (Landscapes, Astronomy & Architecture)",
+            plainDescription = "Hand-picked Featured Pictures from Wikimedia Commons: landscapes, astronomy and architecture",
             licenseSummary = "Public Domain / CC0 / CC BY 2.0–4.0 / CC BY-SA 2.0–4.0 (Verified per asset)",
             termsUrl = "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
             reviewedDate = "2026-11-04",
@@ -92,7 +92,7 @@ object SourceRegistry {
                 SafeCategory.LANDSCAPES_NATURE
             ),
             sourceName = "NASA Space & Earth Image Library",
-            plainDescription = "Key-free images-api.nasa.gov — Public Domain daylight Earth & deep-space photography",
+            plainDescription = "Public-domain photographs of Earth and deep space from NASA's image library",
             licenseSummary = "Public Domain (NASA / US Government Works)",
             termsUrl = "https://www.nasa.gov/multimedia/guidelines/",
             reviewedDate = "2026-11-04",
@@ -116,7 +116,7 @@ object SourceRegistry {
                 SafeCategory.BOTANICAL_FLORA
             ),
             sourceName = "Art Institute of Chicago Open Access (Landscapes)",
-            plainDescription = "Key-free CC0 API — Public domain landscape & architectural works",
+            plainDescription = "Public-domain landscape and architecture works from the Art Institute of Chicago",
             licenseSummary = "CC0 1.0 Universal (Public Domain Dedication)",
             termsUrl = "https://www.artic.edu/open-access/public-api",
             reviewedDate = "2026-11-04",
@@ -138,7 +138,7 @@ object SourceRegistry {
                 SafeCategory.ARCHITECTURE_CITYSCAPES
             ),
             sourceName = "The Met Open Access (CC0)",
-            plainDescription = "Key-free collectionapi.metmuseum.org — Public domain landscapes, seascapes & fine art",
+            plainDescription = "Public-domain landscapes, seascapes and fine art from the Metropolitan Museum of Art",
             licenseSummary = "CC0 1.0 Public Domain (The Metropolitan Museum of Art)",
             termsUrl = "https://www.metmuseum.org/policies-and-documents/open-access",
             reviewedDate = "2026-11-04",
@@ -160,7 +160,7 @@ object SourceRegistry {
                 SafeCategory.ABSTRACT_PATTERNS
             ),
             sourceName = "Cleveland Museum of Art Open Access (CC0)",
-            plainDescription = "Key-free openaccess-api.clevelandart.org — CC0 landscapes, seascapes, architecture & botanical art",
+            plainDescription = "Landscapes, seascapes, architecture and botanical art from the Cleveland Museum of Art, free of copyright",
             licenseSummary = "CC0 1.0 Universal (Public Domain Dedication)",
             termsUrl = "https://www.clevelandart.org/open-access",
             reviewedDate = "2026-11-04",
@@ -186,7 +186,7 @@ object SourceRegistry {
                 SafeCategory.ARCHITECTURE_CITYSCAPES
             ),
             sourceName = "SMK — National Gallery of Denmark (Open)",
-            plainDescription = "Key-free api.smk.dk — Public domain Golden Age seascapes, Nordic landscapes & architecture",
+            plainDescription = "Golden Age seascapes, Nordic landscapes and architecture from the National Gallery of Denmark",
             licenseSummary = "Public Domain Mark 1.0 / CC0 1.0 (SMK Open)",
             termsUrl = "https://www.smk.dk/en/article/smk-open",
             reviewedDate = "2026-11-04",

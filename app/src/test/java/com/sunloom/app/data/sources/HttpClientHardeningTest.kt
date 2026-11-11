@@ -4,6 +4,7 @@ import com.sunloom.app.Requirement
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -70,5 +71,80 @@ class HttpClientHardeningTest {
     @Test
     fun `URL host check helper agrees with the registry`() {
         assertTrue(SourceRegistry.isHostAllowed(URL("https://www.metmuseum.org/x").host, "met_museum_cc0"))
+    }
+
+    // --- downloads: complete, and stoppable ---
+
+    private fun imageConnection(url: URL, body: ByteArray, onDisconnect: () -> Unit = {}, stream: () -> InputStream = { body.inputStream() }) =
+        object : HttpURLConnection(url) {
+            override fun getResponseCode(): Int = 200
+            override fun getContentLengthLong(): Long = body.size.toLong()
+            override fun getContentType(): String = "image/jpeg"
+            override fun getInputStream(): InputStream = stream()
+            override fun disconnect() = onDisconnect()
+            override fun usingProxy(): Boolean = false
+            override fun connect() {}
+        }
+
+    @Test
+    fun `a download comes back whole`() = runBlocking {
+        val body = ByteArray(70_000) { (it % 199).toByte() }
+        val client = DefaultHttpsClient { url -> imageConnection(url, body) }
+
+        val got = client.getBytes("https://collectionapi.metmuseum.org/x.jpg", 1_000_000)
+
+        assertEquals(body.toList(), got.toList())
+    }
+
+    @Test
+    fun `cancelling a download that is waiting on the network disconnects it at once`() {
+        val readStarted = java.util.concurrent.CountDownLatch(1)
+        val disconnected = java.util.concurrent.CountDownLatch(1)
+        val stalled = object : InputStream() {
+            override fun read(): Int = read(ByteArray(1), 0, 1)
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                readStarted.countDown()
+                // A stalled network read: it returns only when the connection is torn down.
+                if (!disconnected.await(30, java.util.concurrent.TimeUnit.SECONDS)) return -1
+                throw java.io.IOException("Socket closed")
+            }
+        }
+        val client = DefaultHttpsClient { url ->
+            imageConnection(url, ByteArray(10), onDisconnect = { disconnected.countDown() }, stream = { stalled })
+        }
+
+        runBlocking {
+            val job = launch(kotlinx.coroutines.Dispatchers.Default) {
+                client.getBytes("https://collectionapi.metmuseum.org/x.jpg", 1_000_000)
+            }
+            assertTrue("the read started", readStarted.await(5, java.util.concurrent.TimeUnit.SECONDS))
+
+            job.cancel()
+            val finished = kotlinx.coroutines.withTimeoutOrNull(5_000) { job.join(); true }
+
+            assertEquals("cancelling must not wait for the network", true, finished)
+            assertEquals("the connection was torn down", 0L, disconnected.count)
+        }
+    }
+
+    @Test
+    fun `clearing the caches forgets saved responses`() = runBlocking {
+        val client = DefaultHttpsClient { url ->
+            object : HttpURLConnection(url) {
+                override fun getResponseCode(): Int = 200
+                override fun getHeaderField(name: String): String? = if (name == "ETag") "\"v1\"" else null
+                override fun getContentLengthLong(): Long = 2L
+                override fun getInputStream(): InputStream = "{}".byteInputStream()
+                override fun disconnect() {}
+                override fun usingProxy(): Boolean = false
+                override fun connect() {}
+            }
+        }
+        client.getText("https://collectionapi.metmuseum.org/a")
+        assertEquals("a response with an ETag is kept for conditional requests", 1, client.cachedResponseCount())
+
+        client.clearCaches()
+
+        assertEquals(0, client.cachedResponseCount())
     }
 }

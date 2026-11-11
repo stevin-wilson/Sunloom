@@ -1,0 +1,15 @@
+Sunloom
+Copyright (C) 2026 the Sunloom authors
+
+Sunloom is free software, licensed under the GNU General Public License,
+version 3 or (at your option) any later version. See the LICENSE file.
+
+This product includes artwork derived from Google's Material Icons
+(https://github.com/google/material-design-icons): the vector paths in
+app/src/main/java/com/sunloom/app/ui/SunloomIcons.kt. Material Icons are
+Copyright Google LLC and licensed under the Apache License, Version 2.0
+(https://www.apache.org/licenses/LICENSE-2.0).
+
+The libraries Sunloom is built with, and their licences, are listed in
+app/src/main/res/raw/open_source_licenses.txt and shown in the app under
+Storage & About > Open-source licenses.

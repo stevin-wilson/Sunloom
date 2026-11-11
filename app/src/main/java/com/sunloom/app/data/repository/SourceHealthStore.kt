@@ -39,7 +39,7 @@ class SourceHealthStore(
 
     fun recordFailure(sourceId: String, error: Throwable?, nowEpochMs: Long = System.currentTimeMillis()) {
         // A cancelled coroutine is the app stopping or the user leaving, not the source failing.
-        if (isCancellation(error) || isCancellationMessage(error?.message.orEmpty())) return
+        if (isCancellation(error)) return
         val fails = failureCount(sourceId) + 1
         val backoffMs = when {
             error is RateLimitException -> maxOf(error.retryAfterSeconds * 1000L, 15L * 60L * 1000L)
@@ -59,21 +59,6 @@ class SourceHealthStore(
             putLong(backoffKey(sourceId), backoffUntil)
             putString(errorKey(sourceId), errorMsg)
         }
-    }
-
-    /**
-     * Older versions stored coroutine cancellations ("Job was cancelled") as if the source had failed. Clear those
-     * entries so a healthy source is not shown as degraded or left in backoff.
-     */
-    fun healCancelledDiagnostics(sourceIds: Collection<String>) {
-        var editor: SharedPreferences.Editor? = null
-        for (sid in sourceIds) {
-            if (isCancellationMessage(lastError(sid))) {
-                val ed = editor ?: prefs.edit().also { editor = it }
-                ed.clearFailureState(sid)
-            }
-        }
-        editor?.apply()
     }
 
     /** Re-enabling a source clears its failure state unless the server rate-limited it. */
@@ -172,17 +157,6 @@ class SourceHealthStore(
                 depth++
             }
             return false
-        }
-
-        private fun isCancellationMessage(message: String): Boolean {
-            if (message.isBlank()) return false
-            val lower = message.lowercase(Locale.ROOT)
-            return lower.contains("job was cancelled") ||
-                lower.contains("job was canceled") ||
-                lower.contains("coroutine was cancelled") ||
-                lower.contains("coroutine was canceled") ||
-                lower.contains("cancellationscope") ||
-                lower.contains("left the composition")
         }
     }
 }

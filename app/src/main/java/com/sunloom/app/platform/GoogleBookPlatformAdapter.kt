@@ -1,5 +1,6 @@
 package com.sunloom.app.platform
 
+import com.sunloom.app.labels.title
 import com.sunloom.app.domain.model.SourceIds
 import android.annotation.SuppressLint
 import android.app.WallpaperManager
@@ -31,6 +32,8 @@ import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.model.WallpaperStatus
 import com.sunloom.app.domain.model.displaySetGeometryKey
 import com.sunloom.app.domain.renderer.CropRenderer
+import com.sunloom.app.domain.renderer.DecodeSampling
+import com.sunloom.app.domain.renderer.DecodeTarget
 import com.sunloom.app.domain.renderer.EnvelopePlan
 import com.sunloom.app.domain.renderer.EnvelopePlanner
 import com.sunloom.app.domain.solar.SolarCalculator
@@ -64,12 +67,25 @@ interface SystemWallpaperGateway {
     fun getWallpaperId(which: Int): Int = 1
     fun getObservedIndependentLockSupport(): Boolean? = null
     fun clearWallpaper(): Boolean = true
-    fun isWifiConnected(): Boolean
+    /**
+     * True when the active network is one the user does not pay for by the byte. This is the network's own flag
+     * (`NET_CAPABILITY_NOT_METERED`), not the radio in use: a phone hotspot is Wi-Fi but metered.
+     */
+    fun isUnmeteredNetwork(): Boolean
+
+    /** True when Android's Data Saver is on and would hold back background data on a metered network. */
+    fun isDataSaverRestricting(): Boolean = false
     fun isBatterySaverActive(): Boolean
 }
 
 class DefaultSystemWallpaperGateway(private val context: Context) : SystemWallpaperGateway {
     companion object {
+        /**
+         * Data Saver holds background data back only when it is on and the app is not exempt. "Whitelisted" means it is on
+         * but the person allowed this app to use data in the background, which is exactly what they did to make it work.
+         */
+        internal fun dataSaverRestricts(status: Int): Boolean = status == ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED
+
         internal const val PREF_OBSERVED_LOCK_SUPPORT = "observed_independent_lock_support"
         private const val TAG = "SunloomWallpaper"
     }
@@ -173,13 +189,18 @@ class DefaultSystemWallpaperGateway(private val context: Context) : SystemWallpa
         }.getOrDefault(false)
     }
 
-    override fun isWifiConnected(): Boolean {
+    override fun isUnmeteredNetwork(): Boolean {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
         val net = cm.activeNetwork ?: return false
         val caps = cm.getNetworkCapabilities(net) ?: return false
-        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
     }
+
+    override fun isDataSaverRestricting(): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        return dataSaverRestricts(cm.restrictBackgroundStatus)
+    }
+
 
     override fun isBatterySaverActive(): Boolean {
         val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
@@ -207,6 +228,10 @@ class GoogleBookPlatformAdapter(
         gateway.forgetRememberedDisplay(key)
     }
 
+    fun isUnmeteredNetwork(): Boolean = gateway.isUnmeteredNetwork()
+
+    fun isDataSaverRestricting(): Boolean = gateway.isDataSaverRestricting()
+
     fun probeCapabilities(displayPolicy: DisplayPolicy = DisplayPolicy.SAME_ON_ALL_DISPLAYS): PlatformCapabilities {
         val displays = gateway.getConnectedDisplays()
         val remembered = gateway.getRememberedDisplays(displays)
@@ -225,7 +250,7 @@ class GoogleBookPlatformAdapter(
                 val sharpest = getPrimaryOrSharpestDisplayOrNull(displays)
                 if (displayPolicy == DisplayPolicy.OPTIMIZE_PRIMARY_SHARPEST) {
                     "Detected ${displays.size} displays (${displays.joinToString { "${it.name} ${it.resolutionLabel}" }}). " +
-                        "Android shares one WallpaperManager surface; optimizing crop for ${sharpest?.name ?: "sharpest display"} " +
+                        "Android uses one wallpaper for every screen, so Sunloom crops it for ${sharpest?.name ?: "sharpest display"} " +
                         "(${sharpest?.resolutionLabel.orEmpty()}) without stretching."
                 } else {
                     val syntheticCheck = envelopePlanner.planEnvelope(
@@ -238,20 +263,20 @@ class GoogleBookPlatformAdapter(
                         allowBlurredFrameFill = false
                     )
                     if (syntheticCheck != null && syntheticCheck.excludedDisplays.isNotEmpty()) {
-                        excludedNote = "Excluded from envelope target: " +
+                        excludedNote = "Left out of the shared wallpaper: " +
                             syntheticCheck.excludedDisplays.joinToString("; ") {
                                 val reason = syntheticCheck.exclusionReasons[it.displayId]?.let { r -> " — $r" }.orEmpty()
                                 "${it.name} (${it.resolutionLabel})$reason"
                             } + "."
                     }
                     "Detected ${displays.size} displays (${displays.joinToString { "${it.name} ${it.resolutionLabel}" }}). " +
-                        "Android shares one WallpaperManager surface; Sunloom renders a shared native-resolution envelope " +
-                        "so each compatible monitor's system center-crop stays crisp and subject-aligned without stretching."
+                        "Android uses one wallpaper for every screen, so Sunloom makes one picture " +
+                        "that stays sharp and well framed on each compatible monitor, without stretching."
                 }
             }
             else -> {
                 val d = displays.first()
-                val ppiNote = d.physicalPpi?.let { " • ${it.roundToInt()} PPI" }.orEmpty()
+                val ppiNote = d.physicalPpi?.let { " • ${it.roundToInt()} pixels per inch" }.orEmpty()
                 val lockClause = when (observedLock) {
                     true -> "Independent Workspace and Lock Screen wallpapers verified."
                     false -> "System shares one wallpaper across Workspace and Lock Screen on this device."
@@ -261,7 +286,7 @@ class GoogleBookPlatformAdapter(
                         "System shares one wallpaper across Workspace and Lock Screen."
                     }
                 }
-                "Detected ${d.name} (${d.resolutionLabel}$ppiNote, ${d.qualityTier.shortLabel}). $lockClause"
+                "Detected ${d.name} (${d.resolutionLabel}$ppiNote, ${d.qualityTier.title(context.resources)}). $lockClause"
             }
         }
 
@@ -374,8 +399,9 @@ class GoogleBookPlatformAdapter(
 
         val maxDecodeW = effectiveDisplays.maxOf { it.widthPx }
         val maxDecodeH = effectiveDisplays.maxOf { it.heightPx }
-        val sourceBitmap = decodeBitmapBounded(file, maxDecodeW, maxDecodeH)
-            ?: return WallpaperStatus.FAILED_TEMPORARILY
+        val sourceBitmap = decodeBitmapBounded(
+            file, maxDecodeW, maxDecodeH, decodeTargetFor(record, envelopePlan, effectiveDisplay, effectiveDisplays)
+        ) ?: return WallpaperStatus.FAILED_TEMPORARILY
 
         var preparedBitmap: Bitmap? = null
         val applied = try {
@@ -440,21 +466,54 @@ class GoogleBookPlatformAdapter(
         record.provenance.sourceId == SourceIds.SEED_RESERVE && displays.size > 1
 
     @SuppressLint("ExifInterface")
-    private fun decodeBitmapBounded(file: File, targetWidthPx: Int, targetHeightPx: Int): Bitmap? {
+    /**
+     * What the picture will be cropped and scaled to, so the decoder can shrink it by the right amount; null where the
+     * picture is used whole (blurred fill, a shared bundled seed) and the older rule applies.
+     */
+    private fun decodeTargetFor(
+        record: WallpaperRecord,
+        plan: EnvelopePlan?,
+        display: DisplayProfile,
+        displays: List<DisplayProfile>
+    ): DecodeTarget? = when {
+        keepsStoredBlurredFill(record) || isSharedSeed(record, displays) -> null
+        plan != null -> if (plan.envelopeCrop.usesBlurredFrameFill) {
+            null
+        } else {
+            val (w, h) = CropRenderer.budgetedSize(plan.outputWidthPx, plan.outputHeightPx)
+            DecodeTarget(
+                aspect = plan.envelopeCrop.width.coerceAtLeast(1).toDouble() / plan.envelopeCrop.height.coerceAtLeast(1),
+                focalX = plan.envelopeCrop.focalX, focalY = plan.envelopeCrop.focalY, outputWidth = w, outputHeight = h
+            )
+        }
+        record.evaluation.cropRect?.usesBlurredFrameFill == true -> null
+        else -> {
+            val (w, h) = CropRenderer.budgetedSize(display.widthPx, display.heightPx)
+            DecodeTarget(
+                aspect = display.aspectRatio,
+                focalX = record.evaluation.cropRect?.focalX ?: 0.5,
+                focalY = record.evaluation.cropRect?.focalY ?: 0.5,
+                outputWidth = w, outputHeight = h
+            )
+        }
+    }
+
+    private fun decodeBitmapBounded(file: File, targetWidthPx: Int, targetHeightPx: Int, target: DecodeTarget?): Bitmap? {
         return try {
             val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(file.absolutePath, boundsOpts)
             val decodeOpts = BitmapFactory.Options()
             if (boundsOpts.outWidth > 0 && boundsOpts.outHeight > 0) {
-                val maxTargetW = (targetWidthPx * 2).coerceAtLeast(2560)
-                val maxTargetH = (targetHeightPx * 2).coerceAtLeast(1600)
-                var sampleSize = 1
-                while ((boundsOpts.outWidth / sampleSize) > maxTargetW ||
-                    (boundsOpts.outHeight / sampleSize) > maxTargetH
-                ) {
-                    sampleSize *= 2
-                }
-                decodeOpts.inSampleSize = sampleSize
+                // The crop is planned on the picture as it will be shown, so a picture stored on its side swaps axes.
+                val sideways = exifOrientation(file) in SIDEWAYS_ORIENTATIONS
+                decodeOpts.inSampleSize = DecodeSampling.sampleSize(
+                    sourceWidth = if (sideways) boundsOpts.outHeight else boundsOpts.outWidth,
+                    sourceHeight = if (sideways) boundsOpts.outWidth else boundsOpts.outHeight,
+                    target = target,
+                    cropRenderer = cropRenderer,
+                    legacyMaxW = targetWidthPx,
+                    legacyMaxH = targetHeightPx
+                )
             }
             val raw = BitmapFactory.decodeFile(file.absolutePath, decodeOpts) ?: return null
             applyExifOrientationIfNeeded(file, raw)
@@ -464,6 +523,12 @@ class GoogleBookPlatformAdapter(
             null
         }
     }
+
+    @SuppressLint("ExifInterface")
+    private fun exifOrientation(file: File): Int = runCatching {
+        android.media.ExifInterface(file.absolutePath)
+            .getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL)
+    }.getOrDefault(android.media.ExifInterface.ORIENTATION_NORMAL)
 
     @SuppressLint("ExifInterface")
     private fun applyExifOrientationIfNeeded(file: File, bitmap: Bitmap): Bitmap {
@@ -518,19 +583,11 @@ class GoogleBookPlatformAdapter(
             focalY = plan.envelopeCrop.focalY,
             targetAspect = targetAspect
         )
-        val cropped = Bitmap.createBitmap(source, bounds.left, bounds.top, bounds.width, bounds.height)
         val (budgetW, budgetH) = CropRenderer.budgetedSize(
             plan.outputWidthPx.coerceAtLeast(1),
             plan.outputHeightPx.coerceAtLeast(1)
         )
-        if (bounds.width > budgetW && bounds.height > budgetH) {
-            val scaled = cropped.scale(budgetW, budgetH)
-            if (scaled != cropped && cropped != source) {
-                cropped.recycle()
-            }
-            return scaled
-        }
-        return cropped
+        return cropAndScale(source, bounds, budgetW, budgetH)
     }
 
     /**
@@ -560,20 +617,25 @@ class GoogleBookPlatformAdapter(
             targetAspect = display.aspectRatio
         )
 
-        val cropped = Bitmap.createBitmap(source, bounds.left, bounds.top, bounds.width, bounds.height)
         val (budgetW, budgetH) = CropRenderer.budgetedSize(
             display.widthPx.coerceAtLeast(1),
             display.heightPx.coerceAtLeast(1)
         )
-        // Downscale uniformly if the cropped region exceeds the budgeted target display dimensions
+        return cropAndScale(source, bounds, budgetW, budgetH)
+    }
+
+    /**
+     * The [bounds] region of [source], scaled uniformly down to [budgetW] x [budgetH] when it is larger than that in both
+     * directions. One call does both, so the unscaled crop is never allocated: with the source, the crop and the result
+     * all alive at once, a 4K wallpaper from a 24 MP photo held about 210 MB; now it holds the source and the result
+     * (about 130 MB). Same pixels, same bilinear filter, same size as cropping first and scaling after.
+     */
+    private fun cropAndScale(source: Bitmap, bounds: CropRect, budgetW: Int, budgetH: Int): Bitmap {
         if (bounds.width > budgetW && bounds.height > budgetH) {
-            val scaled = cropped.scale(budgetW, budgetH)
-            if (scaled != cropped && cropped != source) {
-                cropped.recycle()
-            }
-            return scaled
+            val scale = Matrix().apply { setScale(budgetW.toFloat() / bounds.width, budgetH.toFloat() / bounds.height) }
+            return Bitmap.createBitmap(source, bounds.left, bounds.top, bounds.width, bounds.height, scale, true)
         }
-        return cropped
+        return Bitmap.createBitmap(source, bounds.left, bounds.top, bounds.width, bounds.height)
     }
 
     /**
@@ -641,6 +703,9 @@ class GoogleBookPlatformAdapter(
         bmp.setPixels(temp, 0, w, 0, 0, w, h)
     }
 
+    /** See [SunloomWallpaperScheduler.cancelAllScheduledWorkAndWait]. */
+    fun cancelAllScheduledWorkAndWait(): Boolean = scheduler.cancelAllScheduledWorkAndWait()
+
     fun cancelAllScheduledWork() {
         scheduler.cancelAllScheduledWork()
     }
@@ -677,6 +742,9 @@ class GoogleBookPlatformAdapter(
         const val WORK_NAME = SunloomWallpaperScheduler.WORK_NAME
         const val WORK_NAME_CHANGE = SunloomWallpaperScheduler.WORK_NAME_CHANGE
         const val WORK_NAME_REFRESH = SunloomWallpaperScheduler.WORK_NAME_REFRESH
+
+        /** EXIF orientations that turn the picture a quarter turn, so width and height swap (transpose, 90, transverse, 270). */
+        private val SIDEWAYS_ORIENTATIONS = setOf(5, 6, 7, 8)
 
         suspend fun executeScheduledWallpaperChange(
             appContext: Context,

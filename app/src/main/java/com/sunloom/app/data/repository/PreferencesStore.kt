@@ -46,7 +46,6 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             longitude = Double.fromBits(prefs.getLong("longitude_bits", (-122.4194).toRawBits())),
             fixedLightHour = prefs.getInt("fixed_light_hour", 7).coerceIn(0, 23),
             fixedDarkHour = prefs.getInt("fixed_dark_hour", 19).coerceIn(0, 23),
-            rotationIntervalHours = prefs.getInt("rotation_interval_hours", 0).coerceIn(0, 24),
             enabledCategories = categories,
             enabledSources = sources,
             displayPolicy = DisplayPolicy.entries.firstOrNull {
@@ -56,7 +55,9 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
                 it.name == prefs.getString("lock_workspace_policy", LockWorkspacePolicy.SAME_ON_BOTH.name)
             } ?: LockWorkspacePolicy.SAME_ON_BOTH,
             allowBlurredFrameFill = prefs.getBoolean("allow_blurred_fill", false),
-            wifiOnlyDownloads = prefs.getBoolean("wifi_only", false),
+            wifiOnlyDownloads = prefs.getBoolean("wifi_only", true),
+            weeklyUpdateCheck = prefs.getBoolean("weekly_update_check", false),
+            lastUpdateCheckEpochMs = prefs.getLong("last_update_check_ms", 0L),
             deferOnBatterySaver = prefs.getBoolean("defer_battery_saver", true),
             maxCacheBytes = prefs.getLong("max_cache_bytes", UserPreferences.DEFAULT_MAX_CACHE_BYTES),
             baselineRestorePath = prefs.getString("baseline_restore_path", null),
@@ -127,7 +128,7 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             remove("quiet_hours_enabled")
             remove("quiet_hours_start_hour")
             remove("quiet_hours_end_hour")
-            putInt("rotation_interval_hours", updated.rotationIntervalHours.coerceIn(0, 24))
+            remove("rotation_interval_hours") // no longer used; drop what an older version stored
             putStringSet("enabled_categories", updated.enabledCategories.map { it.name }.toSet())
             putStringSet("enabled_sources", enabledAdmittedSources)
             putStringSet("known_admitted_sources", SourceRegistry.admittedSources().map { it.sourceId }.toSet())
@@ -140,6 +141,8 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             putString("lock_workspace_policy", updated.lockWorkspacePolicy.name)
             putBoolean("allow_blurred_fill", updated.allowBlurredFrameFill)
             putBoolean("wifi_only", updated.wifiOnlyDownloads)
+            putBoolean("weekly_update_check", updated.weeklyUpdateCheck)
+            putLong("last_update_check_ms", updated.lastUpdateCheckEpochMs)
             putBoolean("defer_battery_saver", updated.deferOnBatterySaver)
             putLong("max_cache_bytes", updated.maxCacheBytes)
             putString("baseline_restore_path", updated.baselineRestorePath)

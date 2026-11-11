@@ -36,6 +36,26 @@ class PreferencesStoreTest {
     }
 
     @Test
+    fun `saving drops the unused rotation interval an older version stored`() {
+        raw.edit().putInt("rotation_interval_hours", 3).commit()
+
+        store.save(UserPreferences())
+
+        assertFalse(raw.contains("rotation_interval_hours"))
+    }
+
+    @Test
+    fun `the update-check choice is off by default and survives saving`() {
+        assertFalse(store.load().weeklyUpdateCheck)
+        assertEquals(0L, store.load().lastUpdateCheckEpochMs)
+
+        store.save(UserPreferences(weeklyUpdateCheck = true, lastUpdateCheckEpochMs = 1_234_567L))
+
+        assertTrue(store.load().weeklyUpdateCheck)
+        assertEquals(1_234_567L, store.load().lastUpdateCheckEpochMs)
+    }
+
+    @Test
     fun `an empty file reads as the defaults`() {
         assertEquals(UserPreferences(), store.load().copy(enabledSources = UserPreferences().enabledSources))
         assertFalse(store.load().isSetupCompleted)
@@ -47,7 +67,7 @@ class PreferencesStoreTest {
         val chosen = UserPreferences(
             isSetupCompleted = true, autoChangeEnabled = false, isPaused = true,
             scheduleMode = ScheduleMode.FIXED_CLOCK, selectedCityName = "Oslo, Norway",
-            latitude = 59.91, longitude = 10.75, fixedLightHour = 6, fixedDarkHour = 21, rotationIntervalHours = 3,
+            latitude = 59.91, longitude = 10.75, fixedLightHour = 6, fixedDarkHour = 21,
             enabledCategories = setOf(SafeCategory.SPACE_ASTRONOMY),
             enabledSources = setOf(SourceRegistry.admittedSources().first().sourceId),
             displayPolicy = DisplayPolicy.OPTIMIZE_PRIMARY_SHARPEST, lockWorkspacePolicy = LockWorkspacePolicy.LOCK_ONLY,
@@ -71,11 +91,10 @@ class PreferencesStoreTest {
 
     @Test
     fun `hours are kept within their range`() {
-        store.save(UserPreferences(fixedLightHour = 99, fixedDarkHour = -4, rotationIntervalHours = 400))
+        store.save(UserPreferences(fixedLightHour = 99, fixedDarkHour = -4))
         val loaded = store.load()
         assertEquals(23, loaded.fixedLightHour)
         assertEquals(0, loaded.fixedDarkHour)
-        assertEquals(24, loaded.rotationIntervalHours)
     }
 
     @Test

@@ -1,0 +1,19 @@
+name: Idea or feature request
+description: Something Sunloom could do, or do better
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What are you trying to do?
+      description: Describe the situation first, then what would help.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like Sunloom to do?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What do you do today instead?

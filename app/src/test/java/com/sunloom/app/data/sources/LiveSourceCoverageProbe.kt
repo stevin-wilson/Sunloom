@@ -11,7 +11,7 @@ import org.junit.Test
 /**
  * OPT-IN live probe (Article X §4). It calls the real catalogs, so it is skipped unless asked for:
  *
- *     SUNLOOM_LIVE_PROBE=1 ./gradlew :app:testDebugUnitTest --tests '*LiveSourceCoverageProbe*' --rerun
+ *     SUNLOOM_LIVE_PROBE=1 ./gradlew :app:testGithubDebugUnitTest --tests '*LiveSourceCoverageProbe*' --rerun
  *
  * For each source it makes one small query per category it serves (about 8 candidates, the app's own adapters,
  * User-Agent and per-sync request budgets, a pause between queries), then runs the advertised sizes through the

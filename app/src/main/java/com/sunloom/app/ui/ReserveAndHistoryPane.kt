@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.labels.title
 import com.sunloom.app.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.border
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -40,6 +40,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -294,16 +296,16 @@ private fun ReserveHeader(
     onPickLocalPhoto: () -> Unit,
     onPickBaselineRestore: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
+            shape = MaterialTheme.shapes.large,
             modifier = Modifier.fillMaxWidth()
         ) {
             FlowRow(
-                modifier = Modifier.fillMaxWidth().padding(18.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth().padding(Spacing.l),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.m),
+                verticalArrangement = Arrangement.spacedBy(Spacing.s)
             ) {
                 Column(modifier = Modifier.widthIn(min = 220.dp).weight(1f)) {
                     Text(
@@ -319,25 +321,29 @@ private fun ReserveHeader(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.s),
+                    itemVerticalAlignment = Alignment.CenterVertically
+                ) {
                     FilterChip(
                         selected = !gridView,
                         onClick = { onSetGridView(false) },
                         label = { Text(stringResource(R.string.view_list)) },
-                        modifier = Modifier.desktopControl(RoundedCornerShape(8.dp)).testTag("reserve_view_list")
+                        modifier = Modifier.desktopControl(MaterialTheme.shapes.small).testTag("reserve_view_list")
                     )
                     FilterChip(
                         selected = gridView,
                         onClick = { onSetGridView(true) },
                         label = { Text(stringResource(R.string.view_grid)) },
-                        modifier = Modifier.desktopControl(RoundedCornerShape(8.dp)).testTag("reserve_view_grid")
+                        modifier = Modifier.desktopControl(MaterialTheme.shapes.small).testTag("reserve_view_grid")
                     )
-                    OutlinedButton(onClick = onPickLocalPhoto, modifier = Modifier.desktopControl(RoundedCornerShape(50))) {
+                    OutlinedButton(onClick = onPickLocalPhoto, modifier = Modifier.desktopControl(CircleShape)) {
                         Icon(SunloomIcons.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(stringResource(R.string.add_photo))
                     }
-                    OutlinedButton(onClick = onPickBaselineRestore, modifier = Modifier.desktopControl(RoundedCornerShape(50))) {
+                    OutlinedButton(onClick = onPickBaselineRestore, modifier = Modifier.desktopControl(CircleShape)) {
                         Icon(SunloomIcons.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(stringResource(R.string.restore_photo))
@@ -348,13 +354,13 @@ private fun ReserveHeader(
         if (selectedCount > 0) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                shape = RoundedCornerShape(16.dp),
+                shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth().testTag("reserve_selection_bar")
             ) {
                 FlowRow(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     Text(
                         text = pluralStringResource(R.plurals.reserve_selected_count, selectedCount, selectedCount),
@@ -366,15 +372,15 @@ private fun ReserveHeader(
                     )
                     OutlinedButton(
                         onClick = { onKeepSelected(selectedRecords) },
-                        modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("reserve_selection_keep")
+                        modifier = Modifier.desktopControl(CircleShape).testTag("reserve_selection_keep")
                     ) { Text(stringResource(R.string.keep_selected)) }
                     OutlinedButton(
                         onClick = { onRemoveSelected(selectedRecords.map { it.id }) },
-                        modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("reserve_selection_remove")
+                        modifier = Modifier.desktopControl(CircleShape).testTag("reserve_selection_remove")
                     ) { Text(stringResource(R.string.remove_selected)) }
                     OutlinedButton(
                         onClick = onClearSelection,
-                        modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("reserve_selection_clear")
+                        modifier = Modifier.desktopControl(CircleShape).testTag("reserve_selection_clear")
                     ) { Text(stringResource(R.string.clear_selection)) }
                 }
             }
@@ -386,13 +392,13 @@ private fun ReserveHeader(
 private fun ReserveEmptyState(isSyncing: Boolean, onSyncOnline: () -> Unit, onPickLocalPhoto: () -> Unit) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth().testTag("reserve_empty_state")
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            modifier = Modifier.fillMaxWidth().padding(Spacing.xl),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(Spacing.s)
         ) {
             Text(
                 text = stringResource(R.string.no_saved_wallpapers_yet),
@@ -404,7 +410,7 @@ private fun ReserveEmptyState(isSyncing: Boolean, onSyncOnline: () -> Unit, onPi
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
                 androidx.compose.material3.Button(
                     onClick = onSyncOnline,
                     enabled = !isSyncing,
@@ -440,15 +446,22 @@ private fun ReserveItemCard(
 ) {
     val actions = LocalWallpaperActions.current
     val isActive = uiState.currentWallpaper?.id == item.id
-    val shape = RoundedCornerShape(14.dp)
+    val shape = MaterialTheme.shapes.medium
     val pressGuard = remember { SelectionPressGuard() }
+    val selectLabel = stringResource(R.string.select_card)
+    val unselectLabel = stringResource(R.string.unselect_card)
     CompositionLocalProvider(LocalSelectionPressGuard provides pressGuard) {
     ContextMenuHost(
         modifier = Modifier
             .fillMaxWidth()
             .focusRequester(focusRequester)
             .pointerPressWithModifiers(pressGuard, onPress)
-            .semantics { this.selected = selected }
+            .semantics {
+                this.selected = selected
+                customActions = listOf(
+                    CustomAccessibilityAction(if (selected) unselectLabel else selectLabel) { onToggleSelected(); true }
+                )
+            }
             .testTag("reserve_card_${item.id}"),
         focusShape = shape,
         onActivate = if (!isActive && !restricted) ({ onApplySpecific(item.id) }) else null,
@@ -484,7 +497,7 @@ private fun ReserveItemCard(
                 dismiss()
                 onToggleKeepSpecific(item.id)
             }
-            ContextMenuItem("About this image\u2026", "ctx_about_${item.id}") {
+            ContextMenuItem(stringResource(R.string.about_this_image), "ctx_about_${item.id}") {
                 dismiss()
                 onShowAbout()
             }
@@ -523,8 +536,8 @@ private fun ReserveItemCard(
         ) {
             if (grid) {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth().padding(Spacing.m),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.s)
                 ) {
                     WallpaperPreviewSurface(
                         record = item,
@@ -538,8 +551,8 @@ private fun ReserveItemCard(
                 }
             } else {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.fillMaxWidth().padding(Spacing.m),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.m),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     WallpaperPreviewSurface(
@@ -560,8 +573,8 @@ private fun ReserveItemCard(
 
 @Composable
 private fun ReserveItemText(item: WallpaperRecord, isActive: Boolean) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
             TruncatedTitleWithTooltip(
                 title = item.title,
                 style = MaterialTheme.typography.titleSmall,
@@ -572,7 +585,7 @@ private fun ReserveItemText(item: WallpaperRecord, isActive: Boolean) {
             if (isActive) {
                 Surface(
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = MaterialTheme.shapes.small
                 ) {
                     Text(
                         text = stringResource(R.string.active),
@@ -585,15 +598,15 @@ private fun ReserveItemText(item: WallpaperRecord, isActive: Boolean) {
             }
         }
         Text(
-            "${item.evaluation.brightnessClass.displayName} • ${item.category.displayName} • ${item.provenance.sourceName}",
+            "${item.evaluation.brightnessClass.title()} • ${item.category.title()} • ${item.provenance.sourceName}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
         ProvenanceLinkRow(
-            label = "${item.provenance.creatorName} (${item.provenance.licenseType.label})",
-            displayText = item.provenance.originalPageUrl.ifBlank { "On-device" },
+            label = "${item.provenance.creatorName} (${item.provenance.licenseType.title()})",
+            displayText = item.provenance.originalPageUrl.ifBlank { stringResource(R.string.prov_on_device) },
             url = item.provenance.originalPageUrl
         )
     }
@@ -611,7 +624,7 @@ private fun ReserveItemActions(
 ) {
     FlowRow(
         modifier = Modifier.ignoredBySelection(),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
         verticalArrangement = Arrangement.Center
     ) {
         ShortcutTooltip(if (item.isFavorite) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites)) {
@@ -627,7 +640,7 @@ private fun ReserveItemActions(
             }
         }
         if (!isActive) {
-            ShortcutTooltip(if (restricted) HostRestrictedTooltip else "Apply as wallpaper now") {
+            ShortcutTooltip(if (restricted) stringResource(R.string.host_restricted_tooltip) else stringResource(R.string.apply_as_wallpaper_now)) {
                 OutlinedButton(
                     onClick = { onApplySpecific(item.id) },
                     enabled = !restricted,
