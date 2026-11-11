@@ -27,7 +27,9 @@ object DiagnosticsReport {
      */
     fun scrub(text: String): String {
         val webSafe = WEB_ADDRESS.replace(text) { it.groupValues[1] }
-        val noOtherAddresses = OTHER_ADDRESS.replace(webSafe) { m -> if (m.value.startsWith("http", ignoreCase = true)) m.value else "<address>" }
+        val noOtherAddresses = OTHER_ADDRESS.replace(webSafe) { match ->
+            if (match.value.startsWith("http", ignoreCase = true)) match.value else "<address>"
+        }
         return FILE_PATH.replace(noOtherAddresses, "<path>")
     }
 

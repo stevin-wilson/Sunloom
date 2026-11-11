@@ -164,7 +164,7 @@ internal class SeedReserve(
     }
 
     private fun sizeFolder(plan: Plan): File? =
-        renderCacheDir?.let { File(it, "${plan.renderW}x${plan.renderH}_${plan.targetW}x${plan.targetH}") }
+        renderCacheDir?.let { File(it, "${renderCacheVersion()}_${plan.renderW}x${plan.renderH}_${plan.targetW}x${plan.targetH}") }
 
     /** The kept render of [spec] at this size, or null when there is none or it does not look like a whole PNG. */
     private fun readCachedRender(spec: SeedWallpaperSpec, plan: Plan): ByteArray? = runCatching {
@@ -263,6 +263,16 @@ internal class SeedReserve(
     companion object {
         /** How many display sizes keep their rendered seeds (the current one and the one before it). */
         const val KEPT_SIZES = 2
+
+        /**
+         * Part of every kept folder's name, so renders made by an older version of the app are never read back: the
+         * seed adapter's version (bumped when a seed's look changes) and this renderer's own revision (bump [RENDER_REVISION]
+         * when [SeedRenderer] changes). Folders from other versions simply age out of the two kept sizes.
+         */
+        internal fun renderCacheVersion(): String =
+            "${SourceRegistry.get(SourceIds.SEED_RESERVE)?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION}-r$RENDER_REVISION"
+
+        private const val RENDER_REVISION = 1
 
         private val PNG_SIGNATURE = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47)
 

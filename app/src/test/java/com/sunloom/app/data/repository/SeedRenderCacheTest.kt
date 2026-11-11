@@ -138,4 +138,24 @@ class SeedRenderCacheTest {
         assertEquals(seedCount, records.size)
         assertFalse(cacheDir.exists())
     }
+
+    @Test
+    fun `renders kept by an older version of the app are not reused`() {
+        // A release that changes a seed or the renderer must not be shown last release's pictures.
+        val stale = File(cacheDir, "old-version_1000x625_1000x625").apply { mkdirs() }
+        BundledSeedSourceAdapter.SEED_SPECS.forEach { File(stale, "${it.id}.png").writeBytes(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 1, 2, 3, 4, 5, 6)) }
+
+        val records = load(reserve(), laptop)
+
+        assertEquals("every seed is drawn afresh", seedCount, rendered.size)
+        assertEquals(seedCount, records.size)
+    }
+
+    @Test
+    fun `kept renders are filed under the current version`() {
+        load(reserve(), laptop)
+
+        val folder = geometryDirs().single().name
+        assertTrue("the folder name carries the version ($folder)", folder.startsWith(SeedReserve.renderCacheVersion() + "_"))
+    }
 }
