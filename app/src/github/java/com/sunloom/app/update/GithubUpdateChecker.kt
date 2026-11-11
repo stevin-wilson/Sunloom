@@ -57,7 +57,7 @@ internal object GithubReleases {
  * the answer is only ever shown as a link: nothing is downloaded or installed. [fetch] returns the response text.
  */
 internal class GithubUpdateChecker(
-    private val fetch: suspend (String) -> String = ::fetchFromGithub
+    private val fetch: suspend (String) -> String = { url -> fetchFromGithub(url) }
 ) : UpdateCheckFeature {
 
     override suspend fun check(currentVersion: String): UpdateCheckResult = try {
@@ -81,10 +81,16 @@ internal class GithubUpdateChecker(
     }
 }
 
-/** One short GET to an allowed host: no redirects, small timeouts, a size limit, and nothing but the User-Agent sent. */
-private suspend fun fetchFromGithub(url: String): String = withContext(Dispatchers.IO) {
+/**
+ * One short GET to an allowed host: no redirects, small timeouts, a size limit, and nothing but the User-Agent (and the
+ * Accept header GitHub asks for) sent. [open] makes the connection; tests replace it.
+ */
+internal suspend fun fetchFromGithub(
+    url: String,
+    open: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection }
+): String = withContext(Dispatchers.IO) {
     if (!UpdateHosts.isAllowed(url)) throw IOException("Not an update host: $url")
-    val connection = URL(url).openConnection() as HttpURLConnection
+    val connection = open(URL(url))
     try {
         connection.instanceFollowRedirects = false
         connection.connectTimeout = 10_000
