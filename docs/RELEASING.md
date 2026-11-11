@@ -58,7 +58,27 @@ The release workflow reads four secrets: `SUNLOOM_UPLOAD_KEYSTORE_BASE64` (`base
    it is a final.
 
 Rehearsal without a tag: *Actions → Release → Run workflow* with a tag name; it uses repository-level secrets and no
-environment, and still only drafts.
+environment, and still only drafts. It was rehearsed once on 2026-11-11 with a throwaway key and the tag `v0.0.1-rc.1`:
+every step passed, and the draft held `Sunloom-0.0.1-rc.1-github.apk` (signature schemes v2 and v3 verified, checksum
+matched) and `SHA256SUMS`. Delete the throwaway secrets and the draft afterwards.
+
+## Reading a crash trace from a release
+
+Release builds shrink and rename code (R8), so a trace from a user shows names like `q5.a`. Each release run keeps the
+key to those names as an artifact called `mapping-<version>`. It is `mapping.prt`, which AGP 9 writes as a zip with one
+text file per class. To get an ordinary mapping file, unzip it and join the class entries:
+
+```
+python3 -I - <<'PY'
+import zipfile
+z = zipfile.ZipFile("mapping.prt")
+open("mapping.txt", "w").write("".join(z.read(n).decode() for n in z.namelist() if not n.startswith("R8$$")))
+PY
+retrace mapping.txt crash.txt        # retrace is in the Android SDK's cmdline-tools
+```
+
+Checked on the rehearsal build: 4,293 entries, 422 of the app's own classes mapped. Artifacts are kept for 90 days, so
+copy a release's mapping next to the APK in your own records.
 
 ## Manual QA on a Googlebook (before every final)
 
