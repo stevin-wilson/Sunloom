@@ -234,6 +234,16 @@ internal fun DiagnosticsPane(
             item(key = "diag_rejection_groups_gap") { Spacer(Modifier.height(14.dp)) }
         }
 
+        item(key = "diag_technical_header") {
+            Column(modifier = Modifier.fillMaxWidth().testTag("diag_technical_header")) {
+                DiagnosticsListHeader(
+                    text = stringResource(R.string.technical_details),
+                    color = MaterialTheme.colorScheme.primary
+                )
+                DiagnosticsListRow(text = stringResource(R.string.technical_details_hint), monospace = false, secondary = true)
+            }
+        }
+
         if (uiState.rejectionLog.isNotEmpty()) {
             item(key = "diag_rejections_header") {
                 DiagnosticsListHeader(

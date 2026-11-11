@@ -80,6 +80,15 @@ class AboutSectionTest {
     }
 
     @Test
+    fun `the engineering detail sits under its own Technical details heading`() {
+        show()
+
+        composeTestRule.onNodeWithTag("diag_technical_header").performScrollTo().assertExists()
+        composeTestRule.onNodeWithText(context.getString(R.string.technical_details)).assertExists()
+        assertTrue("technical details come after the plain sections", top("diag_header") < top("diag_technical_header"))
+    }
+
+    @Test
     fun `the privacy policy and the source code open in the browser`() {
         show()
 

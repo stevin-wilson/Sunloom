@@ -457,7 +457,7 @@ class GoogleBookPlatformAdapterTest {
         val restored = gateway.restoreBaselineWallpaper()
         assertEquals(1, fakeWallpaperGateway.clearedCount)
         assertEquals(null, repo.getCurrentWallpaperId())
-        assertTrue(restored.statusBannerMessage.contains("system default", ignoreCase = true))
+        assertTrue(restored.statusBannerMessage.contains("system wallpaper", ignoreCase = true))
     }
 
     @Test

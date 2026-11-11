@@ -248,7 +248,7 @@ internal fun DisplaysAndSchedulePane(
                 ) {
                     uiState.capabilities.connectedDisplays.forEach { disp ->
                         val roleTag = if (disp.isPrimary) "Built-in" else "External"
-                        val ppiLabel = disp.physicalPpi?.let { "${it.roundToInt()} PPI" } ?: "${disp.densityDpi} dpi"
+                        val ppiLabel = disp.physicalPpi?.let { "${it.roundToInt()} pixels per inch" } ?: "${disp.densityDpi} dpi"
                         Text(
                             text = "$roleTag: ${disp.name} (${disp.resolutionLabel}, ${"%.2f".format(disp.aspectRatio)}:1 • $ppiLabel • ${disp.qualityTier.shortLabel})",
                             style = MaterialTheme.typography.bodySmall,
@@ -278,8 +278,8 @@ internal fun DisplaysAndSchedulePane(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         listOf(
-                            DisplayPolicy.SAME_ON_ALL_DISPLAYS to "Shared envelope across displays",
-                            DisplayPolicy.OPTIMIZE_PRIMARY_SHARPEST to "Optimize sharpest display only"
+                            DisplayPolicy.SAME_ON_ALL_DISPLAYS to "One wallpaper for all displays",
+                            DisplayPolicy.OPTIMIZE_PRIMARY_SHARPEST to "Best for the sharpest display"
                         ).forEach { (policy, shortText) ->
                             FilterChip(
                                 selected = uiState.preferences.displayPolicy == policy,
@@ -298,7 +298,7 @@ internal fun DisplaysAndSchedulePane(
                         style = MaterialTheme.typography.labelLarge
                     )
                     disconnectedHistory.forEach { rec ->
-                        val recPpi = rec.physicalPpi?.let { "${it.roundToInt()} PPI" } ?: "${rec.densityDpi} dpi"
+                        val recPpi = rec.physicalPpi?.let { "${it.roundToInt()} pixels per inch" } ?: "${rec.densityDpi} dpi"
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,

@@ -249,7 +249,7 @@ class GoogleBookPlatformAdapter(
                 val sharpest = getPrimaryOrSharpestDisplayOrNull(displays)
                 if (displayPolicy == DisplayPolicy.OPTIMIZE_PRIMARY_SHARPEST) {
                     "Detected ${displays.size} displays (${displays.joinToString { "${it.name} ${it.resolutionLabel}" }}). " +
-                        "Android shares one WallpaperManager surface; optimizing crop for ${sharpest?.name ?: "sharpest display"} " +
+                        "Android uses one wallpaper for every screen, so Sunloom crops it for ${sharpest?.name ?: "sharpest display"} " +
                         "(${sharpest?.resolutionLabel.orEmpty()}) without stretching."
                 } else {
                     val syntheticCheck = envelopePlanner.planEnvelope(
@@ -262,20 +262,20 @@ class GoogleBookPlatformAdapter(
                         allowBlurredFrameFill = false
                     )
                     if (syntheticCheck != null && syntheticCheck.excludedDisplays.isNotEmpty()) {
-                        excludedNote = "Excluded from envelope target: " +
+                        excludedNote = "Left out of the shared wallpaper: " +
                             syntheticCheck.excludedDisplays.joinToString("; ") {
                                 val reason = syntheticCheck.exclusionReasons[it.displayId]?.let { r -> " — $r" }.orEmpty()
                                 "${it.name} (${it.resolutionLabel})$reason"
                             } + "."
                     }
                     "Detected ${displays.size} displays (${displays.joinToString { "${it.name} ${it.resolutionLabel}" }}). " +
-                        "Android shares one WallpaperManager surface; Sunloom renders a shared native-resolution envelope " +
-                        "so each compatible monitor's system center-crop stays crisp and subject-aligned without stretching."
+                        "Android uses one wallpaper for every screen, so Sunloom makes one picture " +
+                        "that stays sharp and well framed on each compatible monitor, without stretching."
                 }
             }
             else -> {
                 val d = displays.first()
-                val ppiNote = d.physicalPpi?.let { " • ${it.roundToInt()} PPI" }.orEmpty()
+                val ppiNote = d.physicalPpi?.let { " • ${it.roundToInt()} pixels per inch" }.orEmpty()
                 val lockClause = when (observedLock) {
                     true -> "Independent Workspace and Lock Screen wallpapers verified."
                     false -> "System shares one wallpaper across Workspace and Lock Screen on this device."
