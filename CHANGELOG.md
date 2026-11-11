@@ -6,6 +6,11 @@ the release's version as its notes.
 
 ## [Unreleased]
 
+### Fixed
+- **Check for updates** now works on a release candidate: it reads GitHub's list of releases and offers the highest newer
+  version. A release-candidate build hears about the next candidate and the final release; a normal release hears only
+  about normal releases. Before, it said "Couldn't check" while only candidates existed.
+
 ## [2.0.0-rc.1] - 2026-11-11
 
 The first release candidate of the first public release. Sunloom 1.x was a private build; this is the version that

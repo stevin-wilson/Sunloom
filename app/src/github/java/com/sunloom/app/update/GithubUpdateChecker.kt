@@ -31,43 +31,62 @@ internal object ReleaseVersion {
         return latest > installed
     }
 
+    /** True for a release candidate such as `2.0.0-rc.1`; false for a release and for anything that is not a version. */
+    fun isCandidate(text: String): Boolean = parse(text)?.candidate != null
+
+    /** The highest of [versions] by version number (not by order of appearance), or null when there are none. */
+    fun highest(versions: List<String>): String? = versions.mapNotNull { v -> parse(v)?.let { v to it } }.maxByOrNull { it.second }?.first
+
     fun isVersion(text: String): Boolean = parse(text) != null
 }
 
-/** What GitHub's "latest release" answer says, once checked. */
+/** One release as GitHub lists it. */
 internal data class LatestRelease(val version: String, val pageUrl: String?, val draft: Boolean, val prerelease: Boolean)
 
 internal object GithubReleases {
-    /** Reads a release; null when the text is not one (an error page, a message object, a tag that is not a version). */
-    fun parse(json: String): LatestRelease? = runCatching {
-        val obj = JSONObject(json)
+    private fun release(obj: JSONObject): LatestRelease? {
         val tag = obj.optString("tag_name", "")
         if (!ReleaseVersion.isVersion(tag)) return null
-        LatestRelease(
+        return LatestRelease(
             version = tag.removePrefix("v"),
             pageUrl = obj.optString("html_url", "").ifBlank { null },
             draft = obj.optBoolean("draft", false),
             prerelease = obj.optBoolean("prerelease", false)
         )
+    }
+
+    /**
+     * Reads GitHub's list of releases. Null when the text is not a list (an error page, a message object, one release on
+     * its own); entries that are not releases, or whose tag is not a version, are left out.
+     */
+    fun parseList(json: String): List<LatestRelease>? = runCatching {
+        val array = org.json.JSONArray(json)
+        (0 until array.length()).mapNotNull { array.optJSONObject(it)?.let(::release) }
     }.getOrNull()
 }
 
 /**
- * Asks GitHub for the project's latest release (Article XVIII §1). Only on request, only the hosts in [UpdateHosts], and
- * the answer is only ever shown as a link: nothing is downloaded or installed. [fetch] returns the response text.
+ * Asks GitHub for the project's published releases (Article XVIII §1) and offers the highest one that is newer than the
+ * installed version. A release build is only ever offered releases; a release-candidate build is offered the next
+ * candidate or the final release. Only on request, only the hosts in [UpdateHosts], and the answer is only ever shown as a
+ * link: nothing is downloaded or installed. [fetch] returns the response text.
  */
 internal class GithubUpdateChecker(
     private val fetch: suspend (String) -> String = { url -> fetchFromGithub(url) }
 ) : UpdateCheckFeature {
 
     override suspend fun check(currentVersion: String): UpdateCheckResult = try {
-        val latest = GithubReleases.parse(fetch(LATEST_RELEASE_URL))
-        when {
-            latest == null -> UpdateCheckResult.Failed
-            latest.draft || latest.prerelease -> UpdateCheckResult.UpToDate(currentVersion)
-            ReleaseVersion.isNewer(currentVersion, latest.version) ->
-                UpdateCheckResult.Available(latest.version, latest.pageUrl?.takeIf(UpdateHosts::isAllowed) ?: RELEASES_PAGE_URL)
-            else -> UpdateCheckResult.UpToDate(currentVersion)
+        val releases = GithubReleases.parseList(fetch(RELEASES_URL))
+        if (releases == null) {
+            UpdateCheckResult.Failed
+        } else {
+            val offered = releases.filter { !it.draft && (!it.prerelease || ReleaseVersion.isCandidate(currentVersion)) }
+            val best = ReleaseVersion.highest(offered.map { it.version })?.let { v -> offered.first { it.version == v } }
+            if (best != null && ReleaseVersion.isNewer(currentVersion, best.version)) {
+                UpdateCheckResult.Available(best.version, best.pageUrl?.takeIf(UpdateHosts::isAllowed) ?: RELEASES_PAGE_URL)
+            } else {
+                UpdateCheckResult.UpToDate(currentVersion)
+            }
         }
     } catch (cancel: CancellationException) {
         throw cancel
@@ -76,8 +95,8 @@ internal class GithubUpdateChecker(
     }
 
     companion object {
-        const val LATEST_RELEASE_URL = "https://api.github.com/repos/stevin-wilson/Sunloom/releases/latest"
-        const val RELEASES_PAGE_URL = "https://github.com/stevin-wilson/Sunloom/releases/latest"
+        const val RELEASES_URL = "https://api.github.com/repos/stevin-wilson/Sunloom/releases?per_page=10"
+        const val RELEASES_PAGE_URL = "https://github.com/stevin-wilson/Sunloom/releases"
     }
 }
 

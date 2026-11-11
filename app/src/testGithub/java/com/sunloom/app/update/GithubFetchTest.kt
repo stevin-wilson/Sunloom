@@ -38,7 +38,7 @@ class GithubFetchTest {
         fetchFromGithub(url) { make(it) }
     }
 
-    private val goodUrl = GithubUpdateChecker.LATEST_RELEASE_URL
+    private val goodUrl = GithubUpdateChecker.RELEASES_URL
 
     @Test
     fun `an answer is returned as text`() {

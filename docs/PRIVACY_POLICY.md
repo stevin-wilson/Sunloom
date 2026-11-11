@@ -45,10 +45,11 @@ filled in; nothing is sent until you review it and press Submit.
 ## Checking for updates (the GitHub build only)
 
 The build you download from GitHub has **Check for updates** in Storage & About. When you tap it, the app asks
-`api.github.com` for the project's latest release. GitHub receives your IP address and the User-Agent above; nothing
+`api.github.com` for the project's list of published releases. GitHub receives your IP address and the User-Agent above; nothing
 else is sent. If you turn on "Check for a new version when I open Sunloom" in setup, the same request is made at most
 once a week, only when you open the app, never in the background. It is off unless you choose it. Nothing is downloaded
-or installed: if a newer version exists the app shows its number and a link that opens in your browser.
+or installed: if a newer version exists the app shows its number and a link that opens in your browser. (A build that is itself
+a release candidate is also told about newer candidates; a normal release is told only about normal releases.)
 
 A future Google Play build will have no update check and will never contact GitHub.
 
