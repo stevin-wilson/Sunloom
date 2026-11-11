@@ -713,6 +713,72 @@ class LocalLibrarySyncTest {
         assertTrue(rounds.size <= com.sunloom.app.platform.scheduler.RefreshSchedulePolicy.MAX_BACKGROUND_ROUNDS)
     }
 
+    private fun gatewayWith(wifi: Boolean, batterySaver: Boolean = false) = object : com.sunloom.app.platform.SystemWallpaperGateway {
+        override fun isWallpaperSupported() = true
+        override fun isSetWallpaperAllowed() = true
+        override fun getConnectedDisplays() = listOf(display)
+        override fun applyBitmapToDestination(bitmap: Bitmap, flags: Int) = true
+        override fun isWifiConnected() = wifi
+        override fun isBatterySaverActive() = batterySaver
+    }
+
+    @Test
+    fun `the background refresh makes no request while the reserve is already full`() = kotlinx.coroutines.test.runTest {
+        val rounds = mutableListOf<Int>()
+        val repo = repo(EndlessAdapter("artic_cc0", { candidate(it, creator = "Artist $it") }, rounds))
+        repo.refreshOnlineCatalog(display)
+        // A cache at its cap needs nothing more (Article X section 4: fetching pauses at 90% of the limit).
+        repo.savePreferences(repo.loadPreferences().copy(maxCacheBytes = 1L))
+        assertFalse("setup: nothing more is needed", repo.needsTopUp())
+        rounds.clear()
+
+        val added = com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler.executeScheduledCatalogRefresh(
+            appContext = context, repo = repo, platform = platformFor(display), gateway = gatewayWith(wifi = true)
+        )
+
+        assertEquals(0, added)
+        assertTrue("a full reserve must not cost a single request, but asked for $rounds", rounds.isEmpty())
+    }
+
+    @Test
+    fun `the background refresh leaves housekeeping alone when it cannot download anyway`() = kotlinx.coroutines.test.runTest {
+        val rounds = mutableListOf<Int>()
+        val repo = repo(EndlessAdapter("artic_cc0", { candidate(it, creator = "Artist $it") }, rounds))
+        repo.refreshOnlineCatalog(display)
+        val victim = repo.getAllWallpapers().first { it.provenance.sourceId == "artic_cc0" }
+        File(victim.localFilePath).delete()
+        repo.savePreferences(repo.loadPreferences().copy(wifiOnlyDownloads = true))
+        rounds.clear()
+
+        com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler.executeScheduledCatalogRefresh(
+            appContext = context, repo = repo, platform = platformFor(display), gateway = gatewayWith(wifi = false)
+        )
+
+        assertTrue("no download without Wi-Fi", rounds.isEmpty())
+        assertEquals("the missing file was not looked into", victim.localFilePath, repo.getWallpaperById(victim.id)!!.localFilePath)
+    }
+
+    @Test
+    fun `the background refresh still downloads, and mends a missing file, when it may`() = kotlinx.coroutines.test.runTest {
+        val rounds = mutableListOf<Int>()
+        val repo = repo(EndlessAdapter("artic_cc0", { candidate(it, creator = "Artist $it") }, rounds))
+        repo.refreshOnlineCatalog(display)
+        val victim = repo.getAllWallpapers().first { it.provenance.sourceId == "artic_cc0" }
+        File(victim.localFilePath).delete()
+        rounds.clear()
+
+        val added = com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler.executeScheduledCatalogRefresh(
+            appContext = context, repo = repo, platform = platformFor(display), gateway = gatewayWith(wifi = true)
+        )
+
+        assertTrue("it fetched ($added added)", rounds.isNotEmpty())
+        // Mended: the row was marked gone (and, being old and never kept, dropped) or the picture came back; it is never
+        // left pointing at a file that is not there.
+        repo.getWallpaperById(victim.id)?.let { after ->
+            assertTrue(after.localFilePath.isBlank() || File(after.localFilePath).exists())
+        }
+    }
+
     @Test
     fun `the background refresh does nothing while automation is paused`() = kotlinx.coroutines.test.runTest {
         val rounds = mutableListOf<Int>()

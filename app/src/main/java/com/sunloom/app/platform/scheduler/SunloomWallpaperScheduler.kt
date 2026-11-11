@@ -55,6 +55,8 @@ class SunloomWallpaperScheduler(
         return Constraints.Builder()
             .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
             .setRequiresBatteryNotLow(deferBatterySaver)
+            // A download into a nearly full disk only makes things worse; wait until there is room.
+            .setRequiresStorageNotLow(true)
             .build()
     }
 
@@ -227,7 +229,7 @@ class SunloomWallpaperScheduler(
         if (!rescheduleRefreshWork) {
             return
         }
-        val constraintsSig = "$wifiOnly:$deferBatterySaver:${RefreshSchedulePolicy.REFRESH_INTERVAL_HOURS}h"
+        val constraintsSig = refreshConstraintsSignature(wifiOnly, deferBatterySaver)
         val prevSig = schedulePrefs.getString(PREF_REFRESH_CONSTRAINTS_SIG, null)
         // A changed constraint set or cadence (the signature includes the interval) replaces the enqueued request.
         val periodicPolicy = if (prevSig != null && prevSig != constraintsSig) {
@@ -254,6 +256,13 @@ class SunloomWallpaperScheduler(
         const val WORK_NAME_REFRESH = "sunloom_refresh_work"
         const val WORK_NAME_STORE_WATCH = "sunloom_store_watch_work"
         private const val PREF_REFRESH_CONSTRAINTS_SIG = "scheduled_refresh_constraints_sig"
+
+        /**
+         * Identifies the refresh job's constraints and cadence. A different signature replaces the queued request, so
+         * adding the storage need (":storage") reaches installs that queued the job without it.
+         */
+        internal fun refreshConstraintsSignature(wifiOnly: Boolean, deferBatterySaver: Boolean): String =
+            "$wifiOnly:$deferBatterySaver:storage:${RefreshSchedulePolicy.REFRESH_INTERVAL_HOURS}h"
 
         /**
          * Executes the local wallpaper transition logic for [ChangeWorker], walking up to 3
@@ -413,15 +422,17 @@ class SunloomWallpaperScheduler(
             val prefs = repo.loadPreferences()
             // Fetching is independent of automatic wallpaper changes: manual-mode users want fresh images too.
             if (prefs.isPaused) return 0
+            // The cheap checks first: a run that cannot download anyway touches nothing (no probing, no file scans).
+            val canDownload = (!prefs.wifiOnlyDownloads || gateway.isWifiConnected()) &&
+                (!prefs.deferOnBatterySaver || !gateway.isBatterySaverActive())
+            if (!canDownload) return 0
             val connectedDisplays = platform.getConnectedDisplays()
             val display = platform.getPrimaryOrSharpestDisplayOrNull(connectedDisplays) ?: return 0
             repo.healMissingFiles()
             repo.runStorageHygieneIfDue()
             repo.ensureSeedReserveLoadedForDisplays(connectedDisplays, prefs.displayPolicy)
-
-            val canDownload = (!prefs.wifiOnlyDownloads || gateway.isWifiConnected()) &&
-                (!prefs.deferOnBatterySaver || !gateway.isBatterySaverActive())
-            if (!canDownload) return 0
+            // A reserve that is already full needs no request at all; checked before the first round, not after it.
+            if (!repo.needsTopUp(prefs)) return 0
 
             // One round polls at most three sources within their request budgets, so keep going while images
             // arrive and the buffer is still short (a few rounds at most).
