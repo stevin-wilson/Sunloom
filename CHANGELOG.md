@@ -6,7 +6,14 @@ the release's version as its notes.
 
 ## [Unreleased]
 
-The first public release. Sunloom 1.x was a private build; this is the version that anyone can download.
+## [2.0.0-rc.1] - 2026-11-11
+
+The first release candidate of the first public release. Sunloom 1.x was a private build; this is the version that
+anyone can download. Please try it and [tell us what you find](https://github.com/stevin-wilson/Sunloom/issues/new/choose).
+
+**Check your download.** Every Sunloom release is signed with one key. Its certificate SHA-256 fingerprint is
+`28:67:7F:15:15:29:90:DB:45:BD:49:8B:5D:B0:32:FE:73:45:71:58:C5:5C:11:27:3C:C9:C5:BA:8D:90:34:9F`.
+`apksigner verify --print-certs` must show the same value (without the colons), and `SHA256SUMS` must match the APK.
 
 ### Added
 - **Share it:** a GitHub Releases APK (`github` build) with a checksum, plus a `play` build for a later Play release
@@ -46,4 +53,5 @@ The first public release. Sunloom 1.x was a private build; this is the version t
 ### Security
 - No secrets in the package; `Log` calls below warning level are removed from release builds.
 
-[Unreleased]: https://github.com/stevin-wilson/Sunloom/commits/main
+[Unreleased]: https://github.com/stevin-wilson/Sunloom/compare/v2.0.0-rc.1...main
+[2.0.0-rc.1]: https://github.com/stevin-wilson/Sunloom/releases/tag/v2.0.0-rc.1

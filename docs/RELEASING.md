@@ -19,17 +19,27 @@ Android accepts the final as an upgrade. The Play build will use the same sequen
 One key signs every release, on both distribution paths (GitHub now, Google Play later via "use my own key"). If it is
 lost, nobody can update in place. **Keep an offline copy**, and write the passwords down separately from the file.
 
-Make a key (once):
+The key made on 2026-11-11 has this certificate fingerprint (public; it is in the README and in every release's
+notes): `28:67:7F:15:15:29:90:DB:45:BD:49:8B:5D:B0:32:FE:73:45:71:58:C5:5C:11:27:3C:C9:C5:BA:8D:90:34:9F`
+
+Make a key (once) with the helper. It asks for a password (typed, never echoed or stored outside the key file),
+creates `~/sunloom-release-key/sunloom-release.jks` outside the repository, uploads the four secrets below to the
+`release` environment, and prints the certificate fingerprint:
 
 ```
-keytool -genkeypair -v -keystore sunloom-release.jks -alias sunloom -keyalg RSA -keysize 4096 -validity 10000
+scripts/make_release_key.sh              # add --no-upload to only make the file
 ```
 
-Print its fingerprint to publish in the release notes and check it matches what the APK reports:
+**Then back it up before anything else:** copy the `.jks` to two places that are not this computer, check each copy
+opens (`keytool -list -keystore <copy>`), and put the password in your password manager. To see the fingerprint again
+later (it is public and goes in the release notes and the README):
 
 ```
 keytool -list -v -keystore sunloom-release.jks -alias sunloom | grep SHA256
 ```
+
+By hand instead: `keytool -genkeypair -keystore sunloom-release.jks -storetype PKCS12 -alias sunloom -keyalg RSA
+-keysize 4096 -validity 10000`, then add the secrets yourself.
 
 Never commit a key, a password or `keystore.properties` (they are in `.gitignore`).
 
@@ -58,7 +68,27 @@ The release workflow reads four secrets: `SUNLOOM_UPLOAD_KEYSTORE_BASE64` (`base
    it is a final.
 
 Rehearsal without a tag: *Actions → Release → Run workflow* with a tag name; it uses repository-level secrets and no
-environment, and still only drafts.
+environment, and still only drafts. It was rehearsed once on 2026-11-11 with a throwaway key and the tag `v0.0.1-rc.1`:
+every step passed, and the draft held `Sunloom-0.0.1-rc.1-github.apk` (signature schemes v2 and v3 verified, checksum
+matched) and `SHA256SUMS`. Delete the throwaway secrets and the draft afterwards.
+
+## Reading a crash trace from a release
+
+Release builds shrink and rename code (R8), so a trace from a user shows names like `q5.a`. Each release run keeps the
+key to those names as an artifact called `mapping-<version>`. It is `mapping.prt`, which AGP 9 writes as a zip with one
+text file per class. To get an ordinary mapping file, unzip it and join the class entries:
+
+```
+python3 -I - <<'PY'
+import zipfile
+z = zipfile.ZipFile("mapping.prt")
+open("mapping.txt", "w").write("".join(z.read(n).decode() for n in z.namelist() if not n.startswith("R8$$")))
+PY
+retrace mapping.txt crash.txt        # retrace is in the Android SDK's cmdline-tools
+```
+
+Checked on the rehearsal build: 4,293 entries, 422 of the app's own classes mapped. Artifacts are kept for 90 days, so
+copy a release's mapping next to the APK in your own records.
 
 ## Manual QA on a Googlebook (before every final)
 

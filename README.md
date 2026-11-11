@@ -23,8 +23,13 @@ is checked for safety and fitted to your screen before it is used.
    ```
    sha256sum --check --ignore-missing SHA256SUMS
    ```
-   For a stronger check, compare the signing certificate. The release notes give its SHA-256 fingerprint; yours must
-   match:
+   For a stronger check, compare the signing certificate. Every Sunloom release is signed with the same key, whose
+   SHA-256 fingerprint is
+   ```
+   28:67:7F:15:15:29:90:DB:45:BD:49:8B:5D:B0:32:FE:73:45:71:58:C5:5C:11:27:3C:C9:C5:BA:8D:90:34:9F
+   ```
+   and each release's notes repeat it. Yours must match what this prints (look for "certificate SHA-256 digest", which
+   shows the same value without the colons, in lower case):
    ```
    apksigner verify --print-certs Sunloom-<version>-github.apk
    ```
