@@ -317,6 +317,18 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
         @Volatile
         private var sharedInstance: Pair<String, SqliteLibraryStore>? = null
 
+        /** Whether anything was written since the last checkpoint; shared by every handle in the process. */
+        private val writes = WriteTracker()
+
+        /**
+         * Folds the write-ahead log into the main file if, and only if, something was written. A background run that
+         * wrote nothing (a Follow-OS poll with nothing to do) neither opens the database nor builds a repository.
+         */
+        fun checkpointSharedIfWritten() {
+            val store = sharedInstance?.second ?: return
+            writes.runIfWritten { store.checkpoint() }
+        }
+
         /** Forgets the shared instance, so the next [getInstance] opens (and creates) the database afresh. */
         internal fun forgetSharedInstance() {
             synchronized(this) { sharedInstance = null }
@@ -349,6 +361,7 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
         override fun onDowngrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
 
         override fun onCreate(db: SQLiteDatabase) {
+            writes.markWritten()
             db.execSQL(
                 """
                 CREATE TABLE IF NOT EXISTS wallpapers (
@@ -430,6 +443,7 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+            writes.markWritten()
             // SQLiteOpenHelper runs this in a transaction: if a statement throws, nothing is applied, the version
             // stays where it was, and the open fails (storage unavailable) instead of half-migrating.
             for (sql in LibraryMigrations.statements(oldVersion) { table -> columnNames(db, table) }) db.execSQL(sql)
@@ -447,6 +461,7 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
     }
 
     override fun upsertWallpaper(record: WallpaperRecord) {
+        writes.markWritten()
         val db = dbHelper.writableDatabase
         db.transaction {
             val cv = WallpaperRowMapper.toContentValues(record)
@@ -473,11 +488,13 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
     }
 
     override fun deleteWallpaper(id: String) {
+        writes.markWritten()
         val db = dbHelper.writableDatabase
         db.delete("wallpapers", "id = ?", arrayOf(id))
     }
 
     override fun recordRejection(rejection: RejectionRecord) {
+        writes.markWritten()
         val db = dbHelper.writableDatabase
         db.transaction {
             val cv = ContentValues().apply {
@@ -502,10 +519,12 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
     }
 
     override fun clearTransientRejections() {
+        writes.markWritten()
         dbHelper.writableDatabase.execSQL("DELETE FROM rejections WHERE is_permanent = 0")
     }
 
     override fun removeSoftSafetyRecords(reasonCodes: Set<String>) {
+        writes.markWritten()
         if (reasonCodes.isEmpty()) return
         val marks = reasonCodes.joinToString(",") { "?" }
         val args = reasonCodes.toTypedArray()
@@ -539,6 +558,7 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
     }
 
     override fun addBlocklistEntry(entry: BlocklistEntry) {
+        writes.markWritten()
         val db = dbHelper.writableDatabase
         val key = entry.assetId.ifBlank { entry.sha256.ifBlank { entry.dHash.ifBlank { "blk_${entry.createdAtEpochMs}" } } }
         val cv = ContentValues().apply {

@@ -500,8 +500,9 @@ class SunloomWallpaperScheduler(
  * `sunloom_library.db` but not the `-wal` file, and a run can finish while the app is closed, so without this a
  * backup taken afterwards would miss the run's last writes (blocklist and rejection rows especially).
  */
-internal fun checkpointAfterRun(context: Context) {
-    context.appContainer().newRepository().checkpointStore()
+internal fun checkpointAfterRun() {
+    // No repository is built for this: a poll that wrote nothing must stay cheap, and a store that is down stays untouched.
+    com.sunloom.app.data.repository.SqliteLibraryStore.checkpointSharedIfWritten()
 }
 
 class ChangeWorker(
@@ -512,7 +513,7 @@ class ChangeWorker(
         runAttemptCount = runAttemptCount,
         execute = { SunloomWallpaperScheduler.executeScheduledWallpaperChange(applicationContext) },
         onGiveUp = { SunloomWallpaperScheduler.rearmAfterGivingUp(applicationContext) },
-        afterRun = { checkpointAfterRun(applicationContext) },
+        afterRun = { checkpointAfterRun() },
         onStoreUnavailable = { SunloomWallpaperScheduler(applicationContext).suspendForUnavailableStore() }
     )
 }
@@ -535,7 +536,7 @@ class RefreshWorker(
     override suspend fun doWork(): Result = mapRefreshWorkResult(
         runAttemptCount = runAttemptCount,
         execute = { SunloomWallpaperScheduler.executeScheduledCatalogRefresh(applicationContext) },
-        afterRun = { checkpointAfterRun(applicationContext) },
+        afterRun = { checkpointAfterRun() },
         onStoreUnavailable = { SunloomWallpaperScheduler(applicationContext).suspendForUnavailableStore() }
     )
 }

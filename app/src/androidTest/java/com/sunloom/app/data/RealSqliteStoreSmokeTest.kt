@@ -85,4 +85,17 @@ class RealSqliteStoreSmokeTest {
             assertTrue(wallpaperColumns.containsAll(listOf("description", "crop_x", "lightness_p50", "hue_bucket")))
         }
     }
+
+    @Test
+    fun aBackgroundRunCheckpointsOnlyWhenItWrote() {
+        val store = SqliteLibraryStore.getInstance(context)
+        store.getAllBlocklistEntries() // opens (and, on a fresh database, creates) it
+        SqliteLibraryStore.checkpointSharedIfWritten() // settles whatever opening wrote
+        store.addBlocklistEntry(BlocklistEntry("asset-run", "sha-run", "dhash-run", "test", "smoke", 3L))
+        val wal = java.io.File(context.getDatabasePath(SqliteLibraryStore.DATABASE_NAME).path + "-wal")
+
+        SqliteLibraryStore.checkpointSharedIfWritten()
+
+        assertTrue("the write reached the main file", !wal.exists() || wal.length() == 0L)
+    }
 }
