@@ -188,6 +188,9 @@ fun SunloomApp(
         { runCatching { rootFocusRequester.requestFocus() }; Unit }
     }
     val context = LocalContext.current
+    val singleKeyShortcuts = remember(context) {
+        SingleKeyShortcuts(UiPrefs.singleKeyShortcuts(context)) { UiPrefs.setSingleKeyShortcuts(context, it) }
+    }
     val scope = rememberCoroutineScope()
     val attributionCopiedMessage = stringResource(R.string.attribution_copied)
     val showMessage: (String) -> Unit = remember(scope, snackbarHostState) {
@@ -216,6 +219,7 @@ fun SunloomApp(
 
     CompositionLocalProvider(
         LocalShortcutGate provides shortcutGate,
+        LocalSingleKeyShortcuts provides singleKeyShortcuts,
         LocalRestoreRootFocus provides restoreRootFocus,
         LocalWallpaperActions provides wallpaperActions
     ) {
@@ -223,6 +227,7 @@ fun SunloomApp(
         Surface(
             modifier = Modifier
                 .fillMaxSize()
+                .testTag("workspace_root")
                 .busyCursor(uiState.isApplyingWallpaper || uiState.isSyncingOnline)
                 .focusRequester(rootFocusRequester)
                 .focusable()
@@ -275,7 +280,7 @@ fun SunloomApp(
                             true
                         }
                         // Single-key accelerators never fire while typing or before setup is complete.
-                        shortcutGate.isTextInputFocused || !workspaceReady -> false
+                        shortcutGate.isTextInputFocused || !workspaceReady || !singleKeyShortcuts.enabled -> false
                         else -> when (event.key) {
                             Key.N -> {
                                 onNextWallpaper()
@@ -754,18 +759,22 @@ fun DesktopWorkspaceScreen(
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
                     DesktopNavTab.entries.forEach { tab ->
-                        NavigationRailItem(
-                            selected = uiState.activeTab == tab,
-                            onClick = { onSelectTab(tab) },
-                            modifier = Modifier.desktopControl(MaterialTheme.shapes.large).testTag("nav_${tab.name}"),
-                            icon = { Icon(navIcon(tab), contentDescription = if (showLabels) null else tab.label) },
-                            label = if (showLabels) {
-                                { Text(tab.label, fontSize = 12.sp) }
-                            } else {
-                                null
-                            },
-                            alwaysShowLabel = showLabels
-                        )
+                        // Without text beside the icon, hover or long-press names the section.
+                        val railItem: @Composable () -> Unit = {
+                            NavigationRailItem(
+                                selected = uiState.activeTab == tab,
+                                onClick = { onSelectTab(tab) },
+                                modifier = Modifier.desktopControl(MaterialTheme.shapes.large).testTag("nav_${tab.name}"),
+                                icon = { Icon(navIcon(tab), contentDescription = if (showLabels) null else tab.label) },
+                                label = if (showLabels) {
+                                    { Text(tab.label, fontSize = 12.sp) }
+                                } else {
+                                    null
+                                },
+                                alwaysShowLabel = showLabels
+                            )
+                        }
+                        if (showLabels) railItem() else ShortcutTooltip(tab.label) { railItem() }
                     }
                 }
                 workspace(Modifier.weight(1f).fillMaxHeight())

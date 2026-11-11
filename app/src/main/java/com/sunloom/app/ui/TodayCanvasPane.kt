@@ -40,6 +40,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.OutlinedButton
@@ -172,7 +174,7 @@ internal fun TodayCanvasPane(
                                 if (current.isFavorite) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
                                 "ctx_keep"
                             ) { dismiss(); onToggleKeep() }
-                            ContextMenuItem("About this image\u2026", "ctx_about") { dismiss(); showAbout = true }
+                            ContextMenuItem(stringResource(R.string.about_this_image), "ctx_about") { dismiss(); showAbout = true }
                             ContextMenuItem(stringResource(R.string.copy_attribution), "ctx_copy_attribution") {
                                 dismiss(); actions.copyAttribution(current)
                             }
@@ -197,12 +199,23 @@ internal fun TodayCanvasPane(
                     ) {
                         Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
                             Column(modifier = Modifier.fillMaxWidth()) {
-                                TruncatedTitleWithTooltip(
-                                    title = current?.title ?: "No Wallpaper Selected",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        TruncatedTitleWithTooltip(
+                                            title = current?.title ?: "No Wallpaper Selected",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                    if (current != null) {
+                                        MoreMenuButton(
+                                            onAbout = { showAbout = true },
+                                            onCopyAttribution = { actions.copyAttribution(current) },
+                                            onSaveAs = { actions.saveAs(current) }
+                                        )
+                                    }
+                                }
                                 if (current == null) {
                                     Text(
                                         text = stringResource(R.string.nothing_is_showing_yet_fetch_a_batch_of),
@@ -639,6 +652,33 @@ internal fun HostRestrictionNotice() {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
+        }
+    }
+}
+
+/** A visible button for what the right-click menu offers, for touch, keyboard and screen-reader users. */
+@Composable
+private fun MoreMenuButton(onAbout: () -> Unit, onCopyAttribution: () -> Unit, onSaveAs: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        ShortcutTooltip(stringResource(R.string.more_actions)) {
+            IconButton(
+                onClick = { open = true },
+                modifier = Modifier.desktopControl(CircleShape).testTag("today_more_button")
+            ) {
+                Icon(SunloomIcons.MoreVert, contentDescription = stringResource(R.string.more_actions))
+            }
+        }
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            modifier = Modifier.dismissOnEscape { open = false }
+        ) {
+            ContextMenuItem(stringResource(R.string.about_this_image), "more_about") { open = false; onAbout() }
+            ContextMenuItem(stringResource(R.string.copy_attribution), "more_copy_attribution") {
+                open = false; onCopyAttribution()
+            }
+            ContextMenuItem(stringResource(R.string.save_wallpaper_as), "more_save_as") { open = false; onSaveAs() }
         }
     }
 }

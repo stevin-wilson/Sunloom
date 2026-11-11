@@ -393,6 +393,29 @@ object SunloomIcons {
         }
     }
 
+    val MoreVert: ImageVector = icon24("MoreVert") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(12f, 8f)
+            curveToRelative(1.1f, 0f, 2f, -0.9f, 2f, -2f)
+            reflectiveCurveToRelative(-0.9f, -2f, -2f, -2f)
+            reflectiveCurveToRelative(-2f, 0.9f, -2f, 2f)
+            reflectiveCurveToRelative(0.9f, 2f, 2f, 2f)
+            close()
+            moveTo(12f, 10f)
+            curveToRelative(-1.1f, 0f, -2f, 0.9f, -2f, 2f)
+            reflectiveCurveToRelative(0.9f, 2f, 2f, 2f)
+            reflectiveCurveToRelative(2f, -0.9f, 2f, -2f)
+            reflectiveCurveToRelative(-0.9f, -2f, -2f, -2f)
+            close()
+            moveTo(12f, 16f)
+            curveToRelative(-1.1f, 0f, -2f, 0.9f, -2f, 2f)
+            reflectiveCurveToRelative(0.9f, 2f, 2f, 2f)
+            reflectiveCurveToRelative(2f, -0.9f, 2f, -2f)
+            reflectiveCurveToRelative(-0.9f, -2f, -2f, -2f)
+            close()
+        }
+    }
+
     val Pause: ImageVector = icon24("Pause") {
         path(fill = SolidColor(Color.Black)) {
             moveTo(6f, 19f)

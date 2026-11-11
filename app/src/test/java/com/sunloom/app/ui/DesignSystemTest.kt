@@ -72,6 +72,34 @@ class DesignSystemTest {
     }
 
     @Test
+    fun `coloured text is readable on every surface it is drawn on`() {
+        val texts = listOf("primary", "secondary", "tertiary", "error", "onSurfaceVariant")
+        val grounds = listOf("background", "surface", "surfaceVariant", "surfaceContainer", "surfaceContainerHigh")
+        val weak = schemes.flatMap { (name, triple) ->
+            val r = roles(triple.first)
+            texts.flatMap { fg ->
+                grounds.mapNotNull { bg ->
+                    val ratio = contrastRatio(r.getValue(fg), r.getValue(bg))
+                    "$name $fg on $bg = ${"%.2f".format(ratio)}".takeIf { ratio < 4.5f }
+                }
+            }
+        }
+        assertTrue(weak.joinToString("\n"), weak.isEmpty())
+    }
+
+    @Test
+    fun `borders and outlines can be seen against the surface`() {
+        val weak = schemes.flatMap { (name, triple) ->
+            val r = roles(triple.first)
+            listOf("background", "surface", "surfaceContainer").mapNotNull { bg ->
+                val ratio = contrastRatio(r.getValue("outline"), r.getValue(bg))
+                "$name outline on $bg = ${"%.2f".format(ratio)}".takeIf { ratio < 3f }
+            }
+        }
+        assertTrue(weak.joinToString("\n"), weak.isEmpty())
+    }
+
+    @Test
     fun `the surface containers step in the right direction`() {
         // Light themes get darker as they rise; dark themes get lighter.
         for ((name, triple) in schemes) {

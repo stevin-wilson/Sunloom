@@ -71,6 +71,20 @@ class ShortcutGate {
 
 val LocalShortcutGate = staticCompositionLocalOf { ShortcutGate() }
 
+/** Whether the single-character shortcuts (N, P, K, Delete) are on; the person can turn them off (WCAG 2.1.4). */
+@Stable
+class SingleKeyShortcuts(initial: Boolean, private val persist: (Boolean) -> Unit) {
+    var enabled by mutableStateOf(initial)
+        private set
+
+    fun set(value: Boolean) {
+        enabled = value
+        persist(value)
+    }
+}
+
+val LocalSingleKeyShortcuts = staticCompositionLocalOf { SingleKeyShortcuts(true) {} }
+
 /**
  * Marks this element as a text input. While it (or a descendant) has focus, root
  * accelerators are suppressed. Safe if the element leaves composition while focused.

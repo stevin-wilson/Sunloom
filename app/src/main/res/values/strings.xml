@@ -107,6 +107,12 @@
     <string name="banner_note_manual">%1$s • Changes when you tap Next</string>
     <string name="technical_details">Technical details</string>
     <string name="technical_details_hint">For bug reports: what each picture passed and why others were skipped.</string>
+    <string name="single_key_shortcuts">Single-key shortcuts</string>
+    <string name="single_key_shortcuts_hint">Letter keys like N, P and K work without Ctrl. Turn them off if keys are pressed by accident or by voice control.</string>
+    <string name="about_this_image">About this image…</string>
+    <string name="more_actions">More actions</string>
+    <string name="select_card">Select</string>
+    <string name="unselect_card">Unselect</string>
     <string name="apply_now">Apply now</string>
     <string name="show_more">Show more</string>
     <string name="show_less">Show less</string>

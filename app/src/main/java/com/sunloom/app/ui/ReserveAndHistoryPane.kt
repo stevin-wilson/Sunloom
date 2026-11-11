@@ -39,6 +39,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -441,13 +443,20 @@ private fun ReserveItemCard(
     val isActive = uiState.currentWallpaper?.id == item.id
     val shape = MaterialTheme.shapes.medium
     val pressGuard = remember { SelectionPressGuard() }
+    val selectLabel = stringResource(R.string.select_card)
+    val unselectLabel = stringResource(R.string.unselect_card)
     CompositionLocalProvider(LocalSelectionPressGuard provides pressGuard) {
     ContextMenuHost(
         modifier = Modifier
             .fillMaxWidth()
             .focusRequester(focusRequester)
             .pointerPressWithModifiers(pressGuard, onPress)
-            .semantics { this.selected = selected }
+            .semantics {
+                this.selected = selected
+                customActions = listOf(
+                    CustomAccessibilityAction(if (selected) unselectLabel else selectLabel) { onToggleSelected(); true }
+                )
+            }
             .testTag("reserve_card_${item.id}"),
         focusShape = shape,
         onActivate = if (!isActive && !restricted) ({ onApplySpecific(item.id) }) else null,
@@ -483,7 +492,7 @@ private fun ReserveItemCard(
                 dismiss()
                 onToggleKeepSpecific(item.id)
             }
-            ContextMenuItem("About this image\u2026", "ctx_about_${item.id}") {
+            ContextMenuItem(stringResource(R.string.about_this_image), "ctx_about_${item.id}") {
                 dismiss()
                 onShowAbout()
             }

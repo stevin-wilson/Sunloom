@@ -138,6 +138,26 @@ class ReserveDesktopTest {
     }
 
     @Test
+    fun `a screen reader can select and unselect a card with a custom action`() {
+        content(reserveState())
+        fun action(label: String) = composeTestRule.onNodeWithTag("reserve_card_${ids[0]}").performScrollTo()
+            .fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.CustomActions]
+            .firstOrNull { it.label == label }
+
+        val select = action("Select")
+        assertTrue("a Select action is offered", select != null)
+        composeTestRule.runOnUiThread { select!!.action() }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("reserve_selection_bar").assertExists()
+
+        val deselect = action("Unselect")
+        assertTrue("then an Unselect action", deselect != null)
+        composeTestRule.runOnUiThread { deselect!!.action() }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("reserve_selection_bar").assertDoesNotExist()
+    }
+
+    @Test
     fun `clear button and Escape both drop the selection`() {
         content(reserveState())
         ctrlClick("reserve_card_${ids[0]}")

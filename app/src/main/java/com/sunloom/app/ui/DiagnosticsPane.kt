@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import androidx.compose.material3.Switch
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.CircleShape
 import com.sunloom.app.R
@@ -171,6 +172,43 @@ internal fun DiagnosticsPane(
                             modifier = Modifier.desktopControl(CircleShape).testTag("report_problem_button")
                         ) { Text(stringResource(R.string.report_a_problem)) }
                     }
+                }
+            }
+        }
+
+        item(key = "diag_keyboard") {
+            val singleKeys = LocalSingleKeyShortcuts.current
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth().padding(bottom = Spacing.m)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(Spacing.l),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = Spacing.m)) {
+                        Text(
+                            stringResource(R.string.single_key_shortcuts),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.sectionHeading()
+                        )
+                        Text(
+                            stringResource(R.string.single_key_shortcuts_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = singleKeys.enabled,
+                        onCheckedChange = singleKeys::set,
+                        modifier = Modifier
+                            .desktopControl(CircleShape)
+                            .switchLabel(stringResource(R.string.single_key_shortcuts))
+                            .testTag("single_key_shortcuts_switch")
+                    )
                 }
             }
         }
