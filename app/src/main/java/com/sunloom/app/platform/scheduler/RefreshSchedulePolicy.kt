@@ -64,6 +64,35 @@ internal object RefreshSchedulePolicy {
     fun shouldReactToThemeChange(mode: ScheduleMode, previousNight: Boolean?, nowNight: Boolean): Boolean =
         mode == ScheduleMode.FOLLOW_OS_THEME && previousNight != null && previousNight != nowNight
 
+    /** The "Change every" choices in hours; 0 is Off. */
+    val CHANGE_EVERY_CHOICES_HOURS: List<Int> = listOf(0, 1, 3, 6, 12)
+
+    /** Shortest wait before an overdue interval change, so a long sleep makes one change, not a burst. */
+    const val MIN_CHANGE_DELAY_MS = 60_000L
+
+    /** Anything that is not an offered choice (a stale or hand-edited value) means Off. */
+    fun sanitizeChangeEveryHours(hours: Int): Int = if (hours in CHANGE_EVERY_CHOICES_HOURS) hours else 0
+
+    /** The interval is an addition to automatic changes: it does nothing when they are off, paused or manual. */
+    fun intervalApplies(changeEveryHours: Int, scheduleChanges: Boolean): Boolean =
+        scheduleChanges && sanitizeChangeEveryHours(changeEveryHours) > 0
+
+    /**
+     * The wait until the next change: the earlier of the next transition and the interval after the last change.
+     * Anchoring to the last change means saving an unrelated setting (which re-arms the work) does not restart the
+     * countdown. An overdue interval waits one minute, so a long sleep makes a single change, not a burst
+     * (Article III §3). Null means there is nothing to wait for and the caller uses its own fallback.
+     */
+    fun nextChangeDelayMs(transitionDelayMs: Long?, changeEveryHours: Int, lastChangeEpochMs: Long?, nowEpochMs: Long): Long? {
+        val hours = sanitizeChangeEveryHours(changeEveryHours)
+        if (hours == 0) return transitionDelayMs
+        val intervalMs = hours * 3_600_000L
+        // A last change in the future (the clock was stepped back) counts as just now.
+        val last = lastChangeEpochMs?.coerceAtMost(nowEpochMs) ?: nowEpochMs
+        val intervalDelay = (last + intervalMs - nowEpochMs).coerceAtLeast(MIN_CHANGE_DELAY_MS)
+        return if (transitionDelayMs == null) intervalDelay else minOf(transitionDelayMs, intervalDelay)
+    }
+
     /** How often a suspended automation checks whether the library store opens again (Article VII §6). */
     const val STORE_WATCH_INTERVAL_HOURS = 6L
 
