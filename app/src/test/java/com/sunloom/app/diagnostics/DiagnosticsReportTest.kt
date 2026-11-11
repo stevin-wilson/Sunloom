@@ -98,4 +98,51 @@ class DiagnosticsReportTest {
     fun `the flavor is part of the issue so a Play build is told apart`() {
         assertEquals(true, URLDecoder.decode(ReportProblem.issueUrl(info.copy(flavor = "play")), "UTF-8").contains("play"))
     }
+
+    // --- nothing that names a file or a place on the device ---
+
+    @Test
+    fun `scrubbing removes file paths and content or file URIs`() {
+        val text = "java.io.FileNotFoundException: /data/user/0/com.sunloom.app/files/wallpapers/local-1a2b.png (No such file) " +
+            "while reading content://com.android.providers.media/external/images/media/42 and file:///sdcard/Pictures/holiday.jpg"
+
+        val clean = DiagnosticsReport.scrub(text)
+
+        assertFalse(clean, clean.contains("/data/user") || clean.contains("local-1a2b") || clean.contains("holiday"))
+        assertFalse(clean, clean.contains("content://") || clean.contains("providers.media") || clean.contains("file:///"))
+        assertTrue("the kind of error is kept", clean.contains("FileNotFoundException") && clean.contains("No such file"))
+    }
+
+    @Test
+    fun `scrubbing keeps a web address's host but not its path or query`() {
+        val clean = DiagnosticsReport.scrub("HTTP 503 from https://api.artic.edu/api/v1/artworks/search?q=cat&token=abc")
+
+        assertTrue(clean, clean.contains("https://api.artic.edu"))
+        assertFalse(clean, clean.contains("artworks") || clean.contains("token"))
+    }
+
+    @Test
+    fun `scrubbing leaves stack frames and ordinary text alone`() {
+        val frames = "at java.base/java.lang.Thread.run(Thread.java:1012)\nat com.sunloom.app.ui.MainActivity.onCreate(MainActivity.kt:94)"
+
+        assertEquals(frames, DiagnosticsReport.scrub(frames))
+        assertEquals("Connection error", DiagnosticsReport.scrub("Connection error"))
+    }
+
+    @Test
+    fun `the report is scrubbed wherever it carries text from the device`() {
+        val dirty = state.copy(
+            statusBannerMessage = "Couldn't read /storage/emulated/0/DCIM/private.jpg",
+            sourceDiagnostics = listOf(
+                SourceDiagnostics("artic_cc0", "Art Institute", isAdmitted = true, isEnabled = true,
+                    lastError = "failed on content://media/external/42", lastSyncSummary = "fetched 8")
+            )
+        )
+        val crash = CrashEntry("c.txt", 1L, "java.io.IOException: /data/user/0/com.sunloom.app/files/wallpapers/local-9.png\nat x.Y.z(Y.kt:1)")
+
+        val text = DiagnosticsReport.build(info, dirty, listOf(crash))
+
+        assertFalse(text, text.contains("private.jpg") || text.contains("local-9") || text.contains("content://media") || text.contains("/data/user"))
+        assertTrue("and still says what failed", text.contains("IOException") && text.contains("artic_cc0"))
+    }
 }

@@ -11,6 +11,26 @@ import java.net.URLEncoder
 object DiagnosticsReport {
     private const val CRASH_LINES = 12
 
+    // A web address: keep its scheme and host (they say which source failed), drop the path and query.
+    private val WEB_ADDRESS = Regex("""(https?://[^/\s?#)'",]+)[^\s)'",]*""", RegexOption.IGNORE_CASE)
+
+    // Any other address (content://, file://, ...) can name a person's file; it is replaced whole.
+    private val OTHER_ADDRESS = Regex("""\b[a-zA-Z][a-zA-Z0-9+.-]*://[^\s)'",]*""")
+
+    // A path on the device: starts a word with "/" and has at least a folder and a name. Not "java.base/java.lang" frames.
+    private val FILE_PATH = Regex("""(?<![\w:./-])/(?:[\w.@+~%-]+/)+[\w.@+~%-]*""")
+
+    /**
+     * Text that comes from the device - an exception message, a failed request - can name a file, a content address or a
+     * folder under the person's name. A bug report is public, so those are replaced; what failed and where in the code
+     * stays.
+     */
+    fun scrub(text: String): String {
+        val webSafe = WEB_ADDRESS.replace(text) { it.groupValues[1] }
+        val noOtherAddresses = OTHER_ADDRESS.replace(webSafe) { m -> if (m.value.startsWith("http", ignoreCase = true)) m.value else "<address>" }
+        return FILE_PATH.replace(noOtherAddresses, "<path>")
+    }
+
     fun build(info: AppInfo, state: SunloomUiState, crashes: List<CrashEntry>): String = buildString {
         val p = state.preferences
         appendLine("Sunloom diagnostics")
@@ -24,13 +44,13 @@ object DiagnosticsReport {
             "wifiOnly=${p.wifiOnlyDownloads}, deferOnBatterySaver=${p.deferOnBatterySaver}, setupDone=${p.isSetupCompleted}")
         appendLine("Reserve: ${state.lightReserveCount} light, ${state.darkReserveCount} dark, ${state.libraryWallpapers.size} total, " +
             "${state.totalCacheBytesUsed / (1024 * 1024)} MB of ${p.maxCacheBytes / (1024 * 1024)} MB")
-        appendLine("Status: ${state.statusBannerMessage}")
+        appendLine("Status: ${scrub(state.statusBannerMessage)}")
         appendLine()
         appendLine("Sources:")
         state.sourceDiagnostics.filter { it.isAdmitted }.forEach { s ->
             append("  ${s.sourceId}: enabled=${s.isEnabled}, health=${s.healthState.name}, failures=${s.consecutiveFailures}")
-            if (s.lastError.isNotBlank()) append(", error=${s.lastError}")
-            if (s.lastSyncSummary.isNotBlank()) append(", last sync: ${s.lastSyncSummary}")
+            if (s.lastError.isNotBlank()) append(", error=${scrub(s.lastError)}")
+            if (s.lastSyncSummary.isNotBlank()) append(", last sync: ${scrub(s.lastSyncSummary)}")
             appendLine()
         }
         appendLine()
@@ -38,7 +58,7 @@ object DiagnosticsReport {
             appendLine("Recent crashes: none")
         } else {
             appendLine("Recent crashes (${crashes.size}):")
-            crashes.forEach { c -> appendLine(c.text.lines().take(CRASH_LINES).joinToString("\n").prependIndent("  ")) }
+            crashes.forEach { c -> appendLine(scrub(c.text.lines().take(CRASH_LINES).joinToString("\n")).prependIndent("  ")) }
         }
     }
 }
