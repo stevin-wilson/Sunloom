@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import androidx.compose.foundation.shape.CircleShape
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -81,16 +81,16 @@ fun FirstRunSetupScreen(
             // Keep setup a readable column on ultra-wide windows (UI_Secondary_Elements).
             .wrapContentWidth(Alignment.CenterHorizontally)
             .widthIn(max = 760.dp)
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(Spacing.xl),
+        verticalArrangement = Arrangement.spacedBy(Spacing.l)
     ) {
         SetupHeader(step)
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
+            shape = MaterialTheme.shapes.large,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
                 when (step) {
                     SetupStep.WELCOME -> WelcomeStep()
                     SetupStep.SCHEDULE -> ScheduleStep(draftPrefs, cityWasGuessed) { draftPrefs = it }
@@ -117,7 +117,7 @@ private fun withGuessedCity(prefs: UserPreferences, zone: java.time.ZoneId): Use
 
 @Composable
 private fun SetupHeader(step: SetupStep) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
         Text(
             text = stringResource(R.string.welcome_to_sunloom),
             style = MaterialTheme.typography.headlineMedium,
@@ -181,7 +181,7 @@ private fun ScheduleStep(draft: UserPreferences, cityWasGuessed: Boolean, onChan
             checked = draft.autoChangeEnabled,
             onCheckedChange = { onChange(draft.copy(autoChangeEnabled = it)) },
             modifier = Modifier
-                .desktopControl(RoundedCornerShape(50))
+                .desktopControl(CircleShape)
                 .switchLabel(stringResource(R.string.automatic_wallpaper_schedule))
                 .testTag("setup_auto_switch")
         )
@@ -193,13 +193,13 @@ private fun ScheduleStep(draft: UserPreferences, cityWasGuessed: Boolean, onChan
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.SemiBold
     )
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.s), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
         ScheduleMode.entries.forEach { mode ->
             FilterChip(
                 selected = draft.scheduleMode == mode,
                 onClick = { onChange(draft.copy(scheduleMode = mode)) },
                 label = { Text(mode.label) },
-                modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
             )
         }
     }
@@ -238,7 +238,7 @@ private fun ContentStep(draft: UserPreferences, onChange: (UserPreferences) -> U
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.s), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
         SafeCategory.entries.filter { it != SafeCategory.USER_LOCAL }.forEach { cat ->
             val selected = cat in draft.enabledCategories
             FilterChip(
@@ -250,7 +250,7 @@ private fun ContentStep(draft: UserPreferences, onChange: (UserPreferences) -> U
                     onChange(draft.copy(enabledCategories = next))
                 },
                 label = { Text(cat.displayName) },
-                modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
             )
         }
     }
@@ -266,13 +266,13 @@ private fun ContentStep(draft: UserPreferences, onChange: (UserPreferences) -> U
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.sectionHeading()
     )
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.s), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
         LockWorkspacePolicy.entries.forEach { policy ->
             FilterChip(
                 selected = draft.lockWorkspacePolicy == policy,
                 onClick = { onChange(draft.copy(lockWorkspacePolicy = policy)) },
                 label = { Text(policy.label) },
-                modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
             )
         }
     }
@@ -286,12 +286,12 @@ private fun FinishStep(uiState: SunloomUiState, draft: UserPreferences, onChange
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.sectionHeading()
     )
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.l)) {
         val library = uiState.libraryWallpapers
         val sampleLight = library.firstOrNull { it.evaluation.brightnessClass == BrightnessClass.LIGHT }
         val sampleDark = library.firstOrNull { it.evaluation.brightnessClass == BrightnessClass.DARK }
         if (sampleLight != null) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
                 WallpaperPreviewSurface(
                     record = sampleLight,
                     showLegibilityZones = false,
@@ -303,7 +303,7 @@ private fun FinishStep(uiState: SunloomUiState, draft: UserPreferences, onChange
             }
         }
         if (sampleDark != null) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
                 WallpaperPreviewSurface(
                     record = sampleDark,
                     showLegibilityZones = false,
@@ -335,7 +335,7 @@ private fun FinishStep(uiState: SunloomUiState, draft: UserPreferences, onChange
                 checked = draft.weeklyUpdateCheck,
                 onCheckedChange = { onChange(draft.copy(weeklyUpdateCheck = it)) },
                 modifier = Modifier
-                    .desktopControl(RoundedCornerShape(50))
+                    .desktopControl(CircleShape)
                     .switchLabel(stringResource(R.string.setup_update_opt_in))
                     .testTag("setup_update_opt_in")
             )
@@ -348,13 +348,13 @@ private fun FinishStep(uiState: SunloomUiState, draft: UserPreferences, onChange
 private fun SetupButtons(step: SetupStep, autoOn: Boolean, onStep: (SetupStep) -> Unit, onFinish: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.m),
         verticalAlignment = Alignment.CenterVertically
     ) {
         step.back()?.let { previous ->
             TextButton(
                 onClick = { onStep(previous) },
-                modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("setup_back_button")
+                modifier = Modifier.desktopControl(CircleShape).testTag("setup_back_button")
             ) {
                 Text(stringResource(R.string.setup_back))
             }
@@ -364,16 +364,16 @@ private fun SetupButtons(step: SetupStep, autoOn: Boolean, onStep: (SetupStep) -
             step.isFirst -> {
                 OutlinedButton(
                     onClick = { onStep(step.next() ?: step) },
-                    modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("setup_customize_button")
+                    modifier = Modifier.desktopControl(CircleShape).testTag("setup_customize_button")
                 ) { Text(stringResource(R.string.setup_customize)) }
                 Button(
                     onClick = onFinish,
-                    modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("start_with_defaults_button")
+                    modifier = Modifier.desktopControl(CircleShape).testTag("start_with_defaults_button")
                 ) { Text(stringResource(R.string.setup_start_with_defaults), fontWeight = FontWeight.SemiBold) }
             }
             step.isLast -> Button(
                 onClick = onFinish,
-                modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("enable_sunloom_button")
+                modifier = Modifier.desktopControl(CircleShape).testTag("enable_sunloom_button")
             ) {
                 Icon(SunloomIcons.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
@@ -384,7 +384,7 @@ private fun SetupButtons(step: SetupStep, autoOn: Boolean, onStep: (SetupStep) -
             }
             else -> Button(
                 onClick = { onStep(step.next() ?: step) },
-                modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("setup_next_button")
+                modifier = Modifier.desktopControl(CircleShape).testTag("setup_next_button")
             ) { Text(stringResource(R.string.setup_next), fontWeight = FontWeight.SemiBold) }
         }
     }

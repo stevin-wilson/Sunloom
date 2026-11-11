@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import androidx.compose.foundation.shape.CircleShape
 import com.sunloom.app.R
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.res.stringResource
@@ -33,7 +34,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -219,7 +219,7 @@ fun SunloomApp(
         LocalRestoreRootFocus provides restoreRootFocus,
         LocalWallpaperActions provides wallpaperActions
     ) {
-    MaterialTheme(colorScheme = colorScheme) {
+    MaterialTheme(colorScheme = colorScheme, shapes = SunloomShapes) {
         Surface(
             modifier = Modifier
                 .fillMaxSize()
@@ -325,7 +325,7 @@ fun SunloomApp(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(32.dp),
+                            .padding(Spacing.xxl),
                         contentAlignment = Alignment.Center
                     ) {
                         Card(
@@ -335,8 +335,8 @@ fun SunloomApp(
                             )
                         ) {
                             Column(
-                                modifier = Modifier.padding(24.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                modifier = Modifier.padding(Spacing.xl),
+                                verticalArrangement = Arrangement.spacedBy(Spacing.m)
                             ) {
                                 Text(
                                     text = stringResource(R.string.local_library_database_unavailable),
@@ -354,7 +354,7 @@ fun SunloomApp(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                OutlinedButton(onClick = onRestoreSystemDefault, modifier = Modifier.desktopControl(RoundedCornerShape(50))) {
+                                OutlinedButton(onClick = onRestoreSystemDefault, modifier = Modifier.desktopControl(CircleShape)) {
                                     Text(stringResource(R.string.restore_system_default_wallpaper))
                                 }
                             }
@@ -365,13 +365,13 @@ fun SunloomApp(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(32.dp),
+                            .padding(Spacing.xxl),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(
                             modifier = Modifier.width(360.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                            verticalArrangement = Arrangement.spacedBy(Spacing.m)
                         ) {
                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                             Text(
@@ -645,7 +645,7 @@ fun DesktopWorkspaceScreen(
         val workspace: @Composable (Modifier) -> Unit = { paneModifier ->
             Column(
                 modifier = paneModifier.padding(contentPadding),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(Spacing.m)
             ) {
                 TopStatusBanner(
                     uiState = uiState,
@@ -730,7 +730,7 @@ fun DesktopWorkspaceScreen(
                         NavigationBarItem(
                             selected = uiState.activeTab == tab,
                             onClick = { onSelectTab(tab) },
-                            modifier = Modifier.desktopControl(RoundedCornerShape(16.dp)).testTag("nav_${tab.name}"),
+                            modifier = Modifier.desktopControl(MaterialTheme.shapes.large).testTag("nav_${tab.name}"),
                             icon = { Icon(navIcon(tab), contentDescription = null) }, // the visible label names it
                             label = { Text(tab.label, fontSize = 12.sp, maxLines = 1) }
                         )
@@ -757,7 +757,7 @@ fun DesktopWorkspaceScreen(
                         NavigationRailItem(
                             selected = uiState.activeTab == tab,
                             onClick = { onSelectTab(tab) },
-                            modifier = Modifier.desktopControl(RoundedCornerShape(16.dp)).testTag("nav_${tab.name}"),
+                            modifier = Modifier.desktopControl(MaterialTheme.shapes.large).testTag("nav_${tab.name}"),
                             icon = { Icon(navIcon(tab), contentDescription = if (showLabels) null else tab.label) },
                             label = if (showLabels) {
                                 { Text(tab.label, fontSize = 12.sp) }
@@ -821,7 +821,7 @@ private fun TopStatusBanner(
         uiState.preferences.scheduleMode != ScheduleMode.MANUAL_ONLY
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.medium,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -834,7 +834,7 @@ private fun TopStatusBanner(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.m),
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(

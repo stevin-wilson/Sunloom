@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -80,7 +79,7 @@ fun Modifier.secondaryClickMenu(onOpen: (Offset) -> Unit): Modifier = this
 @Composable
 fun ContextMenuHost(
     modifier: Modifier = Modifier,
-    focusShape: Shape = RoundedCornerShape(14.dp),
+    focusShape: Shape = MaterialTheme.shapes.medium,
     onActivate: (() -> Unit)? = null,
     onExtraKeyEvent: ((androidx.compose.ui.input.key.KeyEvent) -> Boolean)? = null,
     menuContent: @Composable ColumnScope.(dismiss: () -> Unit) -> Unit,
@@ -214,7 +213,7 @@ fun WallpaperAboutDialog(record: WallpaperRecord, onDismiss: () -> Unit) {
                     .desktopScrollbar(scrollState)
                     .verticalScroll(scrollState)
                     .testTag("wallpaper_about_dialog"),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(Spacing.s)
             ) {
                 ProvenanceDetails(record)
             }

@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -9,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -59,10 +59,10 @@ private fun AboutCard(updateCheck: UpdateCheckUiState, onCheckForUpdates: () -> 
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp).testTag("about_card")
     ) {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
             Text(
                 stringResource(R.string.about_sunloom),
                 style = MaterialTheme.typography.titleMedium,
@@ -79,7 +79,7 @@ private fun AboutCard(updateCheck: UpdateCheckUiState, onCheckForUpdates: () -> 
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.s), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
                 LinkButton(R.string.privacy_policy, "about_privacy_policy") {
                     runCatching { uris.openUri(ProjectLinks.PRIVACY_POLICY) }
                 }
@@ -96,7 +96,7 @@ private fun AboutCard(updateCheck: UpdateCheckUiState, onCheckForUpdates: () -> 
 
 @Composable
 private fun LinkButton(label: Int, tag: String, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag(tag)) {
+    OutlinedButton(onClick = onClick, modifier = Modifier.desktopControl(CircleShape).testTag(tag)) {
         Text(stringResource(label))
     }
 }
@@ -104,7 +104,7 @@ private fun LinkButton(label: Int, tag: String, onClick: () -> Unit) {
 /** The GitHub build's "Check for updates", and what it found in plain words. Never offers to install anything. */
 @Composable
 private fun UpdateCheckRow(state: UpdateCheckUiState, onCheck: () -> Unit, openPage: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.s), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
         when (state) {
             UpdateCheckUiState.Checking -> Text(stringResource(R.string.update_checking), style = MaterialTheme.typography.bodySmall)
             is UpdateCheckUiState.Done -> when (val result = state.result) {
@@ -138,10 +138,10 @@ private fun UpdateCheckRow(state: UpdateCheckUiState, onCheck: () -> Unit, openP
 private fun PrivacyCard() {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp).testTag("privacy_card")
     ) {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
             Text(
                 stringResource(R.string.privacy_open_source_attribution),
                 style = MaterialTheme.typography.titleSmall,

@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
@@ -12,7 +13,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.focus.FocusRequester
@@ -127,7 +127,7 @@ internal fun Modifier.zoomablePreview(state: MutableState<ZoomState>): Modifier 
     this
         .onSizeChanged { size = it }
         .focusRequester(focus)
-        .desktopFocusRing(RoundedCornerShape(12.dp))
+        .desktopFocusRing(MaterialTheme.shapes.medium)
         .focusable()
         .onKeyEvent { event ->
             if (event.type != KeyEventType.KeyDown || event.hasAltOrMeta()) return@onKeyEvent false

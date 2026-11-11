@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -152,7 +151,7 @@ internal fun TodayCanvasPane(
         val previewColumn: @Composable (Modifier) -> Unit = { columnModifier ->
             Column(
                 modifier = columnModifier,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(Spacing.m)
             ) {
                 if (restricted) {
                     HostRestrictionNotice()
@@ -160,7 +159,7 @@ internal fun TodayCanvasPane(
                 val actions = LocalWallpaperActions.current
                 ContextMenuHost(
                     modifier = Modifier.fillMaxWidth(),
-                    focusShape = RoundedCornerShape(16.dp),
+                    focusShape = MaterialTheme.shapes.large,
                     menuContent = { dismiss ->
                         if (current != null) {
                             if (!restricted) {
@@ -193,10 +192,10 @@ internal fun TodayCanvasPane(
                 ) {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = MaterialTheme.shapes.large,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 TruncatedTitleWithTooltip(
                                     title = current?.title ?: "No Wallpaper Selected",
@@ -235,7 +234,7 @@ internal fun TodayCanvasPane(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .aspectRatio(previewAspect)
-                                        .clip(RoundedCornerShape(12.dp))
+                                        .clip(MaterialTheme.shapes.medium)
                                         .zoomablePreview(zoomState)
                                         .semantics { contentDescription = previewDescription }
                                         .testTag("today_preview")
@@ -254,8 +253,8 @@ internal fun TodayCanvasPane(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                                    verticalArrangement = Arrangement.spacedBy(Spacing.s)
                                 ) {
                                     ShortcutTooltip(if (restricted) HostRestrictedTooltip else "Next wallpaper", if (restricted) null else "N") {
                                         Button(
@@ -304,8 +303,8 @@ internal fun TodayCanvasPane(
                                 }
 
                                 FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                                    verticalArrangement = Arrangement.spacedBy(Spacing.s)
                                 ) {
                                     ShortcutTooltip(if (restricted) HostRestrictedTooltip else "Restore original wallpaper") {
                                         OutlinedButton(
@@ -356,14 +355,14 @@ internal fun TodayCanvasPane(
         val provenanceCard: @Composable (Modifier) -> Unit = { cardModifier ->
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(16.dp),
+                shape = MaterialTheme.shapes.large,
                 modifier = cardModifier
             ) {
                 Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.padding(Spacing.l),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.m)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
                         Icon(SunloomIcons.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Text(
                             text = stringResource(R.string.about_this_wallpaper),
@@ -394,7 +393,7 @@ internal fun TodayCanvasPane(
             if (stacked) {
                 Column(
                     modifier = contentModifier,
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    verticalArrangement = Arrangement.spacedBy(Spacing.m)
                 ) {
                     previewColumn(Modifier.fillMaxWidth())
                     provenanceCard(Modifier.fillMaxWidth())
@@ -402,7 +401,7 @@ internal fun TodayCanvasPane(
             } else {
                 Row(
                     modifier = contentModifier.testTag("today_side_by_side"),
-                    horizontalArrangement = Arrangement.spacedBy(18.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.l)
                 ) {
                     previewColumn(Modifier.weight(1.35f))
                     provenanceCard(Modifier.weight(1f))
@@ -419,7 +418,7 @@ internal fun TodayCanvasPane(
 /** Creator, source, license, origin and fit details for one wallpaper. */
 @Composable
 internal fun ProvenanceDetails(current: WallpaperRecord) {
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
     ProvenanceRow("Creator", current.provenance.creatorName)
     ProvenanceRow("Source", current.provenance.sourceName)
     val licenseLabel = if (current.provenance.licenseVersion.isNotBlank()) {
@@ -496,8 +495,8 @@ internal fun ProvenanceLinkRow(label: String, displayText: String, url: String) 
                     // The 48dp target IS the visual: the focus ring and hover tint are drawn by modifiers
                     // OUTSIDE minimumInteractiveComponentSize, so they wrap the whole hit area and the
                     // cursor target matches what the user sees (Cursor_Target_Size).
-                    .desktopFocusRing(RoundedCornerShape(8.dp))
-                    .then(if (url.startsWith("https://")) Modifier.desktopHover(RoundedCornerShape(8.dp)) else Modifier)
+                    .desktopFocusRing(MaterialTheme.shapes.small)
+                    .then(if (url.startsWith("https://")) Modifier.desktopHover(MaterialTheme.shapes.small) else Modifier)
                     .minimumInteractiveComponentSize()
                     .clickable(
                         enabled = url.startsWith("https://"),
@@ -545,9 +544,9 @@ fun WallpaperPreviewSurface(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(MaterialTheme.shapes.medium)
             .background(fallbackBrush)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium)
     ) {
         val safeBmp = bitmap
         if (safeBmp != null && !safeBmp.isRecycled) {
@@ -588,7 +587,7 @@ fun WallpaperPreviewSurface(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 24.dp)
-                    .background(SunloomColors.ZoneCaptionBackdrop, RoundedCornerShape(8.dp))
+                    .background(SunloomColors.ZoneCaptionBackdrop, MaterialTheme.shapes.small)
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Text(
@@ -622,12 +621,12 @@ internal fun primaryDisplayAspect(uiState: SunloomUiState, min: Float, max: Floa
 internal fun HostRestrictionNotice() {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.medium,
         modifier = Modifier.fillMaxWidth().testTag("host_restriction_notice")
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(Spacing.m),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.s),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(

@@ -1,5 +1,7 @@
 package com.sunloom.app.ui
 
+import androidx.compose.foundation.shape.CornerSize
+import androidx.compose.foundation.shape.CircleShape
 import com.sunloom.app.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
@@ -16,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -89,10 +90,10 @@ internal fun DiagnosticsPane(
         item(key = "diag_header") {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(16.dp),
+                shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp).testTag("diag_header")
             ) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -111,20 +112,20 @@ internal fun DiagnosticsPane(
                             onClick = onToggleLegibilityOverlay,
                             leadingIcon = { Icon(SunloomIcons.Visibility, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             label = { Text(stringResource(R.string.legibility_overlay)) },
-                            modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                            modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                         )
                     }
                     LinearProgressIndicator(
                         progress = { (usedMb / maxMb.coerceAtLeast(1.0)).toFloat().coerceIn(0f, 1f) },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
                         listOf(100L, 250L, 500L, 1024L).forEach { mb ->
                             val bytes = mb * 1024L * 1024L
                             FilterChip(
                                 selected = uiState.preferences.maxCacheBytes == bytes,
                                 onClick = { onUpdateMaxCacheBytes(bytes) },
-                                label = { Text(if (mb >= 1024L) "${mb / 1024L} GB cap" else "$mb MB cap") }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                                label = { Text(if (mb >= 1024L) "${mb / 1024L} GB cap" else "$mb MB cap") }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                             )
                         }
                     }
@@ -142,10 +143,10 @@ internal fun DiagnosticsPane(
         item(key = "diag_help") {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(16.dp),
+                shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
             ) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
                     Text(
                         stringResource(R.string.problem_help_title),
                         style = MaterialTheme.typography.titleSmall,
@@ -157,14 +158,17 @@ internal fun DiagnosticsPane(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.s)
+                    ) {
                         OutlinedButton(
                             onClick = onCopyDiagnostics,
-                            modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("copy_diagnostics_button")
+                            modifier = Modifier.desktopControl(CircleShape).testTag("copy_diagnostics_button")
                         ) { Text(stringResource(R.string.copy_diagnostics)) }
                         OutlinedButton(
                             onClick = onReportProblem,
-                            modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("report_problem_button")
+                            modifier = Modifier.desktopControl(CircleShape).testTag("report_problem_button")
                         ) { Text(stringResource(R.string.report_a_problem)) }
                     }
                 }
@@ -174,11 +178,11 @@ internal fun DiagnosticsPane(
         item(key = "diag_reset") {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(16.dp),
+                shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(18.dp),
+                    modifier = Modifier.fillMaxWidth().padding(Spacing.l),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -197,7 +201,7 @@ internal fun DiagnosticsPane(
                     }
                     OutlinedButton(
                         onClick = { showResetConfirm = true },
-                        modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("reset_sunloom_button")
+                        modifier = Modifier.desktopControl(CircleShape).testTag("reset_sunloom_button")
                     ) {
                         Text(stringResource(R.string.reset_sunloom), color = MaterialTheme.colorScheme.error)
                     }
@@ -287,7 +291,7 @@ internal fun DiagnosticsPane(
 private fun DiagnosticsListHeader(text: String, color: androidx.compose.ui.graphics.Color) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = MaterialTheme.shapes.large.copy(bottomStart = CornerSize(0.dp), bottomEnd = CornerSize(0.dp)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Text(

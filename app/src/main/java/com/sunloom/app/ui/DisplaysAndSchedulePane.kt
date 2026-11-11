@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import androidx.compose.foundation.shape.CircleShape
 import com.sunloom.app.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.getValue
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
@@ -91,14 +91,14 @@ internal fun DisplaysAndSchedulePane(
             .fillMaxSize()
             .desktopScrollbar(scrollState)
             .verticalScroll(scrollState),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(Spacing.m)
     ) {
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
+            shape = MaterialTheme.shapes.large,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
                 Text(stringResource(R.string.schedule), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -130,20 +130,20 @@ internal fun DisplaysAndSchedulePane(
                         checked = uiState.preferences.autoChangeEnabled,
                         onCheckedChange = onToggleAutoSwitch,
                         modifier = Modifier
-                            .desktopControl(RoundedCornerShape(50))
+                            .desktopControl(CircleShape)
                             .switchLabel(stringResource(R.string.automatic_switching))
                             .testTag("auto_switch")
                     )
                 }
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.s)
                 ) {
                     ScheduleMode.entries.forEach { mode ->
                         FilterChip(
                             selected = uiState.preferences.scheduleMode == mode,
                             onClick = { onUpdateScheduleMode(mode) },
-                            label = { Text(mode.label) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                            label = { Text(mode.label) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                         )
                     }
                 }
@@ -161,14 +161,14 @@ internal fun DisplaysAndSchedulePane(
                     FilterChip(
                         selected = showCustomCoords,
                         onClick = { showCustomCoords = !showCustomCoords },
-                        label = { Text(stringResource(R.string.custom_coordinates)) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                        label = { Text(stringResource(R.string.custom_coordinates)) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                     )
                     if (showCustomCoords) {
                         val latError = coordinateError(customLatText, -90.0, 90.0)
                         val lonError = coordinateError(customLonText, -180.0, 180.0)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.s),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             OutlinedTextField(
@@ -207,7 +207,7 @@ internal fun DisplaysAndSchedulePane(
                                 },
                                 enabled = latError == null && lonError == null &&
                                     customLatText.isNotBlank() && customLonText.isNotBlank(),
-                                modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("apply_custom_coords_button")
+                                modifier = Modifier.desktopControl(CircleShape).testTag("apply_custom_coords_button")
                             ) {
                                 Text(stringResource(R.string.apply))
                             }
@@ -220,12 +220,13 @@ internal fun DisplaysAndSchedulePane(
                         text = "Transition hours (Daytime ${uiState.preferences.fixedLightHour}:00 • Evening ${uiState.preferences.fixedDarkHour}:00)",
                         style = MaterialTheme.typography.labelLarge
                     )
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
                         listOf(6 to 18, 7 to 19, 8 to 20, 9 to 21, 20 to 6).forEach { (lHour, dHour) ->
                             FilterChip(
                                 selected = uiState.preferences.fixedLightHour == lHour && uiState.preferences.fixedDarkHour == dHour,
                                 onClick = { onUpdateFixedHours(lHour, dHour) },
-                                label = { Text("${lHour}:00 / ${dHour}:00") }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                                label = { Text("${lHour}:00 / ${dHour}:00") },
+                                modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                             )
                         }
                     }
@@ -235,16 +236,16 @@ internal fun DisplaysAndSchedulePane(
 
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
+            shape = MaterialTheme.shapes.large,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
                 Text(stringResource(R.string.display_preferences), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("connected_displays_summary"),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     uiState.capabilities.connectedDisplays.forEach { disp ->
                         val roleTag = if (disp.isPrimary) "Built-in" else "External"
@@ -274,8 +275,8 @@ internal fun DisplaysAndSchedulePane(
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                     Text(stringResource(R.string.multi_display_fitting_mode), style = MaterialTheme.typography.labelLarge)
                     FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.s)
                     ) {
                         listOf(
                             DisplayPolicy.SAME_ON_ALL_DISPLAYS to "One wallpaper for all displays",
@@ -284,7 +285,7 @@ internal fun DisplaysAndSchedulePane(
                             FilterChip(
                                 selected = uiState.preferences.displayPolicy == policy,
                                 onClick = { onUpdateDisplayPolicy(policy) },
-                                label = { Text(shortText) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                                label = { Text(shortText) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                             )
                         }
                     }
@@ -312,7 +313,7 @@ internal fun DisplaysAndSchedulePane(
                             )
                             TextButton(
                                 onClick = { onForgetRememberedDisplay(rec.key) },
-                                modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("forget_display_${rec.key}")
+                                modifier = Modifier.desktopControl(CircleShape).testTag("forget_display_${rec.key}")
                             ) {
                                 Text(stringResource(R.string.forget))
                             }
@@ -322,14 +323,14 @@ internal fun DisplaysAndSchedulePane(
                 HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                 Text(stringResource(R.string.apply_wallpaper_to), style = MaterialTheme.typography.labelLarge)
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.s)
                 ) {
                     LockWorkspacePolicy.entries.forEach { policy ->
                         FilterChip(
                             selected = uiState.preferences.lockWorkspacePolicy == policy,
                             onClick = { onUpdateLockPolicy(policy) },
-                            label = { Text(policy.label) }, modifier = Modifier.desktopControl(RoundedCornerShape(8.dp))
+                            label = { Text(policy.label) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                         )
                     }
                 }
@@ -351,17 +352,17 @@ internal fun DisplaysAndSchedulePane(
                     }
                     Switch(
                         checked = uiState.preferences.allowBlurredFrameFill,
-                        onCheckedChange = onToggleBlurredFill, modifier = Modifier.desktopControl(RoundedCornerShape(50)).switchLabel(stringResource(R.string.blurred_frame_fill_for_smaller_images))
+                        onCheckedChange = onToggleBlurredFill, modifier = Modifier.desktopControl(CircleShape).switchLabel(stringResource(R.string.blurred_frame_fill_for_smaller_images))
                     )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = onReopenSetup, modifier = Modifier.desktopControl(RoundedCornerShape(50))) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.m)) {
+                    OutlinedButton(onClick = onReopenSetup, modifier = Modifier.desktopControl(CircleShape)) {
                         Text(stringResource(R.string.setup_guide))
                     }
                     OutlinedButton(
                         onClick = { showResetConfirm = true },
-                        modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("restore_system_default_button")
+                        modifier = Modifier.desktopControl(CircleShape).testTag("restore_system_default_button")
                     ) {
                         Icon(SunloomIcons.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))

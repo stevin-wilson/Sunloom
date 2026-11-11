@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
@@ -19,7 +20,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isCtrlPressed as isPointerCtrlPressed
@@ -175,7 +175,7 @@ internal fun ctrlActionFor(
  * it. The hover state is read only in the draw phase, so hovering never recomposes the content.
  */
 @Composable
-fun Modifier.desktopHover(shape: Shape = RoundedCornerShape(14.dp)): Modifier {
+fun Modifier.desktopHover(shape: Shape = MaterialTheme.shapes.medium): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
     val hovered = interactionSource.collectIsHoveredAsState()
     val tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
@@ -198,7 +198,7 @@ fun Modifier.handCursor(): Modifier = pointerHoverIcon(PointerIcon.Hand)
  * outside the focusable control.
  */
 @Composable
-fun Modifier.desktopFocusRing(shape: Shape = RoundedCornerShape(8.dp), selfOnly: Boolean = false): Modifier {
+fun Modifier.desktopFocusRing(shape: Shape = MaterialTheme.shapes.small, selfOnly: Boolean = false): Modifier {
     var hasFocus by remember { mutableStateOf(false) }
     val ringColor = MaterialTheme.colorScheme.primary
     return this
@@ -217,7 +217,7 @@ fun Modifier.desktopFocusRing(shape: Shape = RoundedCornerShape(8.dp), selfOnly:
 
 /** Standard desktop affordances for an interactive control: hand cursor plus a visible keyboard focus ring. */
 @Composable
-fun Modifier.desktopControl(shape: Shape = RoundedCornerShape(50)): Modifier =
+fun Modifier.desktopControl(shape: Shape = CircleShape): Modifier =
     this.handCursor().desktopFocusRing(shape)
 
 /** Marks a section title so screen readers can jump between sections (Article XII sec 4). */
