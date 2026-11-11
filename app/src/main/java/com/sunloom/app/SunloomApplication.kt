@@ -34,15 +34,21 @@ class SunloomApplication : Application() {
         val previous = lastNight
         lastNight = now
         if (previous == null || previous == now) return
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        reactionScope.launch {
             runCatching {
                 val prefs = container.newRepository().loadPreferences()
                 val reacts = prefs.autoChangeEnabled && !prefs.isPaused &&
                     com.sunloom.app.platform.scheduler.RefreshSchedulePolicy.shouldReactToThemeChange(prefs.scheduleMode, previous, now)
-                if (reacts) com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler(this@SunloomApplication).runChangeNow()
+                if (reacts) runChangeNow(this@SunloomApplication)
             }
         }
     }
+
+    /** Where a theme change is reacted to (off the main thread); tests run it inline. */
+    internal var reactionScope: kotlinx.coroutines.CoroutineScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
+
+    /** What "react" means; tests replace it to see that it happened. */
+    internal var runChangeNow: (Context) -> Unit = { com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler(it).runChangeNow() }
 
     private fun isNight(config: android.content.res.Configuration): Boolean =
         (config.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES

@@ -32,15 +32,17 @@ class ApplyCropScaleTest {
 
     @Test
     fun `a large photo is cropped to the display shape and scaled to exactly the display size`() {
-        val src = source(6000, 4000)
-        val display = DisplayProfile(0, "4K", 3840, 2160, densityDpi = 220)
+        // Sizes are kept modest: a test JVM has a small heap, and the shape (crop larger than the display) is what matters.
+        val src = source(3000, 2000)
+        val display = DisplayProfile(0, "Full HD", 1920, 1080, densityDpi = 160)
 
         val out = adapter.prepareNonStretchedBitmap(src, display)
 
-        assertEquals(3840, out.width)
-        assertEquals(2160, out.height)
+        assertEquals(1920, out.width)
+        assertEquals(1080, out.height)
         assertNotSame("the source is the caller's to release", src, out)
         assertTrue("the source is not recycled by preparing", !src.isRecycled)
+        out.recycle(); src.recycle()
     }
 
     @Test
@@ -57,25 +59,28 @@ class ApplyCropScaleTest {
     @Test
     fun `sizes that do not divide evenly still come out exact`() {
         for ((sw, sh, dw, dh) in listOf(
-            listOf(5472, 3648, 3440, 1440), listOf(4001, 6003, 2560, 1600), listOf(7000, 3333, 5120, 1440), listOf(9999, 7777, 2160, 3840)
+            listOf(2731, 1823, 1721, 727), listOf(2001, 3003, 1283, 801), listOf(3499, 1667, 1913, 539), listOf(2999, 2333, 719, 1279)
         )) {
-            val out = adapter.prepareNonStretchedBitmap(source(sw, sh), DisplayProfile(0, "d", dw, dh, densityDpi = 200))
+            val src = source(sw, sh)
+            val out = adapter.prepareNonStretchedBitmap(src, DisplayProfile(0, "d", dw, dh, densityDpi = 160))
             assertEquals("$sw x $sh -> $dw x $dh width", dw, out.width)
             assertEquals("$sw x $sh -> $dw x $dh height", dh, out.height)
+            out.recycle(); src.recycle()
         }
     }
 
     @Test
     fun `a persisted focal point still steers the crop`() {
-        val src = source(6000, 4000)
-        val display = DisplayProfile(0, "Wide", 3440, 1440, densityDpi = 200)
-        val focal = CropRect(0, 0, 6000, 4000, 0.2, 0.8, false, 1.0)
+        val src = source(3000, 2000)
+        val display = DisplayProfile(0, "Wide", 1720, 720, densityDpi = 160)
+        val focal = CropRect(0, 0, 3000, 2000, 0.2, 0.8, false, 1.0)
 
         val out = adapter.prepareNonStretchedBitmap(src, display, cropRect = focal)
 
-        assertEquals(3440, out.width)
-        assertEquals(1440, out.height)
-        val bounds = CropRenderer().computeAspectCropBounds(6000, 4000, 0.2, 0.8, display.aspectRatio)
-        assertEquals("the crop follows the focal point, not the centre", true, bounds.top > 4000 / 2 - bounds.height / 2)
+        assertEquals(1720, out.width)
+        assertEquals(720, out.height)
+        val bounds = CropRenderer().computeAspectCropBounds(3000, 2000, 0.2, 0.8, display.aspectRatio)
+        assertEquals("the crop follows the focal point, not the centre", true, bounds.top > 2000 / 2 - bounds.height / 2)
+        out.recycle(); src.recycle()
     }
 }
