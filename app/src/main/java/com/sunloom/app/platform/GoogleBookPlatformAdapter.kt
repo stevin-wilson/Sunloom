@@ -79,6 +79,12 @@ interface SystemWallpaperGateway {
 
 class DefaultSystemWallpaperGateway(private val context: Context) : SystemWallpaperGateway {
     companion object {
+        /**
+         * Data Saver holds background data back only when it is on and the app is not exempt. "Whitelisted" means it is on
+         * but the person allowed this app to use data in the background, which is exactly what they did to make it work.
+         */
+        internal fun dataSaverRestricts(status: Int): Boolean = status == ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED
+
         internal const val PREF_OBSERVED_LOCK_SUPPORT = "observed_independent_lock_support"
         private const val TAG = "SunloomWallpaper"
     }
@@ -191,8 +197,9 @@ class DefaultSystemWallpaperGateway(private val context: Context) : SystemWallpa
 
     override fun isDataSaverRestricting(): Boolean {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
-        return cm.restrictBackgroundStatus != ConnectivityManager.RESTRICT_BACKGROUND_STATUS_DISABLED
+        return dataSaverRestricts(cm.restrictBackgroundStatus)
     }
+
 
     override fun isBatterySaverActive(): Boolean {
         val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false

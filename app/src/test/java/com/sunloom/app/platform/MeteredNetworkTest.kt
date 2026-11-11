@@ -53,4 +53,14 @@ class MeteredNetworkTest {
 
         assertFalse(DefaultSystemWallpaperGateway(context).isUnmeteredNetwork())
     }
+
+    @Test
+    fun `Data Saver only holds the app back when it is on and the app is not exempt`() {
+        assertFalse("Data Saver off", DefaultSystemWallpaperGateway.dataSaverRestricts(ConnectivityManager.RESTRICT_BACKGROUND_STATUS_DISABLED))
+        assertFalse(
+            "Data Saver on, but the person let this app use data in the background",
+            DefaultSystemWallpaperGateway.dataSaverRestricts(ConnectivityManager.RESTRICT_BACKGROUND_STATUS_WHITELISTED)
+        )
+        assertTrue("Data Saver on and the app is not exempt", DefaultSystemWallpaperGateway.dataSaverRestricts(ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED))
+    }
 }
