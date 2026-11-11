@@ -19,17 +19,24 @@ Android accepts the final as an upgrade. The Play build will use the same sequen
 One key signs every release, on both distribution paths (GitHub now, Google Play later via "use my own key"). If it is
 lost, nobody can update in place. **Keep an offline copy**, and write the passwords down separately from the file.
 
-Make a key (once):
+Make a key (once) with the helper. It asks for a password (typed, never echoed or stored outside the key file),
+creates `~/sunloom-release-key/sunloom-release.jks` outside the repository, uploads the four secrets below to the
+`release` environment, and prints the certificate fingerprint:
 
 ```
-keytool -genkeypair -v -keystore sunloom-release.jks -alias sunloom -keyalg RSA -keysize 4096 -validity 10000
+scripts/make_release_key.sh              # add --no-upload to only make the file
 ```
 
-Print its fingerprint to publish in the release notes and check it matches what the APK reports:
+**Then back it up before anything else:** copy the `.jks` to two places that are not this computer, check each copy
+opens (`keytool -list -keystore <copy>`), and put the password in your password manager. To see the fingerprint again
+later (it is public and goes in the release notes and the README):
 
 ```
 keytool -list -v -keystore sunloom-release.jks -alias sunloom | grep SHA256
 ```
+
+By hand instead: `keytool -genkeypair -keystore sunloom-release.jks -storetype PKCS12 -alias sunloom -keyalg RSA
+-keysize 4096 -validity 10000`, then add the secrets yourself.
 
 Never commit a key, a password or `keystore.properties` (they are in `.gitignore`).
 
