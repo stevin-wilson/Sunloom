@@ -126,4 +126,25 @@ class HttpClientHardeningTest {
             assertEquals("the connection was torn down", 0L, disconnected.count)
         }
     }
+
+    @Test
+    fun `clearing the caches forgets saved responses`() = runBlocking {
+        val client = DefaultHttpsClient { url ->
+            object : HttpURLConnection(url) {
+                override fun getResponseCode(): Int = 200
+                override fun getHeaderField(name: String): String? = if (name == "ETag") "\"v1\"" else null
+                override fun getContentLengthLong(): Long = 2L
+                override fun getInputStream(): InputStream = "{}".byteInputStream()
+                override fun disconnect() {}
+                override fun usingProxy(): Boolean = false
+                override fun connect() {}
+            }
+        }
+        client.getText("https://collectionapi.metmuseum.org/a")
+        assertEquals("a response with an ETag is kept for conditional requests", 1, client.cachedResponseCount())
+
+        client.clearCaches()
+
+        assertEquals(0, client.cachedResponseCount())
+    }
 }

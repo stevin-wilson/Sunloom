@@ -164,6 +164,13 @@ class DefaultHttpsClient(
         val body: String
     )
 
+    /** Forgets the saved responses (called when the system asks the app to give memory back). */
+    fun clearCaches() {
+        synchronized(conditionalTextCache) { conditionalTextCache.clear() }
+    }
+
+    internal fun cachedResponseCount(): Int = synchronized(conditionalTextCache) { conditionalTextCache.size }
+
     private val conditionalTextCache = object : LinkedHashMap<String, CachedTextResponse>(32, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedTextResponse>?): Boolean {
             return size > MAX_CONDITIONAL_CACHE_ENTRIES

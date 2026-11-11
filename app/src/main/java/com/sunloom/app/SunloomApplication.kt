@@ -16,6 +16,12 @@ class SunloomApplication : Application() {
         // Only installs a handler (no I/O): an uncaught crash is written to a small local file the person can share.
         com.sunloom.app.diagnostics.CrashLog.install(this)
     }
+
+    /** The system wants memory back: empty the caches it can spare (they rebuild on demand). */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        MemoryTrim.trim(level)
+    }
 }
 
 /**
