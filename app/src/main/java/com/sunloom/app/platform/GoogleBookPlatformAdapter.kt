@@ -695,6 +695,9 @@ class GoogleBookPlatformAdapter(
         bmp.setPixels(temp, 0, w, 0, 0, w, h)
     }
 
+    /** See [SunloomWallpaperScheduler.cancelAllScheduledWorkAndWait]. */
+    fun cancelAllScheduledWorkAndWait(): Boolean = scheduler.cancelAllScheduledWorkAndWait()
+
     fun cancelAllScheduledWork() {
         scheduler.cancelAllScheduledWork()
     }

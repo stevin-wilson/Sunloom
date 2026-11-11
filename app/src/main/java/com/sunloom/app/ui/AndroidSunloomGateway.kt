@@ -453,9 +453,10 @@ class AndroidSunloomGateway(
     override suspend fun resetSunloom(): SunloomUiState {
         withContext(ioDispatcher) {
             val repo = obtainRepository()
-            // The wallpaper first, while the baseline still exists; then stop everything that could write; then wipe.
+            // The device's own wallpaper goes back first; then everything that could write is stopped, including an attempt
+            // already running (cancelling the queue does not stop that one); then the wipe.
             platformAdapter.restoreSystemDefaultWallpaper(dryRunPreviewOnly = false)
-            platformAdapter.cancelAllScheduledWork()
+            platformAdapter.cancelAllScheduledWorkAndWait()
             repo.wipeAllData()
             resolvedRepository = null // its store is gone; the next one opens a fresh database
             reconcileGate.invalidate()

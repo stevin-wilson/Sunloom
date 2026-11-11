@@ -60,6 +60,21 @@ class SunloomWallpaperScheduler(
             .build()
     }
 
+    /**
+     * Cancels everything, then waits (up to [timeoutMs]) for an attempt that is already running to stop: cancelling the
+     * queue does not stop it, and it holds its own repository and could still write. Reset needs this before it erases.
+     * Returns false if something was still running at the timeout.
+     */
+    fun cancelAllScheduledWorkAndWait(timeoutMs: Long = 5_000L): Boolean {
+        cancelAllScheduledWork()
+        val workManager = runCatching { WorkManager.getInstance(context) }.getOrNull() ?: return true
+        val names = listOf(WORK_NAME, WORK_NAME_CHANGE, WORK_NAME_REFRESH, WORK_NAME_STORE_WATCH)
+        return WorkIdle.awaitIdle(
+            isBusy = { names.any { name -> workManager.getWorkInfosForUniqueWork(name).get().any { it.state == WorkInfo.State.RUNNING } } },
+            timeoutMs = timeoutMs
+        )
+    }
+
     fun cancelAllScheduledWork() {
         cancelAutomationWork()
         runCatching { WorkManager.getInstance(context) }.getOrNull()?.cancelUniqueWork(WORK_NAME_STORE_WATCH)
