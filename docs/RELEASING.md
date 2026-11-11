@@ -39,8 +39,8 @@ The release workflow reads four secrets: `SUNLOOM_UPLOAD_KEYSTORE_BASE64` (`base
 `SUNLOOM_UPLOAD_STORE_PASSWORD`, `SUNLOOM_UPLOAD_KEY_ALIAS`, `SUNLOOM_UPLOAD_KEY_PASSWORD`.
 
 - Real key: store them in the **`release` environment** (Settings → Environments), with yourself as required reviewer,
-  so a tag push waits for your approval. A private repository on a free plan cannot protect environments, which is why
-  the repository goes public before the first release candidate.
+  so a tag push waits for your approval. Environments can only be protected on a public repository (or a paid plan); Sunloom's repository is
+  public.
 - Rehearsal: before then, put a **throwaway** key in repository-level secrets and run the workflow by hand (below).
   Delete those secrets when the real ones are in.
 

@@ -13,6 +13,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Scans the whole history for credentials on every push and pull request (the repository is public, so a leaked key
+  # would be public too). GitHub's own secret scanning and push protection are on as well.
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   verify:
     name: Unit tests and lint
     runs-on: ubuntu-latest
