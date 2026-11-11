@@ -56,6 +56,8 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             } ?: LockWorkspacePolicy.SAME_ON_BOTH,
             allowBlurredFrameFill = prefs.getBoolean("allow_blurred_fill", false),
             wifiOnlyDownloads = prefs.getBoolean("wifi_only", true),
+            weeklyUpdateCheck = prefs.getBoolean("weekly_update_check", false),
+            lastUpdateCheckEpochMs = prefs.getLong("last_update_check_ms", 0L),
             deferOnBatterySaver = prefs.getBoolean("defer_battery_saver", true),
             maxCacheBytes = prefs.getLong("max_cache_bytes", UserPreferences.DEFAULT_MAX_CACHE_BYTES),
             baselineRestorePath = prefs.getString("baseline_restore_path", null),
@@ -139,6 +141,8 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             putString("lock_workspace_policy", updated.lockWorkspacePolicy.name)
             putBoolean("allow_blurred_fill", updated.allowBlurredFrameFill)
             putBoolean("wifi_only", updated.wifiOnlyDownloads)
+            putBoolean("weekly_update_check", updated.weeklyUpdateCheck)
+            putLong("last_update_check_ms", updated.lastUpdateCheckEpochMs)
             putBoolean("defer_battery_saver", updated.deferOnBatterySaver)
             putLong("max_cache_bytes", updated.maxCacheBytes)
             putString("baseline_restore_path", updated.baselineRestorePath)

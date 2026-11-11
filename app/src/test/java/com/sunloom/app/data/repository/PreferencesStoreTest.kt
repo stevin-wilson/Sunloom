@@ -45,6 +45,17 @@ class PreferencesStoreTest {
     }
 
     @Test
+    fun `the update-check choice is off by default and survives saving`() {
+        assertFalse(store.load().weeklyUpdateCheck)
+        assertEquals(0L, store.load().lastUpdateCheckEpochMs)
+
+        store.save(UserPreferences(weeklyUpdateCheck = true, lastUpdateCheckEpochMs = 1_234_567L))
+
+        assertTrue(store.load().weeklyUpdateCheck)
+        assertEquals(1_234_567L, store.load().lastUpdateCheckEpochMs)
+    }
+
+    @Test
     fun `an empty file reads as the defaults`() {
         assertEquals(UserPreferences(), store.load().copy(enabledSources = UserPreferences().enabledSources))
         assertFalse(store.load().isSetupCompleted)

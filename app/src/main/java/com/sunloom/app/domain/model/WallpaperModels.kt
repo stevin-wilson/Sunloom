@@ -371,6 +371,10 @@ data class UserPreferences(
     val allowBlurredFrameFill: Boolean = false,
     /** Background downloads only on an unmetered network (a phone hotspot counts as metered). On unless the person turns it off. */
     val wifiOnlyDownloads: Boolean = true,
+    /** GitHub build only: look for a newer release when the app is opened, at most once a week. Off unless turned on. */
+    val weeklyUpdateCheck: Boolean = false,
+    /** When the last successful update check was; 0 if there has not been one. */
+    val lastUpdateCheckEpochMs: Long = 0L,
     val deferOnBatterySaver: Boolean = true,
     val maxCacheBytes: Long = DEFAULT_MAX_CACHE_BYTES,
     val baselineRestorePath: String? = null,

@@ -21,7 +21,8 @@ internal fun setupDraftSaver(base: UserPreferences): Saver<UserPreferences, Any>
             p.latitude,
             p.longitude,
             p.enabledCategories.joinToString(",") { it.name },
-            p.lockWorkspacePolicy.name
+            p.lockWorkspacePolicy.name,
+            p.weeklyUpdateCheck
         )
     },
     restore = { saved ->
@@ -38,7 +39,8 @@ internal fun setupDraftSaver(base: UserPreferences): Saver<UserPreferences, Any>
                 longitude = saved[4] as Double,
                 // Never restore an empty category set; that would leave nothing to select from.
                 enabledCategories = categories.ifEmpty { base.enabledCategories },
-                lockWorkspacePolicy = LockWorkspacePolicy.valueOf(saved[6] as String)
+                lockWorkspacePolicy = LockWorkspacePolicy.valueOf(saved[6] as String),
+                weeklyUpdateCheck = (saved.getOrNull(7) as? Boolean) ?: base.weeklyUpdateCheck
             )
         }.getOrNull()
     }

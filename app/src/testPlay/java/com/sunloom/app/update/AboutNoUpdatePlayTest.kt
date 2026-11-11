@@ -3,6 +3,8 @@ package com.sunloom.app.update
 import android.app.Application
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.sunloom.app.Requirement
 import com.sunloom.app.domain.model.UserPreferences
@@ -43,5 +45,24 @@ class AboutNoUpdatePlayTest {
     @Test
     fun `the Play build's hook offers no feature`() {
         assertNull(updateCheckFeature())
+    }
+
+    @Test
+    fun `setup in the Play build has no update opt-in`() {
+        composeTestRule.setContent {
+            SunloomApp(
+                uiState = SunloomUiState(preferences = UserPreferences(isSetupCompleted = false)),
+                onCompleteSetup = {}, onSelectTab = {}, onNextWallpaper = {}, onPreviousWallpaper = {},
+                onToggleKeep = {}, onRejectForever = {}, onTogglePause = {}, onRestoreOriginal = {},
+                onApplySpecific = {}, onToggleLegibilityOverlay = {}, onSyncOnline = {}, onToggleCategory = {},
+                onToggleSource = {}, onSelectCity = {}, onUpdateScheduleMode = {}, onUpdateLockPolicy = {},
+                onToggleBlurredFill = {}, onToggleWifiOnly = {}, onPickLocalPhoto = {}, darkTheme = false
+            )
+        }
+        composeTestRule.onNodeWithTag("setup_customize_button").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("setup_next_button").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("setup_next_button").performScrollTo().performClick()
+
+        composeTestRule.onNodeWithTag("setup_update_opt_in").assertDoesNotExist()
     }
 }

@@ -14,6 +14,7 @@ interface UiStrings {
     val storageProblem: String
     val resetDone: String
     val meteredFetchWarning: String
+    fun updateAvailableNotice(version: String): String
     val diagnosticsCopied: String
     val fetchingCatalogs: String
     fun scheduleEnabled(modeLabel: String): String
@@ -31,6 +32,7 @@ interface UiStrings {
             override val settingNotSaved = "Couldn't save that setting. Your previous choice was kept."
             override val storageProblem = "Couldn't finish that. Check free space and your connection, then try again."
             override val diagnosticsCopied = "Diagnostics copied. Paste them into your report."
+            override fun updateAvailableNotice(version: String) = "Sunloom $version is available. Find the link in Storage & About."
             override val meteredFetchWarning =
                 "You're on a metered connection, so fetching may use mobile data. Tap Refresh again to go ahead."
             override val resetDone = "Sunloom was reset. Set it up again whenever you like."
@@ -49,6 +51,7 @@ class AndroidUiStrings(private val context: Context) : UiStrings {
     override val settingNotSaved: String get() = context.getString(R.string.msg_setting_not_saved)
     override val storageProblem: String get() = context.getString(R.string.msg_storage_problem)
     override val diagnosticsCopied: String get() = context.getString(R.string.msg_diagnostics_copied)
+    override fun updateAvailableNotice(version: String): String = context.getString(R.string.msg_update_available_notice, version)
     override val meteredFetchWarning: String get() = context.getString(R.string.msg_metered_fetch_warning)
     override val resetDone: String get() = context.getString(R.string.msg_reset_done)
     override val fetchingCatalogs: String get() = context.getString(R.string.msg_fetching_catalogs)

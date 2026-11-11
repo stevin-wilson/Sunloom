@@ -58,7 +58,7 @@ class SunloomComposeUiTest {
         composeTestRule.onNodeWithText("Preview-only mode").assertDoesNotExist()
         composeTestRule.onNodeWithText("Matched pair", substring = true).assertDoesNotExist()
         composeTestRule.onNodeWithText("Different images", substring = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("enable_sunloom_button").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("start_with_defaults_button").performScrollTo().performClick()
         assertTrue(setupCompleted)
     }
 

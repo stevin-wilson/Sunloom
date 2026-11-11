@@ -19,6 +19,8 @@ import com.sunloom.app.ui.SunloomApp
 import com.sunloom.app.ui.SunloomUiState
 import com.sunloom.app.ui.UpdateCheckUiState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -90,5 +92,51 @@ class AboutUpdateGithubTest {
     fun `while checking the button is replaced by a progress message`() {
         show(UpdateCheckUiState.Checking)
         composeTestRule.onNodeWithText(context.getString(R.string.update_checking)).assertExists()
+    }
+}
+
+/** The GitHub build offers the weekly update check once, on the last step of setup, and off by default. */
+@Requirement("XVIII.1")
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [34], application = Application::class, qualifiers = "w1280dp-h2400dp")
+class SetupUpdateOptInGithubTest {
+    @get:Rule
+    val composeTestRule = createComposeRule()
+
+    private var completed: UserPreferences? = null
+
+    private fun toLastStep() {
+        composeTestRule.setContent {
+            SunloomApp(
+                uiState = SunloomUiState(preferences = UserPreferences(isSetupCompleted = false)),
+                onCompleteSetup = { completed = it }, onSelectTab = {}, onNextWallpaper = {}, onPreviousWallpaper = {},
+                onToggleKeep = {}, onRejectForever = {}, onTogglePause = {}, onRestoreOriginal = {},
+                onApplySpecific = {}, onToggleLegibilityOverlay = {}, onSyncOnline = {}, onToggleCategory = {},
+                onToggleSource = {}, onSelectCity = {}, onUpdateScheduleMode = {}, onUpdateLockPolicy = {},
+                onToggleBlurredFill = {}, onToggleWifiOnly = {}, onPickLocalPhoto = {}, darkTheme = false
+            )
+        }
+        composeTestRule.onNodeWithTag("setup_customize_button").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("setup_next_button").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("setup_next_button").performScrollTo().performClick()
+    }
+
+    @Test
+    fun `the last step offers it, off, and what is chosen is saved`() {
+        toLastStep()
+
+        composeTestRule.onNodeWithTag("setup_update_opt_in").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("enable_sunloom_button").performScrollTo().performClick()
+
+        assertTrue(completed!!.weeklyUpdateCheck)
+    }
+
+    @Test
+    fun `left alone it stays off`() {
+        toLastStep()
+
+        composeTestRule.onNodeWithTag("enable_sunloom_button").performScrollTo().performClick()
+
+        assertFalse(completed!!.weeklyUpdateCheck)
     }
 }

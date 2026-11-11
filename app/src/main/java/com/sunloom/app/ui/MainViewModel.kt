@@ -58,6 +58,9 @@ class MainViewModel(
     companion object {
         /** Fetch rounds per top-up; each round polls up to three sources within their request budgets. */
         const val MAX_TOP_UP_ROUNDS = 4
+
+        /** The opt-in update check asks at most this often. */
+        private const val UPDATE_CHECK_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000
     }
 
     /** Preference edits whose save has not landed yet; their optimistic values must outlive other results. */
@@ -92,6 +95,7 @@ class MainViewModel(
                 }
             }
             replenishIfLow()
+            checkForUpdatesIfDue()
         }
     }
 
@@ -382,17 +386,50 @@ class MainViewModel(
     /** "Check for updates" (GitHub build): asks, shows that it is checking, then what was found. A no-op where there is none. */
     fun checkForUpdates() {
         val feature = updateCheck ?: return
-        if (_uiState.value.updateCheck == UpdateCheckUiState.Checking) return
+        if (!beginUpdateCheck()) return
+        viewModelScope.launch(workDispatcher) { finishUpdateCheck(feature) }
+    }
+
+    /** Marks a check as running; false if one already is. */
+    private fun beginUpdateCheck(): Boolean {
+        if (_uiState.value.updateCheck == UpdateCheckUiState.Checking) return false
         _uiState.update { s -> s.copy(updateCheck = UpdateCheckUiState.Checking) }
-        viewModelScope.launch(workDispatcher) {
-            val result = try {
-                feature.check(appInfo().versionName)
-            } catch (cancel: CancellationException) {
-                throw cancel
-            } catch (_: Exception) {
-                com.sunloom.app.update.UpdateCheckResult.Failed
-            }
-            _uiState.update { s -> s.copy(updateCheck = UpdateCheckUiState.Done(result)) }
+        return true
+    }
+
+    private suspend fun finishUpdateCheck(feature: com.sunloom.app.update.UpdateCheckFeature): com.sunloom.app.update.UpdateCheckResult {
+        val result = try {
+            feature.check(appInfo().versionName)
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            com.sunloom.app.update.UpdateCheckResult.Failed
+        }
+        _uiState.update { s -> s.copy(updateCheck = UpdateCheckUiState.Done(result)) }
+        return result
+    }
+
+    /**
+     * The opt-in weekly check (GitHub build): when the app is opened, if the person turned it on and the last successful
+     * check is a week old. The time is recorded only for a check that was actually made, so one that failed offline is
+     * tried again at the next opening. An available update is announced once; there is no background job, which would need a
+     * notification permission Sunloom never asks for.
+     */
+    private suspend fun checkForUpdatesIfDue() {
+        val feature = updateCheck ?: return
+        val prefs = _uiState.value.preferences
+        if (!prefs.isSetupCompleted || !prefs.weeklyUpdateCheck) return
+        val now = clockMs()
+        if (prefs.lastUpdateCheckEpochMs != 0L && now - prefs.lastUpdateCheckEpochMs < UPDATE_CHECK_INTERVAL_MS) return
+        if (!beginUpdateCheck()) return
+        val result = finishUpdateCheck(feature)
+        if (result is com.sunloom.app.update.UpdateCheckResult.Failed) return
+        stateMutex.withLock {
+            val saved = gateway.savePreferences(_uiState.value.preferences.copy(lastUpdateCheckEpochMs = now))
+            _uiState.update { s -> s.copy(preferences = saved.preferences) }
+        }
+        if (result is com.sunloom.app.update.UpdateCheckResult.Available) {
+            _uiState.update { s -> s.copy(statusBannerMessage = strings.updateAvailableNotice(result.version)) }
         }
     }
 
