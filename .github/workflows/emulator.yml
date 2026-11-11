@@ -3,9 +3,9 @@ name: Emulator smoke tests
 # On-device smoke tests (app/src/androidTest) on x86_64 emulators: the real SQLite, WorkManager and activity that
 # the JVM/Robolectric suite replaces or fakes (Constitution Article XVI).
 #
-# While the repository is private these cost private Actions minutes, so they run only on main, on release tags and
-# on demand. When the repository goes public, add `pull_request:` below so every PR gets them (free for public repos).
+# The repository is public, so these run on every pull request as well as on main, on release tags and on demand.
 on:
+  pull_request:
   push:
     branches: [main]
     tags: ["v*"]
