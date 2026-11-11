@@ -133,6 +133,36 @@ class FollowOsPollTest {
         assertEquals("the second poll read nothing", 0, store.reads)
     }
 
+    // --- state that must not survive a restore ---
+
+    @Test
+    fun `what a poll verified is kept out of the backed-up preferences`() {
+        repo.setFollowOsVerified(light, "w1")
+
+        assertFalse(
+            "sunloom_preferences is what Auto Backup restores; a restored key would vouch for images that are not there",
+            context.getSharedPreferences("sunloom_preferences", Context.MODE_PRIVATE).contains("follow_os_verified")
+        )
+        assertEquals("LIGHT:w1", repo.getFollowOsVerifiedKey())
+    }
+
+    @Test
+    fun `the state file is not part of the backup`() {
+        for (rules in listOf("src/main/res/xml/backup_rules.xml", "src/main/res/xml/data_extraction_rules.xml")) {
+            val text = File(rules).readText()
+            assertFalse("$rules must not include sunloom_state", Regex("""include[^>]*sunloom_state""").containsMatchIn(text))
+        }
+    }
+
+    @Test
+    fun `a restore that brought the database but not the images is checked again, not trusted`() {
+        // After a restore: the wallpaper row and the current id are back, the image file is not, and no verification is.
+        store.upsertWallpaper(testWallpaper("w1", localFilePath = File(context.cacheDir, "gone.jpg").absolutePath, fileSizeBytes = 10, brightness = light))
+        setCurrent("w1")
+
+        assertTrue("the poll looks, finds the file missing and goes on to fix it", pollReached())
+    }
+
     // --- a deliberate system default ---
 
     @Test

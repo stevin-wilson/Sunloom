@@ -52,6 +52,7 @@ class ResetSunloomTest {
         prefsFile("sunloom_preferences").edit().putString("current_wallpaper_id", "w1").putInt("lost_imports_notice", 3).commit()
         prefsFile("sunloom_display_history").edit().putString("remembered_displays_v1", "[{}]").commit()
         prefsFile("sunloom_ui").edit().putBoolean("reserve_grid_view", true).commit()
+        prefsFile("sunloom_state").edit().putString("follow_os_verified", "LIGHT:w1").commit()
         val seedRender = File(context.cacheDir, "seed_renders/1000x625_1000x625/seed-a.png").apply { parentFile!!.mkdirs(); writeBytes(ByteArray(8)) }
         return listOf(image, staged, exported, seedRender)
     }
@@ -67,7 +68,7 @@ class ResetSunloomTest {
         assertTrue("the blocklist is gone", store.getAllBlocklistEntries().isEmpty())
         assertTrue("the rejection log is gone", store.getAllRejections().isEmpty())
         assertTrue("image, staging and export files are gone", files.none { it.exists() })
-        for (name in listOf("sunloom_preferences", "sunloom_display_history", "sunloom_ui")) {
+        for (name in listOf("sunloom_preferences", "sunloom_display_history", "sunloom_ui", "sunloom_state")) {
             assertTrue("$name is empty", prefsFile(name).all.isEmpty())
         }
         assertNull(repo.getCurrentWallpaperId())

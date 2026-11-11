@@ -86,6 +86,13 @@ class LocalLibraryRepository(
         private const val KEY_LOST_IMPORTS = "lost_imports_notice"
         private const val SEED_RENDER_CACHE_DIR = "seed_renders"
         private const val KEY_FOLLOW_OS_VERIFIED = "follow_os_verified"
+
+        /**
+         * Derived state: things the app worked out about this device and this moment. It is deliberately not in
+         * `sunloom_preferences`, the file Auto Backup restores - a restored "verified" claim would vouch for images the
+         * restore did not bring back. The backup rules list the files they include, and this is not one of them.
+         */
+        private const val STATE_FILE = "sunloom_state"
         private const val KEY_LAST_HYGIENE = "last_storage_hygiene_ms"
         private const val HYGIENE_INTERVAL_MS = 24L * 60 * 60 * 1000
 
@@ -99,7 +106,7 @@ class LocalLibraryRepository(
         private var sharedDefaultStore: Pair<String, LibraryStore>? = null
 
         /** The preference files the app writes; a reset empties all of them. */
-        private val PREFERENCE_FILES = listOf("sunloom_preferences", "sunloom_display_history", "sunloom_ui")
+        private val PREFERENCE_FILES = listOf("sunloom_preferences", "sunloom_display_history", "sunloom_ui", STATE_FILE)
 
         private fun forgetDefaultStore() {
             synchronized(this) { sharedDefaultStore = null }
@@ -146,6 +153,7 @@ class LocalLibraryRepository(
 
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences("sunloom_preferences", Context.MODE_PRIVATE)
+    private val statePrefs = appContext.getSharedPreferences(STATE_FILE, Context.MODE_PRIVATE)
     private val sourceHealth = SourceHealthStore(prefs, random)
     private val preferencesStore = PreferencesStore(prefs)
     private val displayReconciler = DisplayReconciler(envelopePlanner, cropRenderer)
@@ -311,10 +319,10 @@ class LocalLibraryRepository(
     }
 
     /** What the last Follow-OS poll verified (see [FollowOsVerification.key]); null when nothing is. */
-    fun getFollowOsVerifiedKey(): String? = prefs.getString(KEY_FOLLOW_OS_VERIFIED, null)
+    fun getFollowOsVerifiedKey(): String? = statePrefs.getString(KEY_FOLLOW_OS_VERIFIED, null)
 
     fun setFollowOsVerified(target: BrightnessClass, currentId: String?) {
-        prefs.edit { putString(KEY_FOLLOW_OS_VERIFIED, FollowOsVerification.key(target, currentId)) }
+        statePrefs.edit { putString(KEY_FOLLOW_OS_VERIFIED, FollowOsVerification.key(target, currentId)) }
     }
 
     /**
@@ -325,8 +333,8 @@ class LocalLibraryRepository(
 
     fun recordWallpaperApplied(wallpaperId: String) {
         val current = getCurrentWallpaperId()
+        statePrefs.edit { remove(KEY_FOLLOW_OS_VERIFIED) } // a new wallpaper (or leaving the system default) must be verified afresh
         prefs.edit {
-            remove(KEY_FOLLOW_OS_VERIFIED) // a new wallpaper (or leaving the system default) must be verified afresh
             if (current != null && current != wallpaperId) {
                 putString("previous_wallpaper_id", current)
             }
