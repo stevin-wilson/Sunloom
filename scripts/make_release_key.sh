@@ -27,6 +27,11 @@ fi
 if [ -n "${SUNLOOM_KEY_PASSWORD:-}" ]; then
   pw="$SUNLOOM_KEY_PASSWORD"
 else
+  if [ ! -t 0 ]; then
+    echo "This asks you to type a password, so it needs a real terminal (not a pipe or a tool that has no keyboard)." >&2
+    echo "Open a terminal window, cd to this folder, and run:  scripts/make_release_key.sh" >&2
+    exit 1
+  fi
   read -rsp "Choose a password for the key (at least 12 characters, kept in your password manager): " pw; echo
   read -rsp "Type it again: " pw2; echo
   [ "$pw" = "$pw2" ] || { echo "The two passwords differ." >&2; exit 1; }
