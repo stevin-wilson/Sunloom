@@ -19,6 +19,9 @@ Android accepts the final as an upgrade. The Play build will use the same sequen
 One key signs every release, on both distribution paths (GitHub now, Google Play later via "use my own key"). If it is
 lost, nobody can update in place. **Keep an offline copy**, and write the passwords down separately from the file.
 
+The key made on 2026-11-11 has this certificate fingerprint (public; it is in the README and in every release's
+notes): `28:67:7F:15:15:29:90:DB:45:BD:49:8B:5D:B0:32:FE:73:45:71:58:C5:5C:11:27:3C:C9:C5:BA:8D:90:34:9F`
+
 Make a key (once) with the helper. It asks for a password (typed, never echoed or stored outside the key file),
 creates `~/sunloom-release-key/sunloom-release.jks` outside the repository, uploads the four secrets below to the
 `release` environment, and prints the certificate fingerprint:

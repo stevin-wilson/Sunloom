@@ -84,6 +84,21 @@ class DocumentationTest {
     }
 
     @Test
+    fun `the signing certificate fingerprint is the same in every document that quotes it`() {
+        val shape = Regex("(?:[0-9A-F]{2}:){31}[0-9A-F]{2}")
+        val found = listOf("README.md", "CHANGELOG.md", "docs/RELEASING.md")
+            .associateWith { doc -> shape.findAll(text(doc)).map { it.value }.toSet() }
+        assertTrue("README.md must quote the SHA-256 fingerprint of the signing certificate", found.getValue("README.md").size == 1)
+        assertTrue(
+            "CHANGELOG.md must quote the same fingerprint in the section for the release it belongs to",
+            found.getValue("CHANGELOG.md").containsAll(found.getValue("README.md"))
+        )
+        found.forEach { (doc, values) ->
+            assertTrue("$doc quotes a different fingerprint: $values", values.all { it in found.getValue("README.md") })
+        }
+    }
+
+    @Test
     fun `the issue form asks for diagnostics`() {
         assertTrue(text(".github/ISSUE_TEMPLATE/bug_report.yml").contains("Copy diagnostics"))
     }
