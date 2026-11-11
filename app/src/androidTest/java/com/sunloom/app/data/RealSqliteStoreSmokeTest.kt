@@ -19,29 +19,38 @@ import org.junit.runner.RunWith
 class RealSqliteStoreSmokeTest {
     private lateinit var context: Context
 
+    // These tests use a database of their own: deleting the app's real one would pull it out from under the connection
+    // the running app (and any other test in this process) holds, which SQLite reports as "database moved".
+    private companion object {
+        const val TEST_DB = "sunloom_library_smoke_test.db"
+    }
+
+    private fun store() = SqliteLibraryStore(context, TEST_DB)
+    private fun testDbPath() = context.getDatabasePath(TEST_DB).path
+
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        context.deleteDatabase(SqliteLibraryStore.DATABASE_NAME)
+        context.deleteDatabase(TEST_DB)
     }
 
     @After
     fun tearDown() {
-        context.deleteDatabase(SqliteLibraryStore.DATABASE_NAME)
+        context.deleteDatabase(TEST_DB)
     }
 
     @Test
     fun blocklistSurvivesReopeningTheDatabase() {
         val entry = BlocklistEntry("asset-1", "sha-1", "dhash-1", "test", "smoke", 1L)
-        SqliteLibraryStore(context).addBlocklistEntry(entry)
+        store().addBlocklistEntry(entry)
 
-        val reopened = SqliteLibraryStore(context)
+        val reopened = store()
         assertEquals(listOf(entry), reopened.getAllBlocklistEntries())
     }
 
     @Test
     fun checkpointFoldsTheWriteAheadLogIntoTheMainFile() {
-        val store = SqliteLibraryStore(context)
+        val store = store()
         store.addBlocklistEntry(BlocklistEntry("asset-wal", "sha-wal", "dhash-wal", "test", "smoke", 2L))
 
         store.checkpoint()
@@ -53,11 +62,11 @@ class RealSqliteStoreSmokeTest {
 
     @Test
     fun databaseIsCreatedAtTheCurrentSchemaVersionAndCheckpointsCleanly() {
-        val store = SqliteLibraryStore(context)
+        val store = store()
         store.getAllBlocklistEntries()
         store.checkpoint()
         val db = android.database.sqlite.SQLiteDatabase.openDatabase(
-            context.getDatabasePath(SqliteLibraryStore.DATABASE_NAME).path,
+            testDbPath(),
             null,
             android.database.sqlite.SQLiteDatabase.OPEN_READONLY
         )
@@ -67,15 +76,16 @@ class RealSqliteStoreSmokeTest {
 
     @Test
     fun aVersion1DatabaseUpgradesOnTheDevicesSqlite() {
-        val path = context.getDatabasePath(SqliteLibraryStore.DATABASE_NAME).also { it.parentFile?.mkdirs() }.path
+        val path = context.getDatabasePath(TEST_DB).also { it.parentFile?.mkdirs() }.path
         android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(path, null).use { db ->
-            // Only the tables the upgrade alters; the column additions are what is being exercised.
-            db.execSQL("CREATE TABLE wallpapers (id TEXT PRIMARY KEY)")
-            db.execSQL("CREATE TABLE rejections (asset_id TEXT PRIMARY KEY)")
+            // The columns version 1 really had and the upgrade's indexes need (retrieved_at, source_id, timestamp_ms);
+            // the columns it adds (description, crop_x, ...) are what is being exercised.
+            db.execSQL("CREATE TABLE wallpapers (id TEXT PRIMARY KEY, source_id TEXT NOT NULL DEFAULT '', retrieved_at INTEGER NOT NULL DEFAULT 0)")
+            db.execSQL("CREATE TABLE rejections (asset_id TEXT PRIMARY KEY, timestamp_ms INTEGER NOT NULL DEFAULT 0)")
             db.version = 1
         }
 
-        SqliteLibraryStore(context).getAllBlocklistEntries()
+        store().getAllBlocklistEntries()
 
         android.database.sqlite.SQLiteDatabase.openDatabase(path, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY).use { db ->
             assertEquals(SqliteLibraryStore.DATABASE_VERSION, db.version)

@@ -1,7 +1,7 @@
 # Wallpaper Tool Development Constitution
 
 - **Product:** Sunloom (`com.sunloom.app`)
-- **Status:** Adopted v0.55 (Governing Engineering Law) **[v0.55]**
+- **Status:** Adopted v0.56 (Governing Engineering Law) **[v0.56]**
 - **Scope:** Product principles, user experience, platform-independent requirements, and platform and distribution obligations confined to Article XVIII **[v0.3]**
 - **Purpose:** Guide product and engineering decisions. Articles I–XVII remain platform-independent; platform-specific obligations live only in Article XVIII so the core law survives a future port. **[v0.3]**
 - **How to read this:** If you are new here, read Article I (the core product promise) and the article for the part you are changing; skim the rest when a test points you to it. Articles are numbered; `§n` is the numbered item inside one. A tag such as **[v0.46]** marks the version that added or changed a sentence, and the amendment log below says why. Tests name the rule they guard with `@Requirement("XII.1")`. Plain-language companions: the [README](README.md), the [user guide](docs/USER_GUIDE.md) and the [architecture notes](docs/ARCHITECTURE.md).
@@ -68,6 +68,7 @@ The articles and schedules below carry the current rules; the `[vX.Y]` tags in t
 | v0.53 | 2026-11-11 | Tests reach the places people use Sunloom: accessibility is checked in the dark theme, in first-run setup, in dialogs and in a 400 dp window at 200 percent text; the activity is launched and a shared picture is imported; refusals of added pictures are tested; coverage floors are raised (XVI). |
 | v0.54 | 2026-11-11 | Documents for outsiders: README, user guide, architecture, contributing, releasing, changelog, security policy, issue forms and a rewritten privacy policy for the GitHub release; a test keeps them in step with the manifest and the host list (XVI). |
 | v0.55 | 2026-11-11 | The repository is public and says so: CI scans the whole history for credentials on every push, GitHub secret scanning, push protection and private vulnerability reports are on, and `main` takes changes only through pull requests that pass CI (XVI, XVII). |
+| v0.56 | 2026-11-11 | The on-device tests ran for the first time and found two faulty tests (not faults in the app): a made-up version-1 database and tests that deleted the app's own database. They now use a realistic old schema and a database of their own, and run on every pull request (XVI). |
 
 ---
 

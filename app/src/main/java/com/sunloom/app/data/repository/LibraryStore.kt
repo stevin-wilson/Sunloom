@@ -306,7 +306,11 @@ internal object KeepCorruptDatabaseHandler : android.database.DatabaseErrorHandl
     }
 }
 
-class SqliteLibraryStore(context: Context) : LibraryStore {
+/**
+ * [databaseName] is the production name unless a test asks for its own file, so a device test can create and delete a
+ * database without pulling the app's own out from under its open connection.
+ */
+class SqliteLibraryStore(context: Context, private val databaseName: String = DATABASE_NAME) : LibraryStore {
     private val appContext: Context = context.applicationContext
 
     companion object {
@@ -351,7 +355,7 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
 
     private val dbHelper = object : SQLiteOpenHelper(
         context.applicationContext,
-        DATABASE_NAME,
+        databaseName,
         null,
         DATABASE_VERSION,
         KeepCorruptDatabaseHandler
@@ -597,7 +601,7 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
     override fun wipe() {
         runCatching { dbHelper.close() }
         // Removes the database and its -wal, -shm and -journal files.
-        appContext.deleteDatabase(DATABASE_NAME)
+        appContext.deleteDatabase(databaseName)
         forgetSharedInstance()
     }
 
