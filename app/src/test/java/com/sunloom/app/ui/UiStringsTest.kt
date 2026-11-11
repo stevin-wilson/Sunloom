@@ -31,6 +31,7 @@ class UiStringsTest {
         assertEquals(english.syncInterrupted(null), android.syncInterrupted(null))
         assertEquals(english.syncInterrupted("timeout"), android.syncInterrupted("timeout"))
         for (n in listOf(1, 5)) assertEquals(english.batchChecked(n), android.batchChecked(n))
+        assertEquals(english.importingPhoto(2, 5), android.importingPhoto(2, 5))
         for (n in listOf(1, 2, 7)) assertEquals(english.wallpaperCount(n), android.wallpaperCount(n))
     }
 }

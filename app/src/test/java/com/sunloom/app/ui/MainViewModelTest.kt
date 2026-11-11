@@ -57,6 +57,7 @@ class MainViewModelTest {
 
         var lastExcludeIds: Set<String>? = null
         val importApplyFlags = mutableListOf<Boolean>()
+        var duringImport: (() -> Unit)? = null
 
         var failNext: Throwable? = null
 
@@ -114,7 +115,11 @@ class MainViewModelTest {
 
         override suspend fun importLocalUri(uriString: String, asBaselineRestore: Boolean, applyAfterImport: Boolean): SunloomUiState {
             importApplyFlags += applyAfterImport
-            state = state.copy(statusBannerMessage = "Imported $uriString")
+            duringImport?.invoke()
+            state = state.copy(
+                statusBannerMessage = "Imported $uriString",
+                applyOfferRecordId = if (applyAfterImport) null else "imported-$uriString"
+            )
             return state
         }
 
@@ -329,6 +334,27 @@ class MainViewModelTest {
     }
 
     @Test
+    fun `a failed sync offers a retry, and a later good sync takes it away`() = runTest {
+        fakeGateway.shouldThrowOnSync = true
+        viewModel.syncOnlineCatalogNow()
+        assertTrue(viewModel.uiState.value.canRetrySync)
+
+        fakeGateway.shouldThrowOnSync = false
+        viewModel.syncOnlineCatalogNow()
+        assertFalse(viewModel.uiState.value.canRetrySync)
+    }
+
+    @Test
+    fun `a cancelled sync does not offer a retry`() = runTest {
+        fakeGateway.shouldCancelOnSync = true
+        try {
+            viewModel.syncOnlineCatalogNow()
+        } catch (_: kotlinx.coroutines.CancellationException) {
+        }
+        assertFalse(viewModel.uiState.value.canRetrySync)
+    }
+
+    @Test
     fun `selectTab, toggleCategory, toggleSource, toggleLegibilityOverlay, restoreOriginal, and importLocalUri update state`() {
         viewModel.selectTab(DesktopNavTab.SAFETY_AND_DECISION_LOG)
         assertEquals(DesktopNavTab.SAFETY_AND_DECISION_LOG, viewModel.uiState.value.activeTab)
@@ -436,6 +462,51 @@ class MainViewModelTest {
         viewModel.importLocalUris(listOf("content://a/1"))
         viewModel.importLocalUris(listOf("content://a/2", "content://a/3"))
         assertEquals(listOf(true, false, false), fakeGateway.importApplyFlags)
+    }
+
+    @Test
+    fun `adding a photo from the picker puts it in the reserve and offers to apply it`() {
+        viewModel.importLocalUri("content://a/1", asBaselineRestore = false)
+
+        assertEquals("the wallpaper is not changed behind the person's back", listOf(false), fakeGateway.importApplyFlags)
+        assertEquals("imported-content://a/1", viewModel.uiState.value.applyOfferRecordId)
+    }
+
+    @Test
+    fun `a batch has no single photo to apply, so no offer`() {
+        viewModel.importLocalUris(listOf("content://a/1", "content://a/2"))
+        assertNull(viewModel.uiState.value.applyOfferRecordId)
+    }
+
+    @Test
+    fun `a batch import reports how far it has got, and stops reporting when it ends`() {
+        val seen = mutableListOf<ImportProgress?>()
+        fakeGateway.duringImport = { seen += viewModel.uiState.value.importProgress }
+
+        viewModel.importLocalUris(listOf("content://a/1", "content://a/2", "content://a/3"))
+
+        assertEquals(listOf(ImportProgress(0, 3), ImportProgress(1, 3), ImportProgress(2, 3)), seen)
+        assertNull(viewModel.uiState.value.importProgress)
+    }
+
+    @Test
+    fun `a single import shows it is working too`() {
+        var seen: ImportProgress? = null
+        fakeGateway.duringImport = { seen = viewModel.uiState.value.importProgress }
+
+        viewModel.importLocalUris(listOf("content://a/1"))
+
+        assertEquals(ImportProgress(0, 1), seen)
+        assertNull(viewModel.uiState.value.importProgress)
+    }
+
+    @Test
+    fun `an import that fails does not leave the progress bar running`() {
+        fakeGateway.duringImport = { throw IllegalStateException("disk full") }
+
+        viewModel.importLocalUris(listOf("content://a/1", "content://a/2"))
+
+        assertNull(viewModel.uiState.value.importProgress)
     }
 
     @Test

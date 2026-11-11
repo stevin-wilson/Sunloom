@@ -102,6 +102,12 @@
     <string name="export_attribution_prompt">Choose where to save the attribution file for this image.</string>
     <string name="attribution_copied">Attribution copied to the clipboard</string>
     <string name="try_again">Try again</string>
+    <string name="banner_note_follow_os">%1$s • Follows your system theme</string>
+    <string name="banner_note_fixed">%1$s • Light at %2$02d:00, dark at %3$02d:00</string>
+    <string name="banner_note_manual">%1$s • Changes when you tap Next</string>
+    <string name="apply_now">Apply now</string>
+    <string name="show_more">Show more</string>
+    <string name="show_less">Show less</string>
     <string name="no_browser_for_link">No web browser available to open this link</string>
     <string name="today_preview_description">Wallpaper preview. Press Ctrl plus or minus to zoom, Ctrl 0 to reset.</string>
     <string name="shortcut_undo">Undo last dislike or removal</string>
@@ -146,7 +152,7 @@
     <string name="msg_display_dimensions_unknown_connect_an">Display dimensions unknown — connect an active display before syncing.</string>
     <string name="msg_couldn_t_reach_the_online">Couldn\'t reach the online catalogs. Your saved reserve is still available; try again when you\'re connected.</string>
     <string name="msg_reserve_is_up_to_date">Reserve is up to date for %1$s</string>
-    <string name="msg_imports_exceed_cache_limit">Your imported photos now take more space than the reserve limit. They are never removed automatically, so delete some or raise the limit in Settings.</string>
+    <string name="msg_imports_exceed_cache_limit">Your imported photos now take more space than the reserve limit. They are never removed automatically, so delete some, or raise the reserve limit under Storage &amp; About.</string>
     <string name="msg_could_not_import_selected_image">Could not import selected image (check format, bounds, or blocklist).</string>
     <string name="msg_saved_as_your_permanent_original">Saved \'%1$s\' as your permanent Original Wallpaper Restore Point.</string>
     <string name="msg_added_to_your_reserve">Added \'%1$s\' to your reserve.</string>
@@ -201,6 +207,10 @@
     <plurals name="msg_lost_imports">
         <item quantity="one">%1$d imported photo could not be restored on this device and is gone. Import it again if you still have it.</item>
         <item quantity="other">%1$d imported photos could not be restored on this device and are gone. Import them again if you still have them.</item>
+    </plurals>
+    <plurals name="msg_importing_photo">
+        <item quantity="one">Checking your photo…</item>
+        <item quantity="other">Checking photo %1$d of %2$d…</item>
     </plurals>
     <plurals name="msg_batch_checked">
         <item quantity="one">Checked %1$d image — approved ones are in your reserve.</item>

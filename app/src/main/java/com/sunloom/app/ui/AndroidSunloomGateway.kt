@@ -563,7 +563,8 @@ class AndroidSunloomGateway(
         } else {
             context.getString(R.string.msg_reserve_is_up_to_date, targetLabel)
         }
-        buildSnapshot(repo, msg, preloadedPrefs = prefs)
+        // Nothing new and the sources could not be reached: offer Try again, the same as when the request itself fails.
+        buildSnapshot(repo, msg, preloadedPrefs = prefs).copy(canRetrySync = syncFailed && added == 0)
     }
 
     override suspend fun resetSourceFailureIfTransient(sourceId: String) {
@@ -586,7 +587,7 @@ class AndroidSunloomGateway(
             buildSnapshot(
                 repo,
                 if (over) added + " " + context.getString(R.string.msg_imports_exceed_cache_limit) else added
-            )
+            ).copy(applyOfferRecordId = record.id)
         } else {
             applyWallpaperInternal(repo, record.id)
         }

@@ -22,6 +22,7 @@ interface UiStrings {
     /** [reason] is the failure text, or null when there is none to show. */
     fun syncInterrupted(reason: String?): String
     fun batchChecked(count: Int): String
+    fun importingPhoto(current: Int, total: Int): String
     fun wallpaperCount(count: Int): String
 
     companion object {
@@ -40,6 +41,8 @@ interface UiStrings {
             override fun scheduleEnabled(modeLabel: String) = "Automatic wallpaper schedule enabled ($modeLabel)"
             override fun syncInterrupted(reason: String?) = "Online sync interrupted: ${reason ?: "check connection"}"
             override fun batchChecked(count: Int) = if (count == 1) "Checked 1 image — approved ones are in your reserve." else "Checked $count images — approved ones are in your reserve."
+            override fun importingPhoto(current: Int, total: Int) =
+                if (total == 1) "Checking your photo…" else "Checking photo $current of $total…"
             override fun wallpaperCount(count: Int) = if (count == 1) "1 wallpaper" else "$count wallpapers"
         }
     }
@@ -59,6 +62,8 @@ class AndroidUiStrings(private val context: Context) : UiStrings {
     override fun syncInterrupted(reason: String?): String =
         context.getString(R.string.msg_sync_interrupted, reason ?: context.getString(R.string.msg_check_connection))
     override fun batchChecked(count: Int): String = context.resources.getQuantityString(R.plurals.msg_batch_checked, count, count)
+    override fun importingPhoto(current: Int, total: Int): String =
+        context.resources.getQuantityString(R.plurals.msg_importing_photo, total, current, total)
     override fun wallpaperCount(count: Int): String =
         context.resources.getQuantityString(R.plurals.msg_wallpaper_count, count, count)
 }

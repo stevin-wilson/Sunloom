@@ -77,7 +77,13 @@ data class SunloomUiState(
     val isApplyingWallpaper: Boolean = false,
     val statusBannerMessage: String = "Ready",
     /** Set when the last apply failed in a way that may succeed on a second try; drives the banner's Retry. */
-    val retryApplyRecordId: String? = null
+    val retryApplyRecordId: String? = null,
+    /** Set when the last online sync failed; drives the banner's Try again. */
+    val canRetrySync: Boolean = false,
+    /** Set while photos are being checked and added; null otherwise. */
+    val importProgress: ImportProgress? = null,
+    /** The photo that was just added to the reserve without being applied; drives the banner's Apply now. */
+    val applyOfferRecordId: String? = null
 ) {
     val totalCacheBytesUsed: Long
         get() = if (allCachedBytesUsed >= 0L) allCachedBytesUsed else libraryWallpapers.sumOf { it.fileSizeBytes }
@@ -135,3 +141,6 @@ sealed interface UpdateCheckUiState {
     data object Checking : UpdateCheckUiState
     data class Done(val result: com.sunloom.app.update.UpdateCheckResult) : UpdateCheckUiState
 }
+
+/** [done] of [total] photos have been checked so far. */
+data class ImportProgress(val done: Int, val total: Int)

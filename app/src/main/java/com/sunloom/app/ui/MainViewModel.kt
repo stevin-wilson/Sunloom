@@ -202,7 +202,7 @@ class MainViewModel(
                         // Nothing above this scope handles exceptions, so a storage error (disk full, SQLite) would
                         // end the process. Keep the screen as it was and say so.
                         android.util.Log.w("MainViewModel", "action_failed", e)
-                        _uiState.value.copy(statusBannerMessage = strings.storageProblem)
+                        _uiState.value.copy(statusBannerMessage = strings.storageProblem, importProgress = null)
                     }
                     publish(next, preserveNavigation, ownPreferenceEdit = preferenceEdit)
                 }
@@ -656,10 +656,12 @@ class MainViewModel(
         if (!syncMutex.tryLock()) return false
         val prevBanner = _uiState.value.statusBannerMessage
         val prevRetry = _uiState.value.retryApplyRecordId
+        val prevCanRetrySync = _uiState.value.canRetrySync
         _uiState.update { s -> s.copy(
             isSyncingOnline = true,
             statusBannerMessage = strings.fetchingCatalogs,
-            retryApplyRecordId = null
+            retryApplyRecordId = null,
+            canRetrySync = false
         ) }
         try {
             val refreshed = withContext(workDispatcher) {
@@ -672,14 +674,16 @@ class MainViewModel(
             _uiState.update { s -> s.copy(
                 isSyncingOnline = false,
                 statusBannerMessage = prevBanner,
-                retryApplyRecordId = prevRetry
+                retryApplyRecordId = prevRetry,
+                canRetrySync = prevCanRetrySync
             ) }
             throw cancel
         } catch (t: Exception) {
             _uiState.update { s -> s.copy(
                 isSyncingOnline = false,
                 statusBannerMessage = strings.syncInterrupted(t.message),
-                retryApplyRecordId = null
+                retryApplyRecordId = null,
+                canRetrySync = true
             ) }
         } finally {
             if (_uiState.value.isSyncingOnline) {
@@ -691,7 +695,12 @@ class MainViewModel(
     }
 
     fun importLocalUri(uriString: String, asBaselineRestore: Boolean) {
-        launchGatewayMutation { gateway.importLocalUri(uriString, asBaselineRestore) }
+        launchGatewayMutation {
+            _uiState.update { s -> s.copy(importProgress = ImportProgress(0, 1), statusBannerMessage = strings.importingPhoto(1, 1)) }
+            // Adding a photo must not change the wallpaper behind the person's back: it joins the reserve, and the
+            // banner offers Apply now.
+            gateway.importLocalUri(uriString, asBaselineRestore, applyAfterImport = false)
+        }
     }
 
     /**
@@ -708,15 +717,20 @@ class MainViewModel(
             val images = gateway.filterImageUris(uriStrings)
             if (images.isEmpty()) return@launchGatewayMutation current
             var state = current
+            val total = images.size
             // One image behaves like the picker (imported and applied). A batch only fills the reserve:
             // changing the system wallpaper once per image would flash through all of them.
             val applyAfterImport = images.size == 1
-            for (uri in images) {
+            for ((index, uri) in images.withIndex()) {
+                _uiState.update { s ->
+                    s.copy(importProgress = ImportProgress(index, total), statusBannerMessage = strings.importingPhoto(index + 1, total))
+                }
                 state = gateway.importLocalUri(uri, false, applyAfterImport)
             }
             if (images.size > 1) {
                 state = state.copy(
-                    statusBannerMessage = strings.batchChecked(images.size)
+                    statusBannerMessage = strings.batchChecked(images.size),
+                    applyOfferRecordId = null
                 )
             }
             state

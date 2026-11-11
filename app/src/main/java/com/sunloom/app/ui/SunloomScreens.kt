@@ -3,6 +3,7 @@ package com.sunloom.app.ui
 import com.sunloom.app.R
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -64,6 +65,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -648,7 +650,9 @@ fun DesktopWorkspaceScreen(
                 TopStatusBanner(
                     uiState = uiState,
                     onTogglePause = onTogglePause,
-                    onRetryApply = { uiState.retryApplyRecordId?.let(onApplySpecific) }
+                    onRetryApply = { uiState.retryApplyRecordId?.let(onApplySpecific) },
+                    onRetrySync = onSyncOnline,
+                    onApplyNow = { uiState.applyOfferRecordId?.let(onApplySpecific) }
                 )
 
                 when (uiState.activeTab) {
@@ -792,12 +796,25 @@ private val ReadableContentMaxWidth = 1100.dp
 private fun TopStatusBanner(
     uiState: SunloomUiState,
     onTogglePause: () -> Unit,
-    onRetryApply: () -> Unit = {}
+    onRetryApply: () -> Unit = {},
+    onRetrySync: () -> Unit = {},
+    onApplyNow: () -> Unit = {}
 ) {
-    val solarNote = when {
-        uiState.daylightWindow.isPolarDay -> "24h Daylight"
-        uiState.daylightWindow.isPolarNight -> "24h Night"
-        else -> "Sunrise ${uiState.daylightWindow.sunriseTime} • Sunset ${uiState.daylightWindow.sunsetTime}"
+    val prefs = uiState.preferences
+    val brightnessName = uiState.targetBrightnessNow.displayName
+    val scheduleNote = when (prefs.scheduleMode) {
+        ScheduleMode.SUNRISE_SUNSET -> {
+            val solarNote = when {
+                uiState.daylightWindow.isPolarDay -> "24h Daylight"
+                uiState.daylightWindow.isPolarNight -> "24h Night"
+                else -> "Sunrise ${uiState.daylightWindow.sunriseTime} • Sunset ${uiState.daylightWindow.sunsetTime}"
+            }
+            "$brightnessName • $solarNote"
+        }
+        ScheduleMode.FOLLOW_OS_THEME -> stringResource(R.string.banner_note_follow_os, brightnessName)
+        ScheduleMode.FIXED_CLOCK ->
+            stringResource(R.string.banner_note_fixed, brightnessName, prefs.fixedLightHour, prefs.fixedDarkHour)
+        ScheduleMode.MANUAL_ONLY -> stringResource(R.string.banner_note_manual, brightnessName)
     }
     val isDaytime = uiState.targetBrightnessNow == BrightnessClass.LIGHT
     val showPauseResume = uiState.preferences.autoChangeEnabled &&
@@ -825,29 +842,27 @@ private fun TopStatusBanner(
                         contentDescription = null,
                         tint = if (isDaytime) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.tertiary
                     )
-                    Column(modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
-                        Text(
-                            text = uiState.statusBannerMessage,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "${uiState.targetBrightnessNow.displayName} • $solarNote",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    BannerMessage(uiState.statusBannerMessage, scheduleNote)
                 }
                 if (uiState.retryApplyRecordId != null) {
                     OutlinedButton(
                         onClick = onRetryApply,
                         enabled = !uiState.isApplyingWallpaper,
                         modifier = Modifier.desktopControl().testTag("retry_apply_button")
+                    ) { Text(stringResource(R.string.try_again)) }
+                }
+                if (uiState.applyOfferRecordId != null) {
+                    OutlinedButton(
+                        onClick = onApplyNow,
+                        enabled = !uiState.isApplyingWallpaper,
+                        modifier = Modifier.desktopControl().testTag("apply_now_button")
+                    ) { Text(stringResource(R.string.apply_now)) }
+                }
+                if (uiState.canRetrySync) {
+                    OutlinedButton(
+                        onClick = onRetrySync,
+                        enabled = !uiState.isSyncingOnline,
+                        modifier = Modifier.desktopControl().testTag("retry_sync_button")
                     ) { Text(stringResource(R.string.try_again)) }
                 }
                 if (showPauseResume) {
@@ -869,10 +884,62 @@ private fun TopStatusBanner(
                     }
                 }
             }
-            if (uiState.isSyncingOnline || uiState.isApplyingWallpaper) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            }
+            BannerProgress(uiState)
         }
+    }
+}
+
+@Composable
+private fun BannerProgress(uiState: SunloomUiState) {
+    val importing = uiState.importProgress
+    if (importing != null && importing.total > 1) {
+        LinearProgressIndicator(
+            progress = { importing.done.toFloat() / importing.total },
+            modifier = Modifier.fillMaxWidth().testTag("import_progress")
+        )
+    } else if (importing != null || uiState.isSyncingOnline || uiState.isApplyingWallpaper) {
+        LinearProgressIndicator(modifier = Modifier.fillMaxWidth().testTag("import_progress"))
+    }
+}
+
+@Composable
+private fun BannerMessage(message: String, scheduleNote: String) {
+    var expanded by remember(message) { mutableStateOf(false) }
+    var cutOff by remember(message) { mutableStateOf(false) }
+    val expandedLabel = stringResource(R.string.show_less)
+    val collapsedLabel = stringResource(R.string.show_more)
+    Column(modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = if (expanded) Int.MAX_VALUE else 1,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { if (!expanded) cutOff = it.hasVisualOverflow },
+            modifier = Modifier
+                .testTag("status_banner_message")
+                .semantics {
+                    stateDescription = if (expanded) expandedLabel else collapsedLabel
+                }
+                .clickable { expanded = !expanded }
+        )
+        if (cutOff || expanded) {
+            Text(
+                text = stringResource(if (expanded) R.string.show_less else R.string.show_more),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.testTag("status_banner_expand_hint")
+            )
+        }
+        Text(
+            text = scheduleNote,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.testTag("status_banner_note")
+        )
     }
 }
 
