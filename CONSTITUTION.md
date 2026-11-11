@@ -1,7 +1,7 @@
 # Wallpaper Tool Development Constitution
 
 - **Product:** Sunloom (`com.sunloom.app`)
-- **Status:** Adopted v0.35 (Governing Engineering Law) **[v0.35]**
+- **Status:** Adopted v0.36 (Governing Engineering Law) **[v0.36]**
 - **Scope:** Product principles, user experience, platform-independent requirements, and platform and distribution obligations confined to Article XVIII **[v0.3]**
 - **Purpose:** Guide product and engineering decisions. Articles I–XVII remain platform-independent; platform-specific obligations live only in Article XVIII so the core law survives a future port. **[v0.3]**
 
@@ -47,6 +47,7 @@ The articles and schedules below carry the current rules; the `[vX.Y]` tags in t
 | v0.33 | 2026-11-11 | Storage hygiene: the cache limit counts real bytes on disk; a daily pass removes orphaned image files (after a one-hour grace) and rows of long-evicted, never-kept pictures, leaving the blocklist alone (X §3). |
 | v0.34 | 2026-11-11 | `Reset Sunloom`: a confirmed, irreversible way to erase everything the app keeps and start again from setup (XII §3). |
 | v0.35 | 2026-11-11 | Diagnosability without telemetry: a local crash log, "Copy diagnostics" and "Report a problem" (opens a pre-filled GitHub issue), and release builds strip Log.v/d/i (VIII §2). |
+| v0.36 | 2026-11-11 | Small fixes: sources are contacted with the GitHub page instead of an email in the User-Agent (VI §7); personal-photo ids are UUIDs, not clock-based; a cancellation is recognised by its type only; the unused rotation-interval setting is removed. |
 
 ---
 
@@ -144,7 +145,7 @@ A wallpaper should look intentionally selected for the display on which it appea
    Everything else is rejected. This includes NC and ND variants, CC 1.0 licenses, GFDL-only, provider-specific licenses (such as the Unsplash License), "free to use" wording without a license identifier, non-empty Wikimedia `Restrictions` (personality/trademark/insignia restrictions), and missing licenses. Multi-licensed works (e.g., `CC BY-SA 3.0` + `GFDL`) are eligible when at least one offered license is in the allowlist above, and that allowlisted license is recorded at retrieval time. ND is excluded because cropping may constitute an adaptation. **[v0.4]**
 6. **Attribution display:** For CC BY and CC BY-SA assets, "About this wallpaper" shows the title, creator, source, license name with a link, and a note that the image was cropped and resized. It must be reachable within one interaction from the main surface and must work offline. Public-domain assets still show creator and source where known. Procedural seeds state they were generated on-device under CC0 without fabricated URLs. **Export:** when a wallpaper is saved with "Save as…", the credit travels with the file. JPEG exports embed title, creator, source, license and the modification note as metadata; CC BY and CC BY-SA exports additionally require a companion attribution file, because embedded metadata is easily stripped. Only already-approved renditions can be exported; export never re-fetches or bypasses the safety gate. **[v0.4, v0.9]**
 7. **Network conduct:** Adapters shall: **[v0.3]**
-   - send an identifying User-Agent of the form `Sunloom/<version> (com.sunloom.app; <contact URL or email>)`;
+   - send an identifying User-Agent of the form `Sunloom/<version> (+<project page URL>)` (the project's GitHub page; no mailbox is needed) **[v0.36]**;
    - honor `429`, `Retry-After`, and persisted per-source exponential backoff;
    - use conditional requests (`ETag` / `If-Modified-Since`) where supported and applicable;
    - enforce a per-source request budget inside the adapter;

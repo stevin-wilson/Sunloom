@@ -201,7 +201,6 @@ class LocalLibraryRepository(
     init {
         migrateLegacyPerceptualHashesToStore()
         sweepStaleQuarantineFiles()
-        healCancelledSourceDiagnostics()
     }
 
     /**
@@ -508,7 +507,6 @@ class LocalLibraryRepository(
         maxSourcesPerSync: Int = DEFAULT_MAX_SOURCES_PER_SYNC,
         display: DisplayProfile? = null
     ): List<WallpaperSourceAdapter> {
-        healCancelledSourceDiagnostics()
         val baseEligible = sourceAdapters.filter { adapter ->
             !adapter.isBuiltInOffline &&
                 SourceRegistry.isSourceAdmitted(adapter.sourceId) &&
@@ -923,13 +921,9 @@ class LocalLibraryRepository(
 
     // --- Source health, backoff and fetch cursor: see SourceHealthStore ---
 
-    fun healCancelledSourceDiagnostics() =
-        sourceHealth.healCancelledDiagnostics(SourceRegistry.admittedSources().map { it.sourceId })
-
     fun clearTransientSourceFailureOnReenable(sourceId: String) = sourceHealth.clearTransientFailureOnReenable(sourceId)
 
     fun getSourceDiagnostics(nowEpochMs: Long = System.currentTimeMillis()): List<SourceDiagnostics> {
-        healCancelledSourceDiagnostics()
         val enabled = loadPreferences().enabledSources
         return SourceRegistry.admittedSources().map { entry ->
             val sid = entry.sourceId

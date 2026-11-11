@@ -336,10 +336,10 @@ class DefaultHttpsClient(
         private val REDIRECT_STATUS_CODES = setOf(301, 302, 303, 307, 308)
 
         /**
-         * Article VI §7 [v0.5]: Standard identifying User-Agent header derived from BuildConfig.VERSION_NAME.
+         * Article VI §7: the app and its version, with the project page as the way to reach us (no mailbox needed).
          */
         val USER_AGENT: String =
-            "Sunloom/${BuildConfig.VERSION_NAME} (com.sunloom.app; mailto:maintainers@sunloom.app)"
+            "Sunloom/${BuildConfig.VERSION_NAME} (+https://github.com/stevin-wilson/Sunloom)"
 
         fun parseRetryAfterSeconds(rawHeader: String?, nowEpochMs: Long = System.currentTimeMillis()): Long {
             val trimmed = rawHeader?.trim().orEmpty()

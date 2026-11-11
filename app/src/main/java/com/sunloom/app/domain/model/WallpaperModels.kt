@@ -356,7 +356,6 @@ data class UserPreferences(
     val longitude: Double = -122.4194,
     val fixedLightHour: Int = 7,
     val fixedDarkHour: Int = 19,
-    val rotationIntervalHours: Int = 0,
     val enabledCategories: Set<SafeCategory> = setOf(
         SafeCategory.LANDSCAPES_NATURE,
         SafeCategory.SPACE_ASTRONOMY,

@@ -46,7 +46,6 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             longitude = Double.fromBits(prefs.getLong("longitude_bits", (-122.4194).toRawBits())),
             fixedLightHour = prefs.getInt("fixed_light_hour", 7).coerceIn(0, 23),
             fixedDarkHour = prefs.getInt("fixed_dark_hour", 19).coerceIn(0, 23),
-            rotationIntervalHours = prefs.getInt("rotation_interval_hours", 0).coerceIn(0, 24),
             enabledCategories = categories,
             enabledSources = sources,
             displayPolicy = DisplayPolicy.entries.firstOrNull {
@@ -127,7 +126,7 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             remove("quiet_hours_enabled")
             remove("quiet_hours_start_hour")
             remove("quiet_hours_end_hour")
-            putInt("rotation_interval_hours", updated.rotationIntervalHours.coerceIn(0, 24))
+            remove("rotation_interval_hours") // no longer used; drop what an older version stored
             putStringSet("enabled_categories", updated.enabledCategories.map { it.name }.toSet())
             putStringSet("enabled_sources", enabledAdmittedSources)
             putStringSet("known_admitted_sources", SourceRegistry.admittedSources().map { it.sourceId }.toSet())

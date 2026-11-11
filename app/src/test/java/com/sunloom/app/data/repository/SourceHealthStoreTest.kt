@@ -78,12 +78,20 @@ class SourceHealthStoreTest {
     }
 
     @Test
-    fun `stored cancellation errors from older versions are healed`() {
-        store.recordFailure("smk_open", IllegalStateException("boom"), 1L)
-        // an older build recorded this text as if the server had failed
-        prefs.edit().putString("source_last_error_smk_open", "Job was cancelled").putInt("source_fail_count_smk_open", 4).commit()
-        store.healCancelledDiagnostics(listOf("smk_open"))
+    fun `a cancellation anywhere in the cause chain is not a source failure`() {
+        val deep = IllegalStateException("a", RuntimeException("b", java.io.IOException("c", CancellationException("stop"))))
+
+        store.recordFailure("smk_open", deep, 1L)
+
         assertEquals(0, store.failureCount("smk_open"))
+    }
+
+    @Test
+    fun `only the exception type decides, not words in the message`() {
+        // A real failure that happens to mention cancellation is still the source's failure.
+        store.recordFailure("smk_open", IllegalStateException("upstream said: Job was cancelled"), 1L)
+
+        assertEquals(1, store.failureCount("smk_open"))
     }
 
     @Test

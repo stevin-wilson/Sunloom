@@ -427,48 +427,21 @@ class LocalLibraryRepositoryTest {
     }
 
     @Test
-    fun `persisted Job was cancelled source diagnostics self-heal to Healthy while real HTTP errors remain tracked`() {
+    fun `a genuine HTTP failure stays tracked and degraded in the diagnostics`() {
         val rawPrefs = context.getSharedPreferences("sunloom_preferences", Context.MODE_PRIVATE)
         val now = 1762280000000L
         rawPrefs.edit()
-            .putInt("source_fail_count_wikimedia_featured", 4)
-            .putLong("source_backoff_until_wikimedia_featured", now + 600_000L)
-            .putString("source_last_error_wikimedia_featured", "Job was cancelled")
-            .putInt("source_fail_count_nasa_library", 3)
-            .putLong("source_backoff_until_nasa_library", now + 300_000L)
-            .putString("source_last_error_nasa_library", "StandaloneCoroutine was cancelled")
             .putInt("source_fail_count_artic_cc0", 3)
             .putLong("source_backoff_until_artic_cc0", now + 300_000L)
             .putString("source_last_error_artic_cc0", "HTTP 503 from https://api.artic.edu")
             .commit()
 
-        val healedRepo = LocalLibraryRepository(context)
-        val diags = healedRepo.getSourceDiagnostics(now).associateBy { it.sourceId }
+        val diags = LocalLibraryRepository(context).getSourceDiagnostics(now).associateBy { it.sourceId }
 
-        val wiki = diags.getValue("wikimedia_featured")
-        assertEquals(com.sunloom.app.domain.model.SourceHealthState.HEALTHY, wiki.healthState)
-        assertEquals(0, wiki.consecutiveFailures)
-        assertEquals("", wiki.lastError)
-
-        val nasa = diags.getValue("nasa_library")
-        assertEquals(com.sunloom.app.domain.model.SourceHealthState.HEALTHY, nasa.healthState)
-        assertEquals(0, nasa.consecutiveFailures)
-        assertEquals("", nasa.lastError)
-
-        // Genuine HTTP 503 failure remains degraded as expected
         val artic = diags.getValue("artic_cc0")
         assertEquals(com.sunloom.app.domain.model.SourceHealthState.DEGRADED, artic.healthState)
         assertEquals(3, artic.consecutiveFailures)
-
-        // Both healed dark-capable sources are immediately eligible for sync again
-        val selectedIds = healedRepo.selectAdaptersForSync(
-            preferences = healedRepo.loadPreferences().let { it.copy(enabledSources = it.enabledSources + "nasa_library") },
-            nowEpochMs = now,
-            unseenDarkCount = 0,
-            maxSourcesPerSync = 3
-        ).map { it.sourceId }
-        assertTrue(selectedIds.contains("wikimedia_featured"))
-        assertTrue(selectedIds.contains("nasa_library"))
+        assertEquals("HTTP 503 from https://api.artic.edu", artic.lastError)
     }
 
     @Test

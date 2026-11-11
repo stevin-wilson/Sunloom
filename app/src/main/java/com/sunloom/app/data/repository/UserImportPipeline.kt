@@ -41,7 +41,7 @@ internal class UserImportPipeline(
         display: DisplayProfile,
         asBaselineRestore: Boolean = false
     ): WallpaperRecord {
-        val id = if (asBaselineRestore) "baseline-restore-original" else "local-${System.currentTimeMillis()}"
+        val id = if (asBaselineRestore) "baseline-restore-original" else newImportId()
         val srcW = bitmap.width
         val srcH = bitmap.height
 
@@ -232,7 +232,7 @@ internal class UserImportPipeline(
      * resolution (no 2048 px downsample or PNG re-encode) so 4K/5K monitors achieve native sharpness.
      */
     fun importUserUri(uri: Uri, display: DisplayProfile, asBaselineRestore: Boolean = false): WallpaperRecord? {
-        val id = if (asBaselineRestore) "baseline-restore-original" else "local-${System.currentTimeMillis()}"
+        val id = if (asBaselineRestore) "baseline-restore-original" else newImportId()
         val title = if (asBaselineRestore) {
             "Original Baseline Wallpaper"
         } else {
@@ -403,5 +403,13 @@ internal class UserImportPipeline(
         } finally {
             runCatching { stageFile.delete() }
         }
+    }
+
+    companion object {
+        /**
+         * A personal photo's id. Unique by construction: several photos can arrive in the same millisecond (Share,
+         * drag-and-drop, a multi-select), and an id built from the clock would let the second replace the first.
+         */
+        fun newImportId(): String = "local-${java.util.UUID.randomUUID()}"
     }
 }
