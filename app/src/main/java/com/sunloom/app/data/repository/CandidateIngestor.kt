@@ -106,7 +106,7 @@ internal class CandidateIngestor(
             "stage_${candidate.id.replace(SAFE_FILENAME_REGEX, "_")}_${System.nanoTime()}.tmp"
         )
         try {
-            val payloadBytes = when (val result = download(candidate, run)) {
+            var payload: ByteArray? = when (val result = download(candidate, run)) {
                 is Download.Bytes -> result.data
                 Download.Failed -> return true
                 Download.StopSource -> return false
@@ -114,11 +114,15 @@ internal class CandidateIngestor(
             run.downloadsOk++
 
             // Stage raw bytes in quarantine before any decoding
-            FileOutputStream(quarantineFile).use { it.write(payloadBytes) }
+            FileOutputStream(quarantineFile).use { it.write(payload!!) }
 
-            val sampled = sample(candidate, payloadBytes, state, run) ?: return true
+            val sampled = sample(candidate, payload!!, state, run)
+            // The payload (up to 35 MB) is needed no longer: judging works on the small grids, and an accepted picture
+            // is stored from the staged file. Let it go before the evaluator and the store allocate.
+            payload = null
+            if (sampled == null) return true
             val judged = judge(candidate, sampled, state, run) ?: return true
-            store(candidate, payloadBytes, judged, quarantineFile, state, run)
+            store(candidate, judged, quarantineFile, state, run)
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (unavailable: LibraryStoreUnavailableException) {
@@ -407,7 +411,6 @@ internal class CandidateIngestor(
     /** Moves the vetted bytes into the wallpaper directory and stores the library row. */
     private fun store(
         candidate: CandidateAsset,
-        payloadBytes: ByteArray,
         judged: Judged,
         quarantineFile: File,
         state: SyncState,
@@ -416,11 +419,8 @@ internal class CandidateIngestor(
         val ext = judged.approved.detectedFormat.fileExtension
         val outFile = File(wallpaperDir, "${candidate.id}.$ext")
         // The bytes are already on disk in quarantine and have passed every check: move them into place
-        // instead of writing the (possibly tens of MB) payload a second time. A move across file systems
-        // can fail, so fall back to a plain write.
-        if (!quarantineFile.renameTo(outFile)) {
-            FileOutputStream(outFile).use { it.write(payloadBytes) }
-        }
+        // instead of writing the (possibly tens of MB) payload a second time.
+        placeStagedFile(quarantineFile, outFile)
 
         val record = WallpaperRecord(
             id = candidate.id,
@@ -470,6 +470,14 @@ internal class CandidateIngestor(
     }
 
     companion object {
+        /**
+         * Moves a staged, vetted file into place. A move across file systems can fail, so it falls back to copying from
+         * the staged file on disk (the caller removes the staged file afterwards) rather than from a payload kept in memory.
+         */
+        internal fun placeStagedFile(staged: File, dest: File, rename: (File, File) -> Boolean = { a, b -> a.renameTo(b) }) {
+            if (!rename(staged, dest)) staged.copyTo(dest, overwrite = true)
+        }
+
         private const val TAG = "CandidateIngestor"
         private const val GRID_W = 32
         private const val GRID_H = 20

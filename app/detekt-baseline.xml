@@ -155,7 +155,7 @@
     <ID>NestedBlockDepth:SafetyGate.kt$SafetyGate.Companion$fun inspectImageHeaderBounds(bytes: ByteArray): ImageHeaderBounds?</ID>
     <ID>NestedBlockDepth:SimpleJson.kt$SimpleJson.StrictParser$private fun parseString(): String</ID>
     <ID>NestedBlockDepth:WallpaperExporter.kt$WallpaperExporter$fun writeImage(record: WallpaperRecord, target: Uri): Boolean</ID>
-    <ID>NestedBlockDepth:WallpaperSourceAdapter.kt$DefaultHttpsClient$private fun &lt;T&gt; executeFollowingValidatedRedirects( initialUrl: String, scopeSourceId: String? = null, acceptHeader: String, ifNoneMatch: String? = null, ifModifiedSince: String? = null, reader: (HttpURLConnection, Int) -&gt; T ): T</ID>
+    <ID>NestedBlockDepth:WallpaperSourceAdapter.kt$DefaultHttpsClient$private fun &lt;T&gt; executeFollowingValidatedRedirects( initialUrl: String, scopeSourceId: String? = null, acceptHeader: String, ifNoneMatch: String? = null, ifModifiedSince: String? = null, track: (HttpURLConnection) -&gt; Unit = {}, reader: (HttpURLConnection, Int) -&gt; T ): T</ID>
     <ID>SpreadOperator:ReserveAndHistoryPane.kt$(it.anchorId, *it.selected.toTypedArray())</ID>
     <ID>TooGenericExceptionCaught:GoogleBookPlatformAdapter.kt$DefaultSystemWallpaperGateway$e: Throwable</ID>
     <ID>TopLevelPropertyNaming:DesktopScrollbar.kt$private const val ScrollbarActiveAlpha = 0.9f</ID>
@@ -188,7 +188,6 @@
     <ID>UseRequire:SimpleJson.kt$SimpleJson.StrictParser$throw IllegalArgumentException("Unterminated escape sequence")</ID>
     <ID>UseRequire:UserImportPipeline.kt$UserImportPipeline$throw IllegalArgumentException("File exceeds maximum payload size.")</ID>
     <ID>UseRequire:WallpaperSourceAdapter.kt$DefaultHttpsClient$throw IllegalArgumentException("Asset Content-Length ($contentLength bytes) exceeds maximum ($maxBytes bytes)")</ID>
-    <ID>UseRequire:WallpaperSourceAdapter.kt$DefaultHttpsClient$throw IllegalArgumentException("Asset exceeds maximum permitted download size ($maxBytes bytes)")</ID>
     <ID>UseRequire:WallpaperSourceAdapter.kt$DefaultHttpsClient$throw IllegalArgumentException("JSON payload Content-Length ($contentLength) exceeds limit ($MAX_TEXT_BYTES)")</ID>
     <ID>UseRequire:WallpaperSourceAdapter.kt$DefaultHttpsClient.Companion$throw IllegalArgumentException("JSON payload exceeds limit ($maxChars)")</ID>
   </CurrentIssues>
