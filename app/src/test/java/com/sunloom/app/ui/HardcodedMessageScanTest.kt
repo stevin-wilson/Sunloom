@@ -15,7 +15,11 @@ class HardcodedMessageScanTest {
     /** Literals that are data, not UI text: a stored default label and a stored audit reason. */
     private val allowed = setOf(
         "Custom Coordinates",
-        "Rejected by user — permanently excluded from rotation"
+        "Rejected by user — permanently excluded from rotation",
+        // Stored, not shown: the default city is matched by name against the city list.
+        "San Francisco, United States",
+        // Stored, not shown: the name of a city typed as coordinates (the scanner drops the nested format calls).
+        "Custom (\${.format(lat)}, \${.format(lon)})"
     )
 
     /** Reads string literals out of Kotlin source, skipping comments and the inside of `${...}` templates. */
@@ -38,10 +42,10 @@ class HardcodedMessageScanTest {
                             i += 2
                             while (i < src.length && depth > 0) {
                                 if (src[i] == '{') depth++ else if (src[i] == '}') depth--
-                                if (src[i] == '"') { // nested literal inside the template
-                                    val inner = literals(src.substring(i, minOf(src.length, i + 200)))
-                                    out += inner
-                                    i = src.indexOf('"', i + 1) + 1
+                                if (src[i] == '"') { // a nested literal inside the template: format specifiers, not UI text
+                                    var j = i + 1
+                                    while (j < src.length && src[j] != '"') j += if (src[j] == '\\') 2 else 1
+                                    i = j + 1
                                     continue
                                 }
                                 sb.append(src[i]); i++
@@ -59,15 +63,47 @@ class HardcodedMessageScanTest {
         return out
     }
 
-    private fun looksLikeUiText(s: String): Boolean =
-        s.length >= 8 && s.contains(' ') && s.any { it.isLetter() } && s !in allowed
+    /** What the person would read: the literal with its `${...}` and `$name` parts taken out. */
+    private fun visibleText(s: String): String =
+        s.replace(Regex("\\$\\{[^}]*}"), "").replace(Regex("\\$[A-Za-z_][A-Za-z0-9_]*"), "")
+
+    private fun looksLikeUiText(s: String): Boolean {
+        val text = visibleText(s)
+        return text.length >= 8 && text.contains(' ') && text.any { it.isLetter() } && s !in allowed
+    }
+
+    private val base = File("src/main/java/com/sunloom/app")
+
+    /**
+     * The files whose literals the person reads. Left out on purpose: `UiStrings.kt` (its English object mirrors
+     * strings.xml and `UiStringsTest` keeps them equal), and the domain model and source registry, whose English
+     * names are identifiers and records. The screens read their labels through `labels/Labels.kt`, which the next
+     * test enforces.
+     */
+    private fun screenFiles(): List<File> =
+        File(base, "ui").listFiles { f -> f.extension == "kt" && f.name != "UiStrings.kt" }!!.toList()
 
     @Test
-    fun `the view model and the gateway hold no sentence-like literals`() {
-        val dir = File("src/main/java/com/sunloom/app/ui")
-        val offenders = listOf("MainViewModel.kt", "AndroidSunloomGateway.kt").flatMap { name ->
-            literals(File(dir, name).readText()).filter(::looksLikeUiText).map { "$name: \"$it\"" }
+    fun `no screen holds a sentence-like literal`() {
+        val offenders = screenFiles().flatMap { f ->
+            literals(f.readText()).filter(::looksLikeUiText).map { "${f.name}: \"$it\"" }
         }
-        assertTrue("User-visible text must come from strings.xml:\n" + offenders.joinToString("\n"), offenders.isEmpty())
+        assertTrue(
+            "User-visible text must come from strings.xml (${offenders.size}):\n" + offenders.joinToString("\n"),
+            offenders.isEmpty()
+        )
+    }
+
+    @Test
+    fun `screens read enum and source labels through the labels file, not from the domain model`() {
+        val direct = Regex("\\.(displayName|plainDescription|shortLabel)\\b|\\b(reg|registration)\\.sourceName")
+        val enumLabel = Regex("\\b(mode|policy|status|tab|cat|healthState|brightnessClass|licenseType|scheduleMode)\\.label\\b")
+        val offenders = screenFiles().flatMap { f ->
+            f.readLines().withIndex()
+                .filter { (_, line) -> !line.trimStart().startsWith("//") && !line.trimStart().startsWith("*") }
+                .filter { (_, line) -> direct.containsMatchIn(line) || enumLabel.containsMatchIn(line) }
+                .map { "${f.name}:${it.index + 1}: ${it.value.trim()}" }
+        }
+        assertTrue("read labels through labels/Labels.kt (${offenders.size}):\n" + offenders.joinToString("\n"), offenders.isEmpty())
     }
 }

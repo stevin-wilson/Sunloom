@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.labels.title
 import com.sunloom.app.domain.model.SourceIds
 import android.content.Context
 import android.content.res.Configuration
@@ -328,7 +329,10 @@ class AndroidSunloomGateway(
         }
         val msg = when {
             cleanPreferences.isPaused -> context.getString(R.string.msg_automatic_changes_paused)
-            cleanPreferences.autoChangeEnabled -> context.getString(R.string.msg_schedule_active, cleanPreferences.scheduleMode.label)
+            cleanPreferences.autoChangeEnabled -> context.getString(
+                R.string.msg_schedule_active,
+                cleanPreferences.scheduleMode.title(context.resources)
+            )
             else -> context.getString(R.string.msg_manual_mode_active)
         }
         buildSnapshot(repo, msg, preloadedPrefs = cleanPreferences)
@@ -377,7 +381,9 @@ class AndroidSunloomGateway(
             }
             buildSnapshot(
                 repo = repo,
-                bannerMessage = context.getString(R.string.msg_applied_for, record.title, record.evaluation.brightnessClass.displayName, targetName),
+                bannerMessage = context.getString(
+                    R.string.msg_applied_for, record.title, record.evaluation.brightnessClass.title(context.resources), targetName
+                ),
                 preloadedPrefs = prefs
             )
         } else {
@@ -391,7 +397,7 @@ class AndroidSunloomGateway(
                         context.getString(R.string.msg_couldn_t_set_just_now, record.title)
                     WallpaperStatus.UNSUPPORTED_BY_SYSTEM ->
                         context.getString(R.string.msg_this_system_doesn_t_allow)
-                    else -> context.getString(R.string.msg_status_while_applying, status.label, record.title)
+                    else -> context.getString(R.string.msg_status_while_applying, status.title(context.resources), record.title)
                 },
                 preloadedPrefs = prefs,
                 retryApplyRecordId = record.id.takeIf { retryable }

@@ -1,5 +1,7 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.labels.title
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.shape.CircleShape
 import com.sunloom.app.R
@@ -463,14 +465,15 @@ private fun UndoSnackbarEffect(
 ) {
     val latestUndo = rememberUpdatedState(onUndo)
     val latestCommit = rememberUpdatedState(onCommit)
+    val resources = LocalResources.current
     LaunchedEffect(pending?.token) {
         if (pending == null) return@LaunchedEffect
         val message = when (pending.kind) {
-            DiscardKind.DISLIKE -> "Disliked '${pending.title}'"
+            DiscardKind.DISLIKE -> resources.getString(R.string.undo_disliked, pending.title)
             DiscardKind.REMOVE -> if (pending.additionalRecordIds.isEmpty()) {
-                "Removed '${pending.title}' from reserve"
+                resources.getString(R.string.undo_removed_one, pending.title)
             } else {
-                "Removed ${pending.title} from reserve"
+                resources.getString(R.string.undo_removed_many, pending.title)
             }
         }
         val result = snackbarHostState.showSnackbar(
@@ -537,7 +540,7 @@ fun CityDropdownSelector(
                 selectedCityName.startsWith(it.cityName, ignoreCase = true)
         }
     }
-    val displayLabel = selectedCity?.dropdownLabel ?: "Custom: $selectedCityName"
+    val displayLabel = selectedCity?.dropdownLabel ?: stringResource(R.string.custom_city_label, selectedCityName)
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -739,8 +742,8 @@ fun DesktopWorkspaceScreen(
                             onClick = { onSelectTab(tab) },
                             modifier = Modifier.desktopControl(MaterialTheme.shapes.large).testTag("nav_${tab.name}"),
                             // The visible label names it; when labels give way to large text the icon must.
-                            icon = { Icon(navIcon(tab), contentDescription = if (labelsVisible) null else tab.label) },
-                            label = { Text(tab.label, fontSize = 12.sp, maxLines = 1) },
+                            icon = { Icon(navIcon(tab), contentDescription = if (labelsVisible) null else tab.title()) },
+                            label = { Text(tab.title(), fontSize = 12.sp, maxLines = 1) },
                             alwaysShowLabel = labelsVisible
                         )
                     }
@@ -769,16 +772,16 @@ fun DesktopWorkspaceScreen(
                                 selected = uiState.activeTab == tab,
                                 onClick = { onSelectTab(tab) },
                                 modifier = Modifier.desktopControl(MaterialTheme.shapes.large).testTag("nav_${tab.name}"),
-                                icon = { Icon(navIcon(tab), contentDescription = if (showLabels) null else tab.label) },
+                                icon = { Icon(navIcon(tab), contentDescription = if (showLabels) null else tab.title()) },
                                 label = if (showLabels) {
-                                    { Text(tab.label, fontSize = 12.sp) }
+                                    { Text(tab.title(), fontSize = 12.sp) }
                                 } else {
                                     null
                                 },
                                 alwaysShowLabel = showLabels
                             )
                         }
-                        if (showLabels) railItem() else ShortcutTooltip(tab.label) { railItem() }
+                        if (showLabels) railItem() else ShortcutTooltip(tab.title()) { railItem() }
                     }
                 }
                 workspace(Modifier.weight(1f).fillMaxHeight())
@@ -814,15 +817,17 @@ private fun TopStatusBanner(
     onApplyNow: () -> Unit = {}
 ) {
     val prefs = uiState.preferences
-    val brightnessName = uiState.targetBrightnessNow.displayName
+    val brightnessName = uiState.targetBrightnessNow.title()
     val scheduleNote = when (prefs.scheduleMode) {
         ScheduleMode.SUNRISE_SUNSET -> {
             val solarNote = when {
-                uiState.daylightWindow.isPolarDay -> "24h Daylight"
-                uiState.daylightWindow.isPolarNight -> "24h Night"
-                else -> "Sunrise ${uiState.daylightWindow.sunriseTime} • Sunset ${uiState.daylightWindow.sunsetTime}"
+                uiState.daylightWindow.isPolarDay -> stringResource(R.string.solar_24h_daylight)
+                uiState.daylightWindow.isPolarNight -> stringResource(R.string.solar_24h_night)
+                else -> stringResource(
+                    R.string.solar_sunrise_sunset, uiState.daylightWindow.sunriseTime, uiState.daylightWindow.sunsetTime
+                )
             }
-            "$brightnessName • $solarNote"
+            stringResource(R.string.banner_note_solar, brightnessName, solarNote)
         }
         ScheduleMode.FOLLOW_OS_THEME -> stringResource(R.string.banner_note_follow_os, brightnessName)
         ScheduleMode.FIXED_CLOCK ->

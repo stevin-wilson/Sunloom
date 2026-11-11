@@ -90,7 +90,7 @@ class UxLawsComposeTest {
         composeTestRule.onNodeWithTag("custom_lon_input").performTextReplacement("10")
         composeTestRule.waitForIdle()
 
-        val message = coordinateError("95", -90.0, 90.0)
+        val message = coordinateError("95", -90.0, 90.0)?.message(context.resources)
         assertEquals("Must be between -90 and 90", message)
         composeTestRule.onNodeWithText(message!!).assertExists()
         composeTestRule.onNodeWithTag("apply_custom_coords_button").assertIsNotEnabled()

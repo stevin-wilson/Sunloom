@@ -27,7 +27,9 @@ class UiStringsTest {
         assertEquals(english.settingNotSaved, android.settingNotSaved)
         assertEquals(english.storageProblem, android.storageProblem)
         assertEquals(english.fetchingCatalogs, android.fetchingCatalogs)
-        assertEquals(english.scheduleEnabled("Sunrise & Sunset"), android.scheduleEnabled("Sunrise & Sunset"))
+        for (mode in com.sunloom.app.domain.model.ScheduleMode.entries) {
+            assertEquals(english.scheduleEnabled(mode), android.scheduleEnabled(mode))
+        }
         assertEquals(english.syncInterrupted(null), android.syncInterrupted(null))
         assertEquals(english.syncInterrupted("timeout"), android.syncInterrupted("timeout"))
         for (n in listOf(1, 5)) assertEquals(english.batchChecked(n), android.batchChecked(n))

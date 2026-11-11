@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.labels.title
 import com.sunloom.app.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.border
@@ -597,15 +598,15 @@ private fun ReserveItemText(item: WallpaperRecord, isActive: Boolean) {
             }
         }
         Text(
-            "${item.evaluation.brightnessClass.displayName} • ${item.category.displayName} • ${item.provenance.sourceName}",
+            "${item.evaluation.brightnessClass.title()} • ${item.category.title()} • ${item.provenance.sourceName}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
         ProvenanceLinkRow(
-            label = "${item.provenance.creatorName} (${item.provenance.licenseType.label})",
-            displayText = item.provenance.originalPageUrl.ifBlank { "On-device" },
+            label = "${item.provenance.creatorName} (${item.provenance.licenseType.title()})",
+            displayText = item.provenance.originalPageUrl.ifBlank { stringResource(R.string.prov_on_device) },
             url = item.provenance.originalPageUrl
         )
     }
@@ -639,7 +640,7 @@ private fun ReserveItemActions(
             }
         }
         if (!isActive) {
-            ShortcutTooltip(if (restricted) HostRestrictedTooltip else "Apply as wallpaper now") {
+            ShortcutTooltip(if (restricted) stringResource(R.string.host_restricted_tooltip) else stringResource(R.string.apply_as_wallpaper_now)) {
                 OutlinedButton(
                     onClick = { onApplySpecific(item.id) },
                     enabled = !restricted,

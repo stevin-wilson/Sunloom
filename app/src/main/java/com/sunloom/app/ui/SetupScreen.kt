@@ -1,5 +1,7 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.labels.summary
+import com.sunloom.app.labels.title
 import androidx.compose.foundation.shape.CircleShape
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
@@ -198,13 +200,13 @@ private fun ScheduleStep(draft: UserPreferences, cityWasGuessed: Boolean, onChan
             FilterChip(
                 selected = draft.scheduleMode == mode,
                 onClick = { onChange(draft.copy(scheduleMode = mode)) },
-                label = { Text(mode.label) },
+                label = { Text(mode.title()) },
                 modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
             )
         }
     }
     Text(
-        draft.scheduleMode.plainDescription,
+        draft.scheduleMode.summary(),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
@@ -249,7 +251,7 @@ private fun ContentStep(draft: UserPreferences, onChange: (UserPreferences) -> U
                     val next = if (canRemove) draft.enabledCategories - cat else draft.enabledCategories + cat
                     onChange(draft.copy(enabledCategories = next))
                 },
-                label = { Text(cat.displayName) },
+                label = { Text(cat.title()) },
                 modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
             )
         }
@@ -271,7 +273,7 @@ private fun ContentStep(draft: UserPreferences, onChange: (UserPreferences) -> U
             FilterChip(
                 selected = draft.lockWorkspacePolicy == policy,
                 onClick = { onChange(draft.copy(lockWorkspacePolicy = policy)) },
-                label = { Text(policy.label) },
+                label = { Text(policy.title()) },
                 modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
             )
         }
@@ -299,7 +301,10 @@ private fun FinishStep(uiState: SunloomUiState, draft: UserPreferences, onChange
                     maxDecodeWidth = 640,
                     maxDecodeHeight = 400
                 )
-                TruncatedTitleWithTooltip("Daytime: ${sampleLight.title}", style = MaterialTheme.typography.labelLarge)
+                TruncatedTitleWithTooltip(
+                    stringResource(R.string.daytime_sample, sampleLight.title),
+                    style = MaterialTheme.typography.labelLarge
+                )
             }
         }
         if (sampleDark != null) {
@@ -311,7 +316,10 @@ private fun FinishStep(uiState: SunloomUiState, draft: UserPreferences, onChange
                     maxDecodeWidth = 640,
                     maxDecodeHeight = 400
                 )
-                TruncatedTitleWithTooltip("Evening: ${sampleDark.title}", style = MaterialTheme.typography.labelLarge)
+                TruncatedTitleWithTooltip(
+                    stringResource(R.string.evening_sample, sampleDark.title),
+                    style = MaterialTheme.typography.labelLarge
+                )
             }
         }
     }

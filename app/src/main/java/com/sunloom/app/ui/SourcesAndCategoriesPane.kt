@@ -1,5 +1,8 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.labels.summary
+import com.sunloom.app.labels.title
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.foundation.shape.CircleShape
 import com.sunloom.app.R
 import androidx.compose.ui.res.stringResource
@@ -54,9 +57,10 @@ internal fun SourcesAndCategoriesPane(
     val admittedRegistrations = remember {
         com.sunloom.app.data.sources.SourceRegistry.admittedSources()
     }
-    val sourceCatalog = remember(admittedRegistrations) {
+    val labels = LocalResources.current
+    val sourceCatalog = remember(admittedRegistrations, labels) {
         admittedRegistrations.map { reg ->
-            Triple(reg.sourceId, reg.sourceName, reg.plainDescription)
+            Triple(reg.sourceId, reg.title(labels), reg.summary(labels))
         }
     }
 
@@ -98,7 +102,7 @@ internal fun SourcesAndCategoriesPane(
                                 Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                 if (isUnhealthy) {
                                     Text(
-                                        text = "• ${diag.healthState.label}",
+                                        text = "• ${diag.healthState.title()}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.error
                                     )
@@ -107,7 +111,7 @@ internal fun SourcesAndCategoriesPane(
                             Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (diag != null && diag.lastSyncSummary.isNotBlank()) {
                                 Text(
-                                    text = "Last sync: ${diag.lastSyncSummary}",
+                                    text = stringResource(R.string.last_sync, diag.lastSyncSummary),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -183,7 +187,7 @@ internal fun SourcesAndCategoriesPane(
                         FilterChip(
                             selected = cat in uiState.preferences.enabledCategories,
                             onClick = { onToggleCategory(cat) },
-                            label = { Text(cat.displayName) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
+                            label = { Text(cat.title()) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                         )
                     }
                 }

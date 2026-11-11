@@ -261,7 +261,7 @@ class MainViewModel(
                 activeTab = DesktopNavTab.TODAY_CANVAS,
                 showLegibilityZonesOverlay = _uiState.value.showLegibilityZonesOverlay,
                 statusBannerMessage = if (completed.autoChangeEnabled) {
-                    strings.scheduleEnabled(completed.scheduleMode.label)
+                    strings.scheduleEnabled(completed.scheduleMode)
                 } else {
                     strings.manualModeEnabled
                 }

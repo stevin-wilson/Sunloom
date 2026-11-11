@@ -15,12 +15,13 @@ import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.solar.DaylightWindow
 import java.time.LocalTime
 
-enum class DesktopNavTab(val label: String) {
-    TODAY_CANVAS("Home"),
-    RESERVE_AND_HISTORY("Reserve"),
-    SOURCES_AND_CATEGORIES("Sources"),
-    DISPLAYS_AND_SCHEDULE("Schedule"),
-    SAFETY_AND_DECISION_LOG("Storage & About")
+/** The five sections. Their names are in strings.xml (see `labels/Labels.kt`). */
+enum class DesktopNavTab {
+    TODAY_CANVAS,
+    RESERVE_AND_HISTORY,
+    SOURCES_AND_CATEGORIES,
+    DISPLAYS_AND_SCHEDULE,
+    SAFETY_AND_DECISION_LOG
 }
 
 enum class DiscardKind { DISLIKE, REMOVE }
@@ -56,7 +57,7 @@ data class SunloomUiState(
         supportsIndependentLockWallpaper = true,
         supportsPerDisplayWallpaper = false,
         connectedDisplays = emptyList(),
-        capabilityDisclosureNote = "Probing connected displays…"
+        capabilityDisclosureNote = "" // the Schedule pane shows "Probing connected displays…" until the first probe
     ),
     val currentWallpaper: WallpaperRecord? = null,
     val isCurrentWallpaperAppliedToSystem: Boolean = true,

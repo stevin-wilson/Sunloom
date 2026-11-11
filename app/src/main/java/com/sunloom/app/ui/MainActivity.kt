@@ -161,7 +161,8 @@ class MainActivity : ComponentActivity() {
                         viewModel.copyDiagnostics { text ->
                             runOnUiThread {
                                 val clipboard = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Sunloom diagnostics", text))
+                                val label = getString(R.string.diagnostics_clip_label)
+                                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText(label, text))
                             }
                         }
                     },

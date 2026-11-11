@@ -1,5 +1,8 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.labels.summary
+import com.sunloom.app.labels.title
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import com.sunloom.app.R
@@ -144,12 +147,12 @@ internal fun DisplaysAndSchedulePane(
                         FilterChip(
                             selected = uiState.preferences.scheduleMode == mode,
                             onClick = { onUpdateScheduleMode(mode) },
-                            label = { Text(mode.label) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
+                            label = { Text(mode.title()) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                         )
                     }
                 }
                 Text(
-                    text = uiState.preferences.scheduleMode.plainDescription,
+                    text = uiState.preferences.scheduleMode.summary(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -165,6 +168,7 @@ internal fun DisplaysAndSchedulePane(
                         label = { Text(stringResource(R.string.custom_coordinates)) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                     )
                     if (showCustomCoords) {
+                        val resources = LocalResources.current
                         val latError = coordinateError(customLatText, -90.0, 90.0)
                         val lonError = coordinateError(customLonText, -180.0, 180.0)
                         FlowRow(
@@ -179,7 +183,7 @@ internal fun DisplaysAndSchedulePane(
                                 label = { Text(stringResource(R.string.latitude_90_90)) },
                                 singleLine = true,
                                 isError = latError != null,
-                                supportingText = { latError?.let { Text(it) } },
+                                supportingText = { latError?.let { Text(it.message(resources)) } },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 modifier = Modifier
                                     .widthIn(min = 140.dp)
@@ -193,7 +197,7 @@ internal fun DisplaysAndSchedulePane(
                                 label = { Text(stringResource(R.string.longitude_180_180)) },
                                 singleLine = true,
                                 isError = lonError != null,
-                                supportingText = { lonError?.let { Text(it) } },
+                                supportingText = { lonError?.let { Text(it.message(resources)) } },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 modifier = Modifier
                                     .widthIn(min = 140.dp)
@@ -206,7 +210,9 @@ internal fun DisplaysAndSchedulePane(
                                     val lat = customLatText.toDoubleOrNull()
                                     val lon = customLonText.toDoubleOrNull()
                                     if (lat != null && lon != null) {
-                                        onUpdateCustomCoordinates(lat, lon, "Custom (${"%.2f".format(lat)}, ${"%.2f".format(lon)})")
+                                        // Stored as the city name, not shown as text.
+                                        val name = "Custom (${"%.2f".format(lat)}, ${"%.2f".format(lon)})"
+                                        onUpdateCustomCoordinates(lat, lon, name)
                                     }
                                 },
                                 enabled = latError == null && lonError == null &&
@@ -221,7 +227,11 @@ internal fun DisplaysAndSchedulePane(
 
                 if (uiState.preferences.scheduleMode == ScheduleMode.FIXED_CLOCK) {
                     Text(
-                        text = "Transition hours (Daytime ${uiState.preferences.fixedLightHour}:00 • Evening ${uiState.preferences.fixedDarkHour}:00)",
+                        text = stringResource(
+                            R.string.transition_hours,
+                            uiState.preferences.fixedLightHour,
+                            uiState.preferences.fixedDarkHour
+                        ),
                         style = MaterialTheme.typography.labelLarge
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
@@ -252,17 +262,21 @@ internal fun DisplaysAndSchedulePane(
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     uiState.capabilities.connectedDisplays.forEach { disp ->
-                        val roleTag = if (disp.isPrimary) "Built-in" else "External"
-                        val ppiLabel = disp.physicalPpi?.let { "${it.roundToInt()} pixels per inch" } ?: "${disp.densityDpi} dpi"
+                        val roleTag = stringResource(if (disp.isPrimary) R.string.display_role_built_in else R.string.display_role_external)
+                        val ppiLabel = disp.physicalPpi?.let { stringResource(R.string.pixels_per_inch, it.roundToInt().toString()) }
+                            ?: stringResource(R.string.dpi_density, disp.densityDpi.toString())
                         Text(
-                            text = "$roleTag: ${disp.name} (${disp.resolutionLabel}, ${"%.2f".format(disp.aspectRatio)}:1 • $ppiLabel • ${disp.qualityTier.shortLabel})",
+                            text = stringResource(
+                                R.string.display_line, roleTag, disp.name, disp.resolutionLabel,
+                                "%.2f".format(disp.aspectRatio), ppiLabel, disp.qualityTier.title()
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                     Text(
-                        text = uiState.capabilities.capabilityDisclosureNote,
+                        text = uiState.capabilities.capabilityDisclosureNote.ifBlank { stringResource(R.string.probing_displays) },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -283,8 +297,8 @@ internal fun DisplaysAndSchedulePane(
                         verticalArrangement = Arrangement.spacedBy(Spacing.s)
                     ) {
                         listOf(
-                            DisplayPolicy.SAME_ON_ALL_DISPLAYS to "One wallpaper for all displays",
-                            DisplayPolicy.OPTIMIZE_PRIMARY_SHARPEST to "Best for the sharpest display"
+                            DisplayPolicy.SAME_ON_ALL_DISPLAYS to stringResource(R.string.policy_short_same_on_all),
+                            DisplayPolicy.OPTIMIZE_PRIMARY_SHARPEST to stringResource(R.string.policy_short_sharpest)
                         ).forEach { (policy, shortText) ->
                             FilterChip(
                                 selected = uiState.preferences.displayPolicy == policy,
@@ -303,7 +317,8 @@ internal fun DisplaysAndSchedulePane(
                         style = MaterialTheme.typography.labelLarge
                     )
                     disconnectedHistory.forEach { rec ->
-                        val recPpi = rec.physicalPpi?.let { "${it.roundToInt()} pixels per inch" } ?: "${rec.densityDpi} dpi"
+                        val recPpi = rec.physicalPpi?.let { stringResource(R.string.pixels_per_inch, it.roundToInt().toString()) }
+                            ?: stringResource(R.string.dpi_density, rec.densityDpi.toString())
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -334,7 +349,7 @@ internal fun DisplaysAndSchedulePane(
                         FilterChip(
                             selected = uiState.preferences.lockWorkspacePolicy == policy,
                             onClick = { onUpdateLockPolicy(policy) },
-                            label = { Text(policy.label) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
+                            label = { Text(policy.title()) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                         )
                     }
                 }
@@ -399,12 +414,23 @@ internal fun DisplaysAndSchedulePane(
  * Validation message for a coordinate text field, or null when [text] is empty (not yet typed) or a
  * number within [min]..[max]. Shown inline so bad input is explained instead of silently ignored.
  */
-internal fun coordinateError(text: String, min: Double, max: Double): String? {
+internal fun coordinateError(text: String, min: Double, max: Double): CoordinateError? {
     if (text.isBlank()) return null
     val value = text.trim().toDoubleOrNull()
-        ?: return "Enter a number, e.g. 37.77"
+        ?: return CoordinateError.NotANumber
     if (!value.isFinite() || value < min || value > max) {
-        return "Must be between ${min.toInt()} and ${max.toInt()}"
+        return CoordinateError.OutOfRange(min.toInt(), max.toInt())
     }
     return null
+}
+
+/** Why a typed coordinate is not accepted; the words come from strings.xml. */
+internal sealed interface CoordinateError {
+    data object NotANumber : CoordinateError
+    data class OutOfRange(val min: Int, val max: Int) : CoordinateError
+
+    fun message(r: android.content.res.Resources): String = when (this) {
+        NotANumber -> r.getString(R.string.coordinate_not_a_number)
+        is OutOfRange -> r.getString(R.string.coordinate_out_of_range, min.toString(), max.toString())
+    }
 }

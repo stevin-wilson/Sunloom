@@ -1,5 +1,8 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.labels.title
+import androidx.compose.ui.platform.LocalResources
+import android.content.res.Resources
 import androidx.compose.material3.Switch
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.CircleShape
@@ -75,6 +78,7 @@ internal fun DiagnosticsPane(
     val usedMb = uiState.totalCacheBytesUsed.toDouble() / (1024.0 * 1024.0)
     val maxMb = uiState.preferences.maxCacheBytes.toDouble() / (1024.0 * 1024.0)
 
+    val resources = LocalResources.current
     val stockRows = remember(uiState.libraryWallpapers, uiState.preferences.enabledCategories, uiState.sourceDiagnostics) {
         uiState.reserveBySource
     }
@@ -103,7 +107,12 @@ internal fun DiagnosticsPane(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(stringResource(R.string.internal_storage_display_diagnostics), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())
                             Text(
-                                text = "Reserve: ${uiState.lightReserveCount} Light + ${uiState.darkReserveCount} Dark (${uiState.disabledReserveCount} disabled) • Cache Used: ${"%.1f".format(usedMb)} MB / ${"%.0f".format(maxMb)} MB cap",
+                                text = stringResource(
+                                    R.string.diag_reserve_line,
+                                    uiState.lightReserveCount.toString(), uiState.darkReserveCount.toString(),
+                                    uiState.disabledReserveCount.toString(),
+                                    "%.1f".format(usedMb), "%.0f".format(maxMb)
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -126,13 +135,21 @@ internal fun DiagnosticsPane(
                             FilterChip(
                                 selected = uiState.preferences.maxCacheBytes == bytes,
                                 onClick = { onUpdateMaxCacheBytes(bytes) },
-                                label = { Text(if (mb >= 1024L) "${mb / 1024L} GB cap" else "$mb MB cap") }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
+                                label = {
+                                    Text(
+                                        if (mb >= 1024L) stringResource(R.string.cache_cap_gb, mb / 1024L)
+                                        else stringResource(R.string.cache_cap_mb, mb)
+                                    )
+                                }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
                             )
                         }
                     }
                     uiState.capabilities.connectedDisplays.forEach { disp ->
                         Text(
-                            text = "Display: ${disp.name} (${disp.resolutionLabel}, ${"%.2f".format(disp.aspectRatio)}:1, ${disp.densityDpi} dpi)",
+                            text = stringResource(
+                                R.string.diag_display_line, disp.name, disp.resolutionLabel,
+                                "%.2f".format(disp.aspectRatio), disp.densityDpi.toString()
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -250,15 +267,15 @@ internal fun DiagnosticsPane(
         if (stockRows.isNotEmpty()) {
             item(key = "diag_sources_header") {
                 DiagnosticsListHeader(
-                    text = "Reserve by source",
+                    text = stringResource(R.string.diag_reserve_by_source),
                     color = MaterialTheme.colorScheme.primary
                 )
             }
             items(stockRows.size, key = { "diag_src_${stockRows[it].sourceId}" }) { index ->
                 val row = stockRows[index]
                 val diag = uiState.sourceDiagnostics.firstOrNull { it.sourceId == row.sourceId }
-                DiagnosticsListRow(text = sourceStockLine(row), monospace = false)
-                sourceSyncLine(diag)?.let { DiagnosticsListRow(text = "    $it", monospace = false, secondary = true) }
+                DiagnosticsListRow(text = sourceStockLine(row, resources), monospace = false)
+                sourceSyncLine(diag, resources)?.let { DiagnosticsListRow(text = "    $it", monospace = false, secondary = true) }
             }
             item(key = "diag_sources_gap") { Spacer(Modifier.height(14.dp)) }
         }
@@ -266,7 +283,7 @@ internal fun DiagnosticsPane(
         if (rejectionGroups.isNotEmpty()) {
             item(key = "diag_rejection_groups_header") {
                 DiagnosticsListHeader(
-                    text = "Skipped by source and reason (latest ${uiState.rejectionLog.size})",
+                    text = stringResource(R.string.diag_skipped_groups, uiState.rejectionLog.size),
                     color = MaterialTheme.colorScheme.error
                 )
             }
@@ -289,7 +306,7 @@ internal fun DiagnosticsPane(
         if (uiState.rejectionLog.isNotEmpty()) {
             item(key = "diag_rejections_header") {
                 DiagnosticsListHeader(
-                    text = "Skipped Candidates (${uiState.rejectionLog.size})",
+                    text = stringResource(R.string.diag_skipped_candidates, uiState.rejectionLog.size),
                     color = MaterialTheme.colorScheme.error
                 )
             }
@@ -302,7 +319,9 @@ internal fun DiagnosticsPane(
                     else -> "DISPLAY:${rej.displaySignature}"
                 }
                 DiagnosticsListRow(
-                    text = "• [${rej.reasonCode} / $scopeTag] Asset ${rej.assetId} (${rej.sourceId}): ${rej.explanation}",
+                    text = stringResource(
+                        R.string.diag_rejection_line, rej.reasonCode, scopeTag, rej.assetId, rej.sourceId, rej.explanation
+                    ),
                     monospace = true
                 )
             }
@@ -311,7 +330,9 @@ internal fun DiagnosticsPane(
 
         item(key = "diag_prepared_header") {
             DiagnosticsListHeader(
-                text = "Prepared Reserve (${uiState.libraryWallpapers.size}) • Gate ${SafetyGate.COMPOSITE_GATE_VERSION}",
+                text = stringResource(
+                    R.string.diag_prepared_header, uiState.libraryWallpapers.size, SafetyGate.COMPOSITE_GATE_VERSION
+                ),
                 color = MaterialTheme.colorScheme.primary
             )
         }
@@ -356,21 +377,22 @@ private fun DiagnosticsListRow(text: String, monospace: Boolean, secondary: Bool
 }
 
 /** "Wikimedia: 14 images (9 Light, 3 Dark, 2 Balanced), 10 unseen" - what one source holds. */
-internal fun sourceStockLine(row: SourceStockRow): String {
-    if (row.total == 0) return "${row.sourceName}: nothing in the reserve"
-    val noun = if (row.total == 1) "image" else "images"
-    val base = "${row.sourceName}: ${row.total} $noun (${row.light} Light, ${row.dark} Dark, ${row.balanced} Balanced), ${row.unseen} unseen"
-    return if (row.isFallback) "$base, fallback, not counted towards the reserve target" else base
+internal fun sourceStockLine(row: SourceStockRow, r: Resources): String {
+    if (row.total == 0) return r.getString(R.string.diag_stock_empty, row.sourceName)
+    val base = r.getQuantityString(
+        R.plurals.diag_stock_line, row.total, row.sourceName, row.total, row.light, row.dark, row.balanced, row.unseen
+    )
+    return if (row.isFallback) r.getString(R.string.diag_stock_fallback, base) else base
 }
 
 /** Health, last sync and last error for a source on one line, or null when there is nothing to report. */
-internal fun sourceSyncLine(diag: SourceDiagnostics?): String? {
+internal fun sourceSyncLine(diag: SourceDiagnostics?, r: Resources): String? {
     if (diag == null) return null
     val unhealthy = diag.healthState != SourceHealthState.HEALTHY
     if (!unhealthy && diag.lastSyncSummary.isBlank() && diag.lastError.isBlank()) return null
     return listOfNotNull(
-        diag.healthState.label,
-        diag.lastSyncSummary.takeIf { it.isNotBlank() }?.let { "Last sync: $it" },
+        diag.healthState.title(r),
+        diag.lastSyncSummary.takeIf { it.isNotBlank() }?.let { r.getString(R.string.last_sync, it) },
         diag.lastError.takeIf { it.isNotBlank() }
     ).joinToString(" • ")
 }

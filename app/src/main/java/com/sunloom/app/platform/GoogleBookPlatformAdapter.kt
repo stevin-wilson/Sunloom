@@ -1,5 +1,6 @@
 package com.sunloom.app.platform
 
+import com.sunloom.app.labels.title
 import com.sunloom.app.domain.model.SourceIds
 import android.annotation.SuppressLint
 import android.app.WallpaperManager
@@ -285,7 +286,7 @@ class GoogleBookPlatformAdapter(
                         "System shares one wallpaper across Workspace and Lock Screen."
                     }
                 }
-                "Detected ${d.name} (${d.resolutionLabel}$ppiNote, ${d.qualityTier.shortLabel}). $lockClause"
+                "Detected ${d.name} (${d.resolutionLabel}$ppiNote, ${d.qualityTier.title(context.resources)}). $lockClause"
             }
         }
 

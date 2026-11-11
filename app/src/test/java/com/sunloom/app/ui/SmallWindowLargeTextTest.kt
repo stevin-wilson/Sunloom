@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.sunloom.app.Requirement
+import com.sunloom.app.labels.title
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -75,8 +76,8 @@ class SmallWindowLargeTextTest {
         show(DesktopNavTab.TODAY_CANVAS)
         composeTestRule.onNodeWithTag("workspace_nav_bar").assertExists()
         for (tab in DesktopNavTab.entries) {
-            composeTestRule.onAllNodes(hasContentDescription(tab.label) or hasText(tab.label)).fetchSemanticsNodes().also {
-                assertTrue("${tab.label} has no accessible name", it.isNotEmpty())
+            composeTestRule.onAllNodes(hasContentDescription(tab.title(context.resources)) or hasText(tab.title(context.resources))).fetchSemanticsNodes().also {
+                assertTrue("${tab.name} has no accessible name", it.isNotEmpty())
             }
         }
     }

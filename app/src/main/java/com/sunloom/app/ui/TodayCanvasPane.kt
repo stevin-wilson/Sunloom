@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.labels.title
 import com.sunloom.app.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.getValue
@@ -202,7 +203,7 @@ internal fun TodayCanvasPane(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(modifier = Modifier.weight(1f)) {
                                         TruncatedTitleWithTooltip(
-                                            title = current?.title ?: "No Wallpaper Selected",
+                                            title = current?.title ?: stringResource(R.string.no_wallpaper_selected),
                                             style = MaterialTheme.typography.titleLarge,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface
@@ -230,7 +231,7 @@ internal fun TodayCanvasPane(
                                 }
                                 if (current != null) {
                                     Text(
-                                        text = "${current.category.displayName} • ${current.provenance.sourceName}",
+                                        text = "${current.category.title()} • ${current.provenance.sourceName}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.primary,
                                         maxLines = 1,
@@ -270,7 +271,7 @@ internal fun TodayCanvasPane(
                                     horizontalArrangement = Arrangement.spacedBy(Spacing.s),
                                     verticalArrangement = Arrangement.spacedBy(Spacing.s)
                                 ) {
-                                    ShortcutTooltip(if (restricted) HostRestrictedTooltip else "Next wallpaper", if (restricted) null else "N") {
+                                    ShortcutTooltip(if (restricted) stringResource(R.string.host_restricted_tooltip) else stringResource(R.string.next_wallpaper), if (restricted) null else "N") {
                                         Button(
                                             onClick = onNextWallpaper,
                                             enabled = !restricted,
@@ -286,7 +287,7 @@ internal fun TodayCanvasPane(
                                         }
                                     }
 
-                                    ShortcutTooltip(if (restricted) HostRestrictedTooltip else "Previous wallpaper", if (restricted) null else "P") {
+                                    ShortcutTooltip(if (restricted) stringResource(R.string.host_restricted_tooltip) else stringResource(R.string.previous_wallpaper), if (restricted) null else "P") {
                                         OutlinedButton(
                                             onClick = onPreviousWallpaper,
                                             enabled = uiState.previousWallpaperId != null && !restricted,
@@ -320,7 +321,7 @@ internal fun TodayCanvasPane(
                                     horizontalArrangement = Arrangement.spacedBy(Spacing.s),
                                     verticalArrangement = Arrangement.spacedBy(Spacing.s)
                                 ) {
-                                    ShortcutTooltip(if (restricted) HostRestrictedTooltip else "Restore original wallpaper") {
+                                    ShortcutTooltip(if (restricted) stringResource(R.string.host_restricted_tooltip) else stringResource(R.string.restore_original_wallpaper)) {
                                         OutlinedButton(
                                             onClick = onRestoreOriginal,
                                             enabled = !restricted,
@@ -433,34 +434,38 @@ internal fun TodayCanvasPane(
 @Composable
 internal fun ProvenanceDetails(current: WallpaperRecord) {
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
-    ProvenanceRow("Creator", current.provenance.creatorName)
-    ProvenanceRow("Source", current.provenance.sourceName)
+    ProvenanceRow(stringResource(R.string.prov_creator), current.provenance.creatorName)
+    ProvenanceRow(stringResource(R.string.prov_source), current.provenance.sourceName)
     val licenseLabel = if (current.provenance.licenseVersion.isNotBlank()) {
-        "${current.provenance.licenseType.label} (v${current.provenance.licenseVersion})"
+        stringResource(R.string.prov_license_version, current.provenance.licenseType.title(), current.provenance.licenseVersion)
     } else {
-        current.provenance.licenseType.label
+        current.provenance.licenseType.title()
     }
     if (current.provenance.licenseUrl.isNotBlank()) {
         ProvenanceLinkRow(
-            label = "License",
+            label = stringResource(R.string.prov_license),
             displayText = licenseLabel,
             url = current.provenance.licenseUrl
         )
     } else {
-        ProvenanceRow("License", licenseLabel)
+        ProvenanceRow(stringResource(R.string.prov_license), licenseLabel)
     }
     if (current.provenance.originalPageUrl.isNotBlank()) {
         ProvenanceLinkRow(
-            label = "Source page",
+            label = stringResource(R.string.prov_source_page),
             displayText = current.provenance.originalPageUrl,
             url = current.provenance.originalPageUrl
         )
     } else {
-        ProvenanceRow("Origin", "On-device")
+        ProvenanceRow(stringResource(R.string.prov_origin), stringResource(R.string.prov_on_device))
     }
     ProvenanceRow(
-        "Fit & Resolution",
-        "Cropped without stretching (${current.provenance.originalWidth} × ${current.provenance.originalHeight} → ${current.provenance.renditionWidth} × ${current.provenance.renditionHeight})"
+        stringResource(R.string.prov_fit),
+        stringResource(
+            R.string.prov_fit_value,
+            current.provenance.originalWidth, current.provenance.originalHeight,
+            current.provenance.renditionWidth, current.provenance.renditionHeight
+        )
     )
     }
 }
@@ -487,15 +492,16 @@ internal fun ProvenanceLinkRow(label: String, displayText: String, url: String) 
     val uriHandler = LocalUriHandler.current
     val actions = LocalWallpaperActions.current
     val noBrowserMessage = stringResource(R.string.no_browser_for_link)
+    val openSourcePageLabel = stringResource(R.string.prov_open_source_page)
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         TooltipBox(
             positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-            tooltip = { PlainTooltip { Text("Open in browser: $url") } },
+            tooltip = { PlainTooltip { Text(stringResource(R.string.prov_open_in_browser, url)) } },
             state = rememberTooltipState()
         ) {
             Text(
-                text = displayText.ifBlank { "Local / Offline Asset" },
+                text = displayText.ifBlank { stringResource(R.string.prov_local_asset) },
                 style = MaterialTheme.typography.bodySmall.copy(
                     color = MaterialTheme.colorScheme.primary,
                     textDecoration = if (url.startsWith("https://")) TextDecoration.Underline else TextDecoration.None,
@@ -514,7 +520,7 @@ internal fun ProvenanceLinkRow(label: String, displayText: String, url: String) 
                     .minimumInteractiveComponentSize()
                     .clickable(
                         enabled = url.startsWith("https://"),
-                        onClickLabel = "Open source page in browser",
+                        onClickLabel = openSourcePageLabel,
                         role = androidx.compose.ui.semantics.Role.Button
                     ) {
                         if (url.startsWith("https://")) {
@@ -605,7 +611,11 @@ fun WallpaperPreviewSurface(
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Text(
-                    text = "Legibility Zones (Clock Y=${"%.2f".format(record.evaluation.lockClockZoneLuminance)} • Shelf Y=${"%.2f".format(record.evaluation.desktopZoneLuminance)})",
+                    text = stringResource(
+                        R.string.legibility_zones_caption,
+                        "%.2f".format(record.evaluation.lockClockZoneLuminance),
+                        "%.2f".format(record.evaluation.desktopZoneLuminance)
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White
                 )
@@ -617,12 +627,6 @@ fun WallpaperPreviewSurface(
 /** True once capabilities are probed and the host forbids changing the system wallpaper. */
 internal val SunloomUiState.isWallpaperChangeRestricted: Boolean
     get() = !isInitialLoading && (!capabilities.isWallpaperSupported || !capabilities.isSetWallpaperAllowed)
-
-internal const val HostRestrictedTooltip = "Unavailable: system wallpaper changes are restricted on this device"
-
-internal const val HostRestrictionMessage =
-    "System wallpaper changes are restricted by this device's host environment. " +
-        "You can still browse and preview wallpapers in your reserve."
 
 /** Aspect ratio (w/h) of the largest connected display, defaulting to 16:10, clamped to [min, max]. */
 internal fun primaryDisplayAspect(uiState: SunloomUiState, min: Float, max: Float): Float {
@@ -649,7 +653,7 @@ internal fun HostRestrictionNotice() {
                 tint = MaterialTheme.colorScheme.onErrorContainer
             )
             Text(
-                text = HostRestrictionMessage,
+                text = stringResource(R.string.host_restriction_message),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
