@@ -356,6 +356,15 @@ class MainViewModel(
         updatePreferences { it.copy(autoChangeEnabled = enabled) }
     }
 
+    /** "Reset Sunloom": erase everything and start again from first-run setup. */
+    fun resetSunloom() {
+        // Whatever was waiting to be undone goes with the data it referred to.
+        _uiState.update { s -> s.copy(pendingDiscard = null, isSetupReopened = false) }
+        launchGatewayMutation(preserveNavigation = false) {
+            gateway.resetSunloom().copy(activeTab = DesktopNavTab.TODAY_CANVAS, statusBannerMessage = strings.resetDone)
+        }
+    }
+
     /**
      * "Setup Guide": show the first-run screen again, starting from the current choices. Nothing is saved until the
      * person finishes it, so leaving mid-way or relaunching costs nothing and no reserve work runs.

@@ -155,6 +155,7 @@ class MainActivity : ComponentActivity() {
                     onCommitDiscard = { viewModel.commitPendingDiscard() },
                     onToggleAutoSwitch = { viewModel.setAutoChangeEnabled(it) },
                     onReopenSetup = { viewModel.reopenSetup() },
+                    onResetSunloom = { viewModel.resetSunloom() },
                     onTogglePause = { viewModel.togglePauseAutomation() },
                     onRestoreOriginal = { viewModel.restoreOriginalBaselineWallpaper() },
                     onRestoreSystemDefault = { viewModel.restoreSystemDefaultWallpaper() },

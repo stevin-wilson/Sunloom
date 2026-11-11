@@ -426,6 +426,19 @@ class AndroidSunloomGateway(
      * Article II §2: Restores the user's saved baseline wallpaper if configured, or clears to the
      * OS system default wallpaper — never silently falling back to `previousWallpaperId`.
      */
+    override suspend fun resetSunloom(): SunloomUiState {
+        withContext(ioDispatcher) {
+            val repo = obtainRepository()
+            // The wallpaper first, while the baseline still exists; then stop everything that could write; then wipe.
+            platformAdapter.restoreSystemDefaultWallpaper(dryRunPreviewOnly = false)
+            platformAdapter.cancelAllScheduledWork()
+            repo.wipeAllData()
+            resolvedRepository = null // its store is gone; the next one opens a fresh database
+            PreviewBitmapCache.clear()
+        }
+        return loadInitialSnapshot()
+    }
+
     override suspend fun restoreBaselineWallpaper(): SunloomUiState = withGatewayIo { repo ->
         val baseline = repo.getAllWallpapers().firstOrNull { it.isBaselineRestore && !it.isRejected }
         if (baseline != null) {

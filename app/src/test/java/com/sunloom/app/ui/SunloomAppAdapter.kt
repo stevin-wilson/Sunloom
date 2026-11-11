@@ -52,6 +52,7 @@ internal fun SunloomApp(
     onCommitDiscard: () -> Unit = {},
     onToggleAutoSwitch: (Boolean) -> Unit = {},
     onReopenSetup: () -> Unit = {},
+    onResetSunloom: () -> Unit = {},
     isFullscreen: Boolean = false,
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
@@ -93,7 +94,8 @@ internal fun SunloomApp(
             onUndoDiscard = onUndoDiscard,
             onCommitDiscard = onCommitDiscard,
             onToggleAutoSwitch = onToggleAutoSwitch,
-            onReopenSetup = onReopenSetup
+            onReopenSetup = onReopenSetup,
+            onResetSunloom = onResetSunloom
         ),
         isFullscreen = isFullscreen,
         darkTheme = darkTheme

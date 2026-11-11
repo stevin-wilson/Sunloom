@@ -58,6 +58,15 @@ class InMemoryLibraryStore(
         }
     }
 
+    override fun wipe() {
+        synchronized(lock) {
+            wallpaperRows.clear()
+            rejections.clear()
+            blocklist.clear()
+            backingDirectory?.listFiles().orEmpty().forEach { it.deleteRecursively() }
+        }
+    }
+
     override fun deleteWallpaper(id: String) {
         synchronized(lock) {
             wallpaperRows.remove(id)

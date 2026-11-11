@@ -50,7 +50,8 @@ data class SunloomActions(
     val onUndoDiscard: () -> Unit,
     val onCommitDiscard: () -> Unit,
     val onToggleAutoSwitch: (Boolean) -> Unit,
-    val onReopenSetup: () -> Unit
+    val onReopenSetup: () -> Unit,
+    val onResetSunloom: () -> Unit
 ) {
     companion object {
         /**
@@ -94,7 +95,8 @@ data class SunloomActions(
             onUndoDiscard = {},
             onCommitDiscard = {},
             onToggleAutoSwitch = { _ -> },
-            onReopenSetup = {}
+            onReopenSetup = {},
+            onResetSunloom = {}
         )
     }
 }

@@ -154,6 +154,11 @@
     <!-- Status messages built by the ViewModel (see UiStrings) -->
     <string name="msg_loading_library">Loading wallpaper library…</string>
     <string name="msg_manual_mode_enabled">Manual mode enabled — click Next Wallpaper whenever you\'d like a change</string>
+    <string name="reset_sunloom">Reset Sunloom</string>
+    <string name="reset_sunloom_hint">Erase everything Sunloom keeps on this device and start again from setup.</string>
+    <string name="reset_sunloom_message">This erases everything Sunloom keeps on this device: the wallpapers it downloaded, the photos you imported, the pictures you kept or blocked, and all your settings. It puts your device\'s original wallpaper back and returns Sunloom to first-time setup. This cannot be undone.</string>
+    <string name="reset_sunloom_confirm">Erase everything</string>
+    <string name="msg_reset_done">Sunloom was reset. Set it up again whenever you like.</string>
     <string name="msg_storage_problem">Couldn\'t finish that. Check free space and your connection, then try again.</string>
     <string name="msg_setting_not_saved">Couldn\'t save that setting. Your previous choice was kept.</string>
     <string name="msg_fetching_catalogs">Fetching high-resolution wallpapers from online catalogs…</string>

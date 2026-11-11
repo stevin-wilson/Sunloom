@@ -33,7 +33,12 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.platform.testTag
 import com.sunloom.app.domain.matcher.SourceRejectionGroup
 import com.sunloom.app.domain.matcher.SourceStockRow
 import com.sunloom.app.domain.model.SourceDiagnostics
@@ -45,8 +50,23 @@ import com.sunloom.app.domain.safety.SafetyGate
 internal fun DiagnosticsPane(
     uiState: SunloomUiState,
     onToggleLegibilityOverlay: () -> Unit = {},
-    onUpdateMaxCacheBytes: (Long) -> Unit = {}
+    onUpdateMaxCacheBytes: (Long) -> Unit = {},
+    onResetSunloom: () -> Unit = {}
 ) {
+    var showResetConfirm by remember { mutableStateOf(false) }
+    if (showResetConfirm) {
+        ConfirmDestructiveDialog(
+            title = stringResource(R.string.reset_sunloom),
+            message = stringResource(R.string.reset_sunloom_message),
+            confirmLabel = stringResource(R.string.reset_sunloom_confirm),
+            confirmTestTag = "confirm_reset_sunloom_button",
+            onConfirm = {
+                showResetConfirm = false
+                onResetSunloom()
+            },
+            onDismiss = { showResetConfirm = false }
+        )
+    }
     val usedMb = uiState.totalCacheBytesUsed.toDouble() / (1024.0 * 1024.0)
     val maxMb = uiState.preferences.maxCacheBytes.toDouble() / (1024.0 * 1024.0)
 
@@ -109,6 +129,40 @@ internal fun DiagnosticsPane(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                }
+            }
+        }
+
+        item(key = "diag_reset") {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(18.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            stringResource(R.string.reset_sunloom),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.sectionHeading()
+                        )
+                        Text(
+                            stringResource(R.string.reset_sunloom_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = { showResetConfirm = true },
+                        modifier = Modifier.desktopControl(RoundedCornerShape(50)).testTag("reset_sunloom_button")
+                    ) {
+                        Text(stringResource(R.string.reset_sunloom), color = MaterialTheme.colorScheme.error)
                     }
                 }
             }

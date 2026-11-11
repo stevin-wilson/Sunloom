@@ -95,6 +95,13 @@ class LocalLibraryRepository(
         @Volatile
         private var sharedDefaultStore: Pair<String, LibraryStore>? = null
 
+        /** The preference files the app writes; a reset empties all of them. */
+        private val PREFERENCE_FILES = listOf("sunloom_preferences", "sunloom_display_history", "sunloom_ui")
+
+        private fun forgetDefaultStore() {
+            synchronized(this) { sharedDefaultStore = null }
+        }
+
         internal fun clearCachedDefaultStoreForTests() {
             synchronized(this) {
                 sharedDefaultStore = null
@@ -839,6 +846,25 @@ class LocalLibraryRepository(
             orphanFilesRemoved = hygiene.sweepOrphanedFiles(nowEpochMs),
             staleRowsRemoved = hygiene.compactStaleRows(nowEpochMs, activeIds)
         )
+    }
+
+    /**
+     * "Reset Sunloom": removes everything the app keeps - library, blocklist, settings, images, staging and export
+     * files - so it starts again as if freshly installed. Waits for a running sync and blocks library writers while
+     * it works. The caller restores the wallpaper and cancels scheduled work first, and drops this repository
+     * afterwards (its store is gone).
+     */
+    suspend fun wipeAllData() {
+        SYNC_MUTEX.withLock {
+            synchronized(LIBRARY_WRITE_LOCK) {
+                store.wipe()
+                forgetDefaultStore()
+                PREFERENCE_FILES.forEach { appContext.getSharedPreferences(it, Context.MODE_PRIVATE).edit(commit = true) { clear() } }
+                listOf(wallpaperDir, quarantineDir).forEach { dir -> dir.listFiles().orEmpty().forEach { it.deleteRecursively() } }
+                appContext.cacheDir.listFiles { f -> f.name.startsWith("export-") }.orEmpty().forEach { it.delete() }
+                SeedReserve.clearSeedRenderCache()
+            }
+        }
     }
 
     fun enforceCacheLimit() {

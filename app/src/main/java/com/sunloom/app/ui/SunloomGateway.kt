@@ -26,4 +26,6 @@ interface SunloomGateway {
     suspend fun onDisplaysChanged(): SunloomUiState = loadInitialSnapshot()
     suspend fun forgetRememberedDisplay(key: String): SunloomUiState = loadInitialSnapshot()
     suspend fun checkpointDatabaseForBackup() {}
+    /** Erases everything the app keeps and returns to a freshly installed state (first-run setup). */
+    suspend fun resetSunloom(): SunloomUiState = loadInitialSnapshot()
 }

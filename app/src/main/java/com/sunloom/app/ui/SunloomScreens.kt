@@ -159,6 +159,7 @@ fun SunloomApp(
     val onCommitDiscard = actions.onCommitDiscard
     val onToggleAutoSwitch = actions.onToggleAutoSwitch
     val onReopenSetup = actions.onReopenSetup
+    val onResetSunloom = actions.onResetSunloom
     val snackbarHostState = remember { SnackbarHostState() }
     val colorScheme = if (darkTheme) SunloomDarkPalette else SunloomLightPalette
     val shortcutGate = remember { ShortcutGate() }
@@ -415,6 +416,7 @@ fun SunloomApp(
                     onUpdateDisplayPolicy = onUpdateDisplayPolicy,
                     onForgetRememberedDisplay = onForgetRememberedDisplay,
                     onToggleAutoSwitch = onToggleAutoSwitch,
+                    onResetSunloom = onResetSunloom,
                     onReopenSetup = onReopenSetup
                     )
                 }
@@ -833,6 +835,7 @@ fun DesktopWorkspaceScreen(
     isFullscreen: Boolean = false,
     onToggleFullscreen: () -> Unit = {},
     onToggleAutoSwitch: (Boolean) -> Unit = {},
+    onResetSunloom: () -> Unit = {},
     onReopenSetup: () -> Unit
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -898,7 +901,8 @@ fun DesktopWorkspaceScreen(
                         DesktopNavTab.SAFETY_AND_DECISION_LOG -> DiagnosticsPane(
                             uiState = uiState,
                             onToggleLegibilityOverlay = onToggleLegibilityOverlay,
-                            onUpdateMaxCacheBytes = onUpdateMaxCacheBytes
+                            onUpdateMaxCacheBytes = onUpdateMaxCacheBytes,
+                            onResetSunloom = onResetSunloom
                         )
                 
                             else -> Unit

@@ -14,6 +14,7 @@ import com.sunloom.app.domain.solar.SolarCalculator
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -66,6 +67,13 @@ class MainViewModelTest {
         }
         override suspend fun applyPreviousWallpaper(): SunloomUiState = applyWallpaper(state.previousWallpaperId ?: "seed-1")
         override suspend fun restoreBaselineWallpaper(): SunloomUiState = applyWallpaper("seed-1")
+
+        var resetCount = 0
+        override suspend fun resetSunloom(): SunloomUiState {
+            resetCount++
+            state = SunloomUiState(preferences = UserPreferences(isSetupCompleted = false))
+            return state
+        }
 
         override suspend fun toggleKeepWallpaper(recordId: String): SunloomUiState {
             val cur = state.currentWallpaper ?: return state
@@ -166,6 +174,24 @@ class MainViewModelTest {
         viewModel.changeToNextWallpaper()
         assertEquals(UiStrings.English.storageProblem, viewModel.uiState.value.statusBannerMessage)
         assertFalse(viewModel.uiState.value.isApplyingWallpaper)
+    }
+
+    @Test
+    fun `resetting returns to first-run setup with a clean screen`() {
+        viewModel.completeFirstRunSetup(UserPreferences(autoChangeEnabled = true))
+        viewModel.selectTab(DesktopNavTab.DISPLAYS_AND_SCHEDULE)
+        viewModel.reopenSetup()
+        assertTrue(viewModel.uiState.value.preferences.isSetupCompleted)
+
+        viewModel.resetSunloom()
+
+        assertEquals(1, fakeGateway.resetCount)
+        val state = viewModel.uiState.value
+        assertFalse("setup is shown again", state.preferences.isSetupCompleted)
+        assertFalse(state.isSetupReopened)
+        assertEquals(DesktopNavTab.TODAY_CANVAS, state.activeTab)
+        assertNull(state.pendingDiscard)
+        assertFalse(state.isApplyingWallpaper)
     }
 
     @Test

@@ -53,6 +53,9 @@ interface LibraryStore {
     fun getAllBlocklistEntries(): List<BlocklistEntry>
 
     fun checkpoint() {}
+
+    /** Deletes the whole store - library, rejections and blocklist - so the app can start again from nothing. */
+    fun wipe()
 }
 
 /**
@@ -304,6 +307,8 @@ internal object KeepCorruptDatabaseHandler : android.database.DatabaseErrorHandl
 }
 
 class SqliteLibraryStore(context: Context) : LibraryStore {
+    private val appContext: Context = context.applicationContext
+
     companion object {
         const val DATABASE_NAME = "sunloom_library.db"
         const val DATABASE_VERSION = 3
@@ -311,6 +316,11 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
 
         @Volatile
         private var sharedInstance: Pair<String, SqliteLibraryStore>? = null
+
+        /** Forgets the shared instance, so the next [getInstance] opens (and creates) the database afresh. */
+        internal fun forgetSharedInstance() {
+            synchronized(this) { sharedInstance = null }
+        }
 
         fun getInstance(context: Context): SqliteLibraryStore {
             val appCtx = context.applicationContext
@@ -562,6 +572,13 @@ class SqliteLibraryStore(context: Context) : LibraryStore {
             }
         }
         return out
+    }
+
+    override fun wipe() {
+        runCatching { dbHelper.close() }
+        // Removes the database and its -wal, -shm and -journal files.
+        appContext.deleteDatabase(DATABASE_NAME)
+        forgetSharedInstance()
     }
 
     override fun checkpoint() {
