@@ -40,13 +40,13 @@ class ChangeIntervalPolicyTest {
 
     @Test
     fun `an interval already overdue is due in one minute, not at once`() {
-        val delay = RefreshSchedulePolicy.nextChangeDelayMs(5 * hour, 1, now - 10 * hour, now)
+        val delay = RefreshSchedulePolicy.nextChangeDelayMs(5 * hour, 3, now - 10 * hour, now)
         assertEquals(RefreshSchedulePolicy.MIN_CHANGE_DELAY_MS, delay)
     }
 
     @Test
     fun `a transition closer than the minimum is not stretched`() {
-        assertEquals(10_000L, RefreshSchedulePolicy.nextChangeDelayMs(10_000L, 1, now - 10 * hour, now))
+        assertEquals(10_000L, RefreshSchedulePolicy.nextChangeDelayMs(10_000L, 3, now - 10 * hour, now))
     }
 
     @Test
@@ -66,8 +66,9 @@ class ChangeIntervalPolicyTest {
 
     @Test
     fun `only the offered intervals are valid and anything else means off`() {
-        assertEquals(listOf(0, 1, 3, 6, 12), UserPreferences.CHANGE_EVERY_CHOICES_HOURS)
+        assertEquals(listOf(0, 3, 6, 12), UserPreferences.CHANGE_EVERY_CHOICES_HOURS)
         assertEquals(3, UserPreferences.sanitizeChangeEveryHours(3))
+        assertEquals(0, UserPreferences.sanitizeChangeEveryHours(1))
         assertEquals(0, UserPreferences.sanitizeChangeEveryHours(5))
         assertEquals(0, UserPreferences.sanitizeChangeEveryHours(-1))
         assertEquals(0, UserPreferences.sanitizeChangeEveryHours(24))
