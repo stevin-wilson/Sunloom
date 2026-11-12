@@ -914,7 +914,7 @@ class LocalLibraryRepository(
         if (last != 0L && nowEpochMs - last < HYGIENE_INTERVAL_MS) return null
         // Recorded first: a pass that fails must not retry on every launch.
         prefs.edit { putLong(KEY_LAST_HYGIENE, nowEpochMs) }
-        val activeIds = setOfNotNull(getCurrentWallpaperId(), getPreviousWallpaperId())
+        val activeIds = idsToKeep(loadPreferences())
         return StorageHygieneReport(
             orphanFilesRemoved = hygiene.sweepOrphanedFiles(nowEpochMs),
             staleRowsRemoved = hygiene.compactStaleRows(nowEpochMs, activeIds)
@@ -941,9 +941,13 @@ class LocalLibraryRepository(
         }
     }
 
+    /** Pictures clean-up must leave alone: the current and previous wallpaper, and the chosen Daytime and Evening ones. */
+    private fun idsToKeep(preferences: UserPreferences): Set<String> =
+        setOfNotNull(getCurrentWallpaperId(), getPreviousWallpaperId(), preferences.daytimePickId, preferences.eveningPickId)
+
     fun enforceCacheLimit() {
         val prefs = loadPreferences()
-        val activeIds = setOfNotNull(getCurrentWallpaperId(), getPreviousWallpaperId())
+        val activeIds = idsToKeep(prefs)
         val (updated, report) = cacheManager.executeCleanupOnDisk(
             records = getAllWallpapers(),
             activeWallpaperIds = activeIds,
