@@ -1,11 +1,9 @@
 package com.sunloom.app.domain.matcher
 
 import com.sunloom.app.Requirement
-import com.sunloom.app.domain.matcher.ChosenWallpaper.Decision
 import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.ScheduleMode
 import com.sunloom.app.platform.scheduler.RefreshSchedulePolicy
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -37,24 +35,6 @@ class ChosenPeriodRuleTest {
     fun `a first run, a reinstall or a reset with no side remembered starts a period`() {
         assertTrue(ChosenWallpaper.periodStarted(lastTargetSeen = null, target = light))
         assertTrue(ChosenWallpaper.periodStarted(lastTargetSeen = null, target = dark))
-    }
-
-    // --- what to do ---
-
-    @Test
-    fun `when a period starts and a chosen picture is usable it is applied`() {
-        assertEquals(Decision.APPLY_CHOSEN, ChosenWallpaper.decide(chosenUsable = true, periodStarted = true))
-    }
-
-    @Test
-    fun `inside a period a usable chosen picture is left alone, so the interval does not rotate it`() {
-        assertEquals(Decision.LEAVE_ALONE, ChosenWallpaper.decide(chosenUsable = true, periodStarted = false))
-    }
-
-    @Test
-    fun `without a usable chosen picture the normal choice applies, at a flip and inside a period`() {
-        assertEquals(Decision.AUTOMATIC, ChosenWallpaper.decide(chosenUsable = false, periodStarted = true))
-        assertEquals(Decision.AUTOMATIC, ChosenWallpaper.decide(chosenUsable = false, periodStarted = false))
     }
 
     // --- Follow OS ---

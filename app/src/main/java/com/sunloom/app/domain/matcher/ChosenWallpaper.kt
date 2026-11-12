@@ -34,19 +34,42 @@ object ChosenWallpaper {
         return lookup(id)?.takeIf { isUsable(it, fileExists) }
     }
 
-    /** What a change run does about the chosen picture for the current side. */
-    enum class Decision { APPLY_CHOSEN, LEAVE_ALONE, AUTOMATIC }
-
     /** A period starts when the side differs from the one last seen; with none remembered, it counts as starting. */
     fun periodStarted(lastTargetSeen: BrightnessClass?, target: BrightnessClass): Boolean = lastTargetSeen != target
 
+    /** What one change run does: show the chosen [Chosen] picture, [LeaveAlone] the one on screen, or pick as usual. */
+    sealed interface Choice {
+        data class Chosen(val record: WallpaperRecord) : Choice
+        data object LeaveAlone : Choice
+        data object Automatic : Choice
+    }
+
     /**
-     * A chosen picture is applied when its period starts and left alone inside it (so the interval does not rotate it);
-     * without a usable one the normal choice applies.
+     * The one place a change run asks what to do about the chosen picture for [target], given the side last handled: a usable
+     * one is applied when its period starts and left alone inside it; without one the normal choice applies.
      */
-    fun decide(chosenUsable: Boolean, periodStarted: Boolean): Decision = when {
-        !chosenUsable -> Decision.AUTOMATIC
-        periodStarted -> Decision.APPLY_CHOSEN
-        else -> Decision.LEAVE_ALONE
+    fun choose(
+        preferences: UserPreferences,
+        target: BrightnessClass,
+        lastTargetSeen: BrightnessClass?,
+        lookup: (String) -> WallpaperRecord?,
+        fileExists: (String) -> Boolean
+    ): Choice {
+        val chosen = resolve(preferences, target, lookup, fileExists)
+        return when {
+            chosen == null -> Choice.Automatic
+            periodStarted(lastTargetSeen, target) -> Choice.Chosen(chosen)
+            else -> Choice.LeaveAlone
+        }
+    }
+
+    /**
+     * Whether the run may record [Choice]'s side as handled. A chosen picture that did not end up on screen keeps the
+     * period open, so the next look tries it again instead of giving up on it until the next flip.
+     */
+    fun shouldRememberTarget(choice: Choice, status: WallpaperStatus?, appliedId: String?): Boolean = when (choice) {
+        Choice.LeaveAlone -> true
+        Choice.Automatic -> status == WallpaperStatus.APPLIED_SUCCESSFULLY
+        is Choice.Chosen -> status == WallpaperStatus.APPLIED_SUCCESSFULLY && appliedId == choice.record.id
     }
 }
