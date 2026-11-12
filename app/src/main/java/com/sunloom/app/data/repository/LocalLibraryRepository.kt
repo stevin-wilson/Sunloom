@@ -19,6 +19,8 @@ import com.sunloom.app.data.sources.SourceRegistry
 import com.sunloom.app.data.sources.WallpaperSourceAdapter
 import com.sunloom.app.data.sources.WikimediaFeaturedSourceAdapter
 import com.sunloom.app.domain.evaluator.ImageEvaluator
+import com.sunloom.app.domain.matcher.ChosenSlot
+import com.sunloom.app.domain.matcher.ChosenWallpaper
 import com.sunloom.app.domain.model.BlocklistEntry
 import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.FollowOsVerification
@@ -86,6 +88,7 @@ class LocalLibraryRepository(
         private const val KEY_LOST_IMPORTS = "lost_imports_notice"
         private const val SEED_RENDER_CACHE_DIR = "seed_renders"
         private const val KEY_FOLLOW_OS_VERIFIED = "follow_os_verified"
+        private const val KEY_LAST_TARGET_SEEN = "last_target_seen"
 
         /**
          * Derived state: things the app worked out about this device and this moment. It is deliberately not in
@@ -306,6 +309,21 @@ class LocalLibraryRepository(
     /** When the "Change every" wait started; see [ChangeCountdown]. */
     fun getChangeCountdownStartMs(): Long? = ChangeCountdown.read(appContext)
 
+    /**
+     * The side (daytime = light, evening = dark) the last change run handled, or null when none is remembered. Derived
+     * state in the file Auto Backup does not restore: it tells a new period from a repeat visit to the same one.
+     */
+    fun getLastTargetSeen(): BrightnessClass? =
+        (statePrefs.all[KEY_LAST_TARGET_SEEN] as? String)
+            ?.let { name -> BrightnessClass.entries.firstOrNull { it.name == name } }
+            ?.takeIf { it != BrightnessClass.NEUTRAL }
+
+    /** Remembers [target] as the side just handled. A balanced target is not a side and leaves the memory as it was. */
+    fun setLastTargetSeen(target: BrightnessClass) {
+        if (target == BrightnessClass.NEUTRAL) return
+        statePrefs.edit { putString(KEY_LAST_TARGET_SEEN, target.name) }
+    }
+
     fun getCurrentWallpaperId(): String? = prefs.getString("current_wallpaper_id", null)
     fun getPreviousWallpaperId(): String? = prefs.getString("previous_wallpaper_id", null)
     fun getLastAppliedDisplayGeometryKey(): String? = prefs.getString("last_applied_display_geometry", null)
@@ -392,7 +410,17 @@ class LocalLibraryRepository(
         )
         if (existing.localFilePath.isNotBlank()) runCatching { File(existing.localFilePath).delete() }
         if (existing.croppedFilePath.isNotBlank()) runCatching { File(existing.croppedFilePath).delete() }
+        clearChosenSlotsHolding(existing.id)
         clearInvalidatedActiveWallpaper(existing.id)
+    }
+
+    /** A refused picture cannot stay a chosen one: each slot that holds [wallpaperId] goes back to Automatic. */
+    private fun clearChosenSlotsHolding(wallpaperId: String) {
+        val current = loadPreferences()
+        if (!ChosenWallpaper.isChosen(current, wallpaperId)) return
+        savePreferences(
+            ChosenSlot.entries.fold(current) { prefs, slot -> if (slot.pickOf(prefs) == wallpaperId) slot.with(prefs, null) else prefs }
+        )
     }
 
     /**
@@ -823,10 +851,14 @@ class LocalLibraryRepository(
     /** True while Light or Dark holds fewer unseen fetched images than the target and the cache has room. */
     fun needsTopUp(preferences: UserPreferences = loadPreferences()): Boolean {
         val all = getAllWallpapers()
+        val byId = all.associateBy { it.id }
         val usable = all.filter { it.provenance.sourceId in preferences.enabledSources }
         val bytes = all.filter { !it.isRejected }.sumOf { it.fileSizeBytes }
         return com.sunloom.app.domain.matcher.ReserveBuffer.needsTopUp(
-            usable, preferences.enabledCategories, bytes, preferences.maxCacheBytes
+            usable, preferences.enabledCategories, bytes, preferences.maxCacheBytes,
+            heldSides = ChosenSlot.entries.filter { slot ->
+                ChosenWallpaper.resolve(preferences, slot.side, byId::get) { File(it).exists() } != null
+            }.map { it.side }.toSet()
         )
     }
 
@@ -898,7 +930,7 @@ class LocalLibraryRepository(
         if (last != 0L && nowEpochMs - last < HYGIENE_INTERVAL_MS) return null
         // Recorded first: a pass that fails must not retry on every launch.
         prefs.edit { putLong(KEY_LAST_HYGIENE, nowEpochMs) }
-        val activeIds = setOfNotNull(getCurrentWallpaperId(), getPreviousWallpaperId())
+        val activeIds = idsToKeep(loadPreferences())
         return StorageHygieneReport(
             orphanFilesRemoved = hygiene.sweepOrphanedFiles(nowEpochMs),
             staleRowsRemoved = hygiene.compactStaleRows(nowEpochMs, activeIds)
@@ -925,9 +957,13 @@ class LocalLibraryRepository(
         }
     }
 
+    /** Pictures clean-up must leave alone: the current and previous wallpaper, and the chosen Daytime and Evening ones. */
+    private fun idsToKeep(preferences: UserPreferences): Set<String> =
+        setOfNotNull(getCurrentWallpaperId(), getPreviousWallpaperId()) + ChosenSlot.entries.mapNotNull { it.pickOf(preferences) }
+
     fun enforceCacheLimit() {
         val prefs = loadPreferences()
-        val activeIds = setOfNotNull(getCurrentWallpaperId(), getPreviousWallpaperId())
+        val activeIds = idsToKeep(prefs)
         val (updated, report) = cacheManager.executeCleanupOnDisk(
             records = getAllWallpapers(),
             activeWallpaperIds = activeIds,

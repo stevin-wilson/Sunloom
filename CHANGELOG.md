@@ -10,6 +10,10 @@ the release's version as its notes.
 - **Change every** (Schedule): Off, 3, 6 or 12 hours. Sunloom also changes the wallpaper during the day and the evening,
   about that often, in addition to the sunrise, sunset or hours you chose. Off to begin with, so nothing changes unless
   you choose it.
+- **Daytime wallpaper** and **Evening wallpaper** (Schedule): pick a picture for each. Right-click any picture in
+  Reserve or on Today and choose *Use as daytime wallpaper* or *Use as evening wallpaper*. It appears when that period
+  starts and stays until the next one; Next and Previous still work. A small picture is shown with a blurred background
+  instead of being refused, and can look soft. Disliking or removing the picture sets its slot back to Automatic.
 
 ### Fixed
 - **Check for updates** now works on a release candidate: it reads GitHub's list of releases and offers the highest newer

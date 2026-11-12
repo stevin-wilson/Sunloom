@@ -63,6 +63,22 @@
     </plurals>
     <string name="change_every_needs_automatic">Turn on automatic switching to use this.</string>
     <string name="change_every_needs_schedule">The schedule is set to Manual, so nothing changes by itself. Pick another schedule above.</string>
+    <string name="chosen_daytime_title">Daytime wallpaper</string>
+    <string name="chosen_evening_title">Evening wallpaper</string>
+    <string name="chosen_automatic">Automatic</string>
+    <string name="chosen_how_to_hint">To choose a picture, open its menu in Reserve or on Today and pick Use as daytime wallpaper or Use as evening wallpaper.</string>
+    <string name="chosen_unavailable">Not available, using the automatic choice.</string>
+    <string name="chosen_clear">Clear</string>
+    <string name="chosen_clear_description">Clear the %1$s</string>
+    <string name="chosen_when_daytime_sun">Shown from sunrise to sunset.</string>
+    <string name="chosen_when_evening_sun">Shown from sunset to sunrise.</string>
+    <string name="chosen_when_daytime_os">Shown while your device uses its light appearance.</string>
+    <string name="chosen_when_evening_os">Shown while your device uses its dark appearance.</string>
+    <string name="chosen_when_daytime_clock">Shown during your daytime hours.</string>
+    <string name="chosen_when_evening_clock">Shown during your evening hours.</string>
+    <string name="chosen_small_picture_hint">A small picture is shown with a blurred background and can look soft. A chosen picture appears when its period starts, and stays until the next one.</string>
+    <string name="use_as_daytime_wallpaper">Use as daytime wallpaper</string>
+    <string name="use_as_evening_wallpaper">Use as evening wallpaper</string>
     <string name="automatic_switching_hint">Change the wallpaper by itself on the schedule below. Turn off to choose wallpapers only by hand.</string>
     <string name="sunloom">Sunloom</string>
     <string name="switch_between_bright_wallpapers_during">Switch between bright wallpapers during the day and calm dark wallpapers at night.</string>
@@ -165,6 +181,13 @@
     <string name="msg_restored_googlebookos_system_default_wallpaper">Switched to the system wallpaper.</string>
     <string name="msg_system_wallpaper_restore_was_not">System wallpaper restore was not permitted by OS policy.</string>
     <string name="msg_wallpaper_not_found">Wallpaper not found.</string>
+    <string name="msg_chosen_saved_daytime">Daytime wallpaper set to \'%1$s\'. It appears when the daytime starts.</string>
+    <string name="msg_chosen_saved_evening">Evening wallpaper set to \'%1$s\'. It appears when the evening starts.</string>
+    <string name="msg_chosen_saved_automatic_off">\'%1$s\' is saved. It is used once automatic changes are on.</string>
+    <string name="msg_chosen_already_shown">Saved. \'%1$s\' is on screen now.</string>
+    <string name="msg_chosen_cleared_daytime">Daytime wallpaper is Automatic again.</string>
+    <string name="msg_chosen_cleared_evening">Evening wallpaper is Automatic again.</string>
+    <string name="msg_chosen_unavailable">That picture can\'t be used right now.</string>
     <string name="msg_added_to_favorites">Kept \'%1$s\'</string>
     <string name="msg_removed_from_favorites">No longer keeping \'%1$s\'</string>
     <string name="msg_disliked_it_won_t_be">Disliked \'%1$s\'. It won\'t be shown again.</string>

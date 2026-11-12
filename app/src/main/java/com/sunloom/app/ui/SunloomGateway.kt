@@ -20,6 +20,12 @@ interface SunloomGateway {
     suspend fun restoreBaselineWallpaper(): SunloomUiState
     suspend fun restoreSystemDefaultWallpaper(): SunloomUiState = restoreBaselineWallpaper()
     suspend fun toggleKeepWallpaper(recordId: String): SunloomUiState
+    /**
+     * Chooses [recordId] as the picture for [slot], or sets the slot back to Automatic when null. A choice for the
+     * current period is shown at once; for the other period it waits for that period to start.
+     */
+    suspend fun setChosenWallpaper(slot: com.sunloom.app.domain.matcher.ChosenSlot, recordId: String?): SunloomUiState =
+        loadInitialSnapshot()
     suspend fun rejectWallpaperForever(recordId: String): SunloomUiState
     suspend fun deleteWallpaperFromReserve(recordId: String): SunloomUiState = rejectWallpaperForever(recordId)
     suspend fun refreshFromInternet(): SunloomUiState

@@ -383,6 +383,10 @@ data class UserPreferences(
      * changing only at the schedule's light/dark transitions. Offered choices: 0, 3, 6, 12.
      */
     val changeEveryHours: Int = 0,
+    /** "Daytime wallpaper": the record id chosen for the light side of the schedule, or null for Automatic. */
+    val daytimePickId: String? = null,
+    /** "Evening wallpaper": the record id chosen for the dark side of the schedule, or null for Automatic. */
+    val eveningPickId: String? = null,
     val dryRunPreviewOnly: Boolean = false
 ) {
     /** Whether the schedule changes the wallpaper by itself: automatic switching is on, not paused, not Manual. */

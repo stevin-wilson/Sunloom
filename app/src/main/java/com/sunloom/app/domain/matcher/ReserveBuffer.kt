@@ -35,18 +35,20 @@ object ReserveBuffer {
     fun stockCount(records: List<WallpaperRecord>, enabledCategories: Set<SafeCategory>): Int =
         records.count { it.isFetchedStock(enabledCategories) }
 
+    /** [heldSides] are the sides whose Daytime/Evening slot holds a usable chosen picture. */
     fun needsTopUp(
         records: List<WallpaperRecord>,
         enabledCategories: Set<SafeCategory>,
         bytesUsed: Long,
-        maxBytes: Long
+        maxBytes: Long,
+        heldSides: Set<BrightnessClass> = emptySet()
     ): Boolean {
         if (maxBytes > 0 && bytesUsed >= maxBytes * CACHE_FULL_FRACTION) return false
         if (records.count { it.isFetchedStock(enabledCategories) && it.appliedCount == 0 } >= MAX_UNSEEN_STOCK) return false
-        return minOf(
-            unseenFor(records, BrightnessClass.LIGHT, enabledCategories),
-            unseenFor(records, BrightnessClass.DARK, enabledCategories)
-        ) < TARGET_UNSEEN_PER_MODE
+        // A side holding a chosen picture never rotates, so it does not need stock (Article III §1, v0.59).
+        return listOf(BrightnessClass.LIGHT, BrightnessClass.DARK)
+            .filter { it !in heldSides }
+            .any { unseenFor(records, it, enabledCategories) < TARGET_UNSEEN_PER_MODE }
     }
 
     private fun WallpaperRecord.isFetchedStock(enabledCategories: Set<SafeCategory>): Boolean =
