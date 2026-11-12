@@ -17,8 +17,8 @@ import com.sunloom.app.domain.model.UserPreferences
  */
 internal class PreferencesStore(private val prefs: SharedPreferences) {
 
-    /** What a save did: the enabled sources that are admitted, and whether the blurred-fill and "Change every" choices changed. */
-    class SaveResult(val enabledSources: Set<String>, val blurredFillChanged: Boolean, val changeEveryChanged: Boolean)
+    /** What a save did: the enabled sources that are admitted, and whether the blurred-fill choice changed. */
+    class SaveResult(val enabledSources: Set<String>, val blurredFillChanged: Boolean)
 
     fun load(): UserPreferences = synchronized(LOCK) { loadLocked() }
 
@@ -115,8 +115,6 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
 
     private fun saveLocked(updated: UserPreferences): SaveResult {
         val blurredFillChanged = prefs.getBoolean("allow_blurred_fill", false) != updated.allowBlurredFrameFill
-        val changeEveryChanged = UserPreferences.sanitizeChangeEveryHours(prefs.getInt("change_every_hours", 0)) !=
-            UserPreferences.sanitizeChangeEveryHours(updated.changeEveryHours)
         val enabledAdmittedSources = updated.enabledSources.filter { SourceRegistry.isSourceAdmitted(it) }.toSet()
         prefs.edit {
             putBoolean("setup_completed", updated.isSetupCompleted)
@@ -156,7 +154,7 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             putBoolean(KEY_CACHE_DEFAULT_MIGRATED, true)
         }
 
-        return SaveResult(enabledAdmittedSources, blurredFillChanged, changeEveryChanged)
+        return SaveResult(enabledAdmittedSources, blurredFillChanged)
     }
 
     private companion object {

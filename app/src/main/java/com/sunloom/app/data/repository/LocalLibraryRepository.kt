@@ -269,8 +269,9 @@ class LocalLibraryRepository(
     fun loadPreferences(): UserPreferences = preferencesStore.load()
 
     fun savePreferences(updated: UserPreferences) {
+        val before = preferencesStore.load()
         val saved = preferencesStore.save(updated)
-        if (saved.changeEveryChanged) ChangeCountdown.start(appContext, System.currentTimeMillis())
+        if (ChangeCountdown.shouldRestart(before, updated)) ChangeCountdown.start(appContext, System.currentTimeMillis())
         // Resolution rejections made under the old blur-fill setting no longer apply (Article XI §3).
         if (saved.blurredFillChanged) store.clearTransientRejections()
         syncSourceEnabledStates(saved.enabledSources)

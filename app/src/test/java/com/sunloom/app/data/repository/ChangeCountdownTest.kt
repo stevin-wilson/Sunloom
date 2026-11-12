@@ -6,6 +6,8 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.sunloom.app.Requirement
 import com.sunloom.app.data.testWallpaper
+import com.sunloom.app.domain.model.ScheduleMode
+import com.sunloom.app.domain.model.UserPreferences
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -44,15 +46,26 @@ class ChangeCountdownTest {
     }
 
     @Test
-    fun `starting records the moment, and starting if missing never overwrites it`() {
+    fun `starting records the moment`() {
         ChangeCountdown.start(context, 1_000L)
         assertEquals(1_000L, ChangeCountdown.read(context))
+    }
 
-        ChangeCountdown.startIfMissing(context, 9_999L)
-        assertEquals("kept", 1_000L, ChangeCountdown.read(context))
+    @Test
+    fun `ensuring a countdown starts a missing one but never moves a running one`() {
+        ChangeCountdown.ensureStarted(context, 9_999L)
+        assertEquals("started", 9_999L, ChangeCountdown.read(context))
 
-        context.getSharedPreferences("sunloom_state", Context.MODE_PRIVATE).edit().clear().commit()
-        ChangeCountdown.startIfMissing(context, 9_999L)
+        ChangeCountdown.ensureStarted(context, 20_000L)
+        assertEquals("kept", 9_999L, ChangeCountdown.read(context))
+    }
+
+    @Test
+    fun `a countdown that starts in the future, after the clock was stepped back, starts over now`() {
+        ChangeCountdown.start(context, 50_000L)
+
+        ChangeCountdown.ensureStarted(context, 9_999L)
+
         assertEquals(9_999L, ChangeCountdown.read(context))
     }
 
@@ -86,5 +99,52 @@ class ChangeCountdownTest {
 
         val backedUp = context.getSharedPreferences("sunloom_preferences", Context.MODE_PRIVATE)
         assertFalse(backedUp.all.keys.any { it.contains("countdown") })
+    }
+
+    private fun withActiveInterval(): UserPreferences {
+        repo.savePreferences(repo.loadPreferences().copy(changeEveryHours = 3))
+        ChangeCountdown.start(context, 5L) // pretend time passed
+        return repo.loadPreferences()
+    }
+
+    @Test
+    fun `turning automatic switching back on starts a fresh wait instead of an overdue one`() {
+        val active = withActiveInterval()
+        repo.savePreferences(active.copy(autoChangeEnabled = false))
+        assertEquals("switching off leaves it alone", 5L, repo.getChangeCountdownStartMs())
+
+        repo.savePreferences(active.copy(autoChangeEnabled = true))
+
+        assertTrue((repo.getChangeCountdownStartMs() ?: 0L) > 5L)
+    }
+
+    @Test
+    fun `leaving the manual schedule starts a fresh wait`() {
+        val active = withActiveInterval()
+        repo.savePreferences(active.copy(scheduleMode = ScheduleMode.MANUAL_ONLY))
+        assertEquals(5L, repo.getChangeCountdownStartMs())
+
+        repo.savePreferences(active.copy(scheduleMode = ScheduleMode.FIXED_CLOCK))
+
+        assertTrue((repo.getChangeCountdownStartMs() ?: 0L) > 5L)
+    }
+
+    @Test
+    fun `resuming from a pause starts a fresh wait`() {
+        val active = withActiveInterval()
+        repo.savePreferences(active.copy(isPaused = true))
+        assertEquals(5L, repo.getChangeCountdownStartMs())
+
+        repo.savePreferences(active.copy(isPaused = false))
+
+        assertTrue((repo.getChangeCountdownStartMs() ?: 0L) > 5L)
+    }
+
+    @Test
+    fun `saving with the interval off never starts a countdown`() {
+        repo.savePreferences(repo.loadPreferences().copy(autoChangeEnabled = false))
+        repo.savePreferences(repo.loadPreferences().copy(autoChangeEnabled = true))
+
+        assertNull(repo.getChangeCountdownStartMs())
     }
 }

@@ -186,6 +186,20 @@ class FollowOsPollTest {
     }
 
     @Test
+    fun `a countdown left in the future by a clock step is repaired, so the interval still works`() {
+        setCurrent("w1")
+        repo.setFollowOsVerified(light, "w1")
+        chooseInterval(3, startedAgoMs = -5 * hourMs) // started "in five hours"
+        val before = System.currentTimeMillis()
+
+        assertNull("not due, so still a cheap skip", poll())
+
+        val repaired = repo.getChangeCountdownStartMs() ?: Long.MAX_VALUE
+        assertTrue("start no later than now", repaired <= System.currentTimeMillis())
+        assertTrue("and not older than this run", repaired >= before - 1_000L)
+    }
+
+    @Test
     fun `a poll that is skipped does not restart the countdown`() {
         setCurrent("w1")
         repo.setFollowOsVerified(light, "w1")

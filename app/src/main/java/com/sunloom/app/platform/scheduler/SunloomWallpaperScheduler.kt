@@ -213,8 +213,8 @@ class SunloomWallpaperScheduler(
         }
         val currentZoned = nowZoned ?: ZonedDateTime.now(zoneId)
         // An interval restored from a backup has no countdown on this device yet: start one rather than wait forever.
-        if (effectivePrefs != null && RefreshSchedulePolicy.intervalApplies(effectivePrefs.changeEveryHours, true)) {
-            ChangeCountdown.startIfMissing(context, currentZoned.toInstant().toEpochMilli())
+        if (effectivePrefs?.changeEveryActive == true) {
+            ChangeCountdown.ensureStarted(context, currentZoned.toInstant().toEpochMilli())
         }
         val delayMs = armedDelayMs(solarCalculator, effectivePrefs, currentZoned, ChangeCountdown.read(context))
 
@@ -286,7 +286,7 @@ class SunloomWallpaperScheduler(
                 mode = mode,
                 transitionDelayMs = preferences?.let { solar.computeNextTransitionDelayMs(it, nowZoned) },
                 changeEveryHours = preferences?.changeEveryHours ?: 0,
-                scheduleChanges = mode != ScheduleMode.MANUAL_ONLY,
+                scheduleChanges = preferences?.changesBySchedule ?: false,
                 countdownStartMs = countdownStartMs,
                 nowMs = nowZoned.toInstant().toEpochMilli()
             )
@@ -336,7 +336,10 @@ class SunloomWallpaperScheduler(
             // nothing to do, and the library pass below (healing, revalidation, reconcile) would only cost battery.
             val nowMs = nowZoned.toInstant().toEpochMilli()
             // A due "Change every" interval makes a Follow-OS poll look further than the theme alone would.
-            val intervalDue = RefreshSchedulePolicy.isIntervalDue(prefs.changeEveryHours, true, repo.getChangeCountdownStartMs(), nowMs)
+            if (prefs.changeEveryActive) ChangeCountdown.ensureStarted(appContext, nowMs) // repairs a start the clock outran
+            val intervalDue = RefreshSchedulePolicy.isIntervalDue(
+                prefs.changeEveryHours, prefs.changesBySchedule, repo.getChangeCountdownStartMs(), nowMs
+            )
             if (prefs.scheduleMode == ScheduleMode.FOLLOW_OS_THEME) {
                 val currentId = repo.getCurrentWallpaperId()
                 // The theme and the wallpaper are exactly what the last poll verified (or the person chose the system
@@ -358,7 +361,7 @@ class SunloomWallpaperScheduler(
 
             // This run goes on to change the wallpaper, so the "Change every" wait starts over now, whatever the outcome:
             // a change that keeps failing must not be retried every minute because its interval is still overdue.
-            if (RefreshSchedulePolicy.intervalApplies(prefs.changeEveryHours, true)) ChangeCountdown.start(appContext, nowMs)
+            if (prefs.changeEveryActive) ChangeCountdown.start(appContext, nowMs)
 
             val connectedDisplays = platform.getConnectedDisplays()
             val display = platform.getPrimaryOrSharpestDisplayOrNull(connectedDisplays)

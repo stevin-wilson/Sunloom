@@ -79,10 +79,12 @@ internal object RefreshSchedulePolicy {
     fun intervalApplies(changeEveryHours: Int, scheduleChanges: Boolean): Boolean =
         scheduleChanges && UserPreferences.sanitizeChangeEveryHours(changeEveryHours) > 0
 
+    private fun intervalMs(changeEveryHours: Int): Long = UserPreferences.sanitizeChangeEveryHours(changeEveryHours) * 3_600_000L
+
     /** Whether the wait since [countdownStartMs] has run out. Without a countdown nothing is due yet. */
     fun isIntervalDue(changeEveryHours: Int, scheduleChanges: Boolean, countdownStartMs: Long?, nowMs: Long): Boolean =
         intervalApplies(changeEveryHours, scheduleChanges) && countdownStartMs != null &&
-            nowMs >= countdownStartMs + UserPreferences.sanitizeChangeEveryHours(changeEveryHours) * 3_600_000L
+            nowMs >= countdownStartMs + intervalMs(changeEveryHours)
 
     /**
      * How long to wait before the next look: the schedule's own wait (its next transition, or the mode's fallback when
@@ -108,9 +110,8 @@ internal object RefreshSchedulePolicy {
      * (Article III §3). Null means there is nothing to wait for and the caller uses its own fallback.
      */
     fun nextChangeDelayMs(transitionDelayMs: Long?, changeEveryHours: Int, lastChangeEpochMs: Long?, nowEpochMs: Long): Long? {
-        val hours = UserPreferences.sanitizeChangeEveryHours(changeEveryHours)
-        if (hours == 0) return transitionDelayMs
-        val intervalMs = hours * 3_600_000L
+        val intervalMs = intervalMs(changeEveryHours)
+        if (intervalMs == 0L) return transitionDelayMs
         // A last change in the future (the clock was stepped back) counts as just now.
         val last = lastChangeEpochMs?.coerceAtMost(nowEpochMs) ?: nowEpochMs
         val intervalDelay = (last + intervalMs - nowEpochMs).coerceAtLeast(MIN_CHANGE_DELAY_MS)

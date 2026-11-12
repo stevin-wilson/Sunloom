@@ -385,6 +385,12 @@ data class UserPreferences(
     val changeEveryHours: Int = 0,
     val dryRunPreviewOnly: Boolean = false
 ) {
+    /** Whether the schedule changes the wallpaper by itself: automatic switching is on, not paused, not Manual. */
+    val changesBySchedule: Boolean get() = autoChangeEnabled && !isPaused && scheduleMode != ScheduleMode.MANUAL_ONLY
+
+    /** Whether "Change every" has anything to do right now: an interval is chosen and the schedule changes things. */
+    val changeEveryActive: Boolean get() = sanitizeChangeEveryHours(changeEveryHours) > 0 && changesBySchedule
+
     companion object {
         /** The "Change every" choices in hours; 0 is Off. */
         val CHANGE_EVERY_CHOICES_HOURS: List<Int> = listOf(0, 3, 6, 12)

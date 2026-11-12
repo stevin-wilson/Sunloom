@@ -65,4 +65,34 @@ class ArmedDelayTest {
         val delay = SunloomWallpaperScheduler.armedDelayMs(solar, prefs(ScheduleMode.MANUAL_ONLY, 3), noon, nowMs)
         assertEquals(6 * hour, delay)
     }
+
+    @Test
+    fun `a paused or switched-off schedule ignores the interval`() {
+        val countdown = nowMs - 9 * hour // an overdue wait that would otherwise shorten the delay
+        listOf(
+            prefs(ScheduleMode.FIXED_CLOCK, 3).copy(isPaused = true),
+            prefs(ScheduleMode.FIXED_CLOCK, 3).copy(autoChangeEnabled = false)
+        ).forEach { withInterval ->
+            val withoutInterval = withInterval.copy(changeEveryHours = 0)
+            assertEquals(
+                SunloomWallpaperScheduler.armedDelayMs(solar, withoutInterval, noon, countdown),
+                SunloomWallpaperScheduler.armedDelayMs(solar, withInterval, noon, countdown)
+            )
+        }
+    }
+
+    @Test
+    fun `the preferences agree with the scheduling plan about whether changes are scheduled`() {
+        listOf(true, false).forEach { auto ->
+            listOf(true, false).forEach { paused ->
+                ScheduleMode.entries.forEach { mode ->
+                    val p = UserPreferences(autoChangeEnabled = auto, isPaused = paused, scheduleMode = mode, changeEveryHours = 3)
+                    val plan = RefreshSchedulePolicy.plan(auto, paused, mode == ScheduleMode.MANUAL_ONLY)
+                    assertEquals("$auto $paused $mode", plan.scheduleChanges, p.changesBySchedule)
+                    assertEquals("$auto $paused $mode", plan.scheduleChanges, p.changeEveryActive)
+                }
+            }
+        }
+        assertEquals(false, UserPreferences(changeEveryHours = 0).changeEveryActive)
+    }
 }
