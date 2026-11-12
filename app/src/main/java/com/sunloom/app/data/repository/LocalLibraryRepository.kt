@@ -86,6 +86,7 @@ class LocalLibraryRepository(
         private const val KEY_LOST_IMPORTS = "lost_imports_notice"
         private const val SEED_RENDER_CACHE_DIR = "seed_renders"
         private const val KEY_FOLLOW_OS_VERIFIED = "follow_os_verified"
+        private const val KEY_LAST_TARGET_SEEN = "last_target_seen"
 
         /**
          * Derived state: things the app worked out about this device and this moment. It is deliberately not in
@@ -305,6 +306,21 @@ class LocalLibraryRepository(
 
     /** When the "Change every" wait started; see [ChangeCountdown]. */
     fun getChangeCountdownStartMs(): Long? = ChangeCountdown.read(appContext)
+
+    /**
+     * The side (daytime = light, evening = dark) the last change run handled, or null when none is remembered. Derived
+     * state in the file Auto Backup does not restore: it tells a new period from a repeat visit to the same one.
+     */
+    fun getLastTargetSeen(): BrightnessClass? =
+        (statePrefs.all[KEY_LAST_TARGET_SEEN] as? String)
+            ?.let { name -> BrightnessClass.entries.firstOrNull { it.name == name } }
+            ?.takeIf { it != BrightnessClass.NEUTRAL }
+
+    /** Remembers [target] as the side just handled. A balanced target is not a side and leaves the memory as it was. */
+    fun setLastTargetSeen(target: BrightnessClass) {
+        if (target == BrightnessClass.NEUTRAL) return
+        statePrefs.edit { putString(KEY_LAST_TARGET_SEEN, target.name) }
+    }
 
     fun getCurrentWallpaperId(): String? = prefs.getString("current_wallpaper_id", null)
     fun getPreviousWallpaperId(): String? = prefs.getString("previous_wallpaper_id", null)
