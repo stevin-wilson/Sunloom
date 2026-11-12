@@ -370,11 +370,7 @@ class GoogleBookPlatformAdapter(
         val effectiveDisplay = effectiveDisplays.maxByOrNull { it.widthPx.toLong() * it.heightPx.toLong() }
             ?: return WallpaperStatus.FAILED_TEMPORARILY
 
-        // A picture the person chose skips only the resolution-quality verdicts; everything else still refuses it.
-        val skipsQualityVerdict = chosen && ChosenWallpaper.isQualityVerdict(record.evaluation.rejectionReasonCode)
-        if (record.isRejected || (!record.isBaselineRestore && !record.evaluation.isEligible && !skipsQualityVerdict)) {
-            return WallpaperStatus.FAILED_TEMPORARILY
-        }
+        if (isRefused(record, chosen)) return WallpaperStatus.FAILED_TEMPORARILY
 
         // A chosen picture is never refused for being small: it is planned sharp when it can be, blurred when it cannot.
         val allowBlurred = chosen || record.provenance.sourceId == SourceIds.USER_LOCAL ||
@@ -465,6 +461,16 @@ class GoogleBookPlatformAdapter(
             gateway.lastApplyRefusedByHost() -> WallpaperStatus.UNSUPPORTED_BY_SYSTEM
             else -> WallpaperStatus.FAILED_TEMPORARILY
         }
+    }
+
+    /**
+     * Whether [record] may not be applied at all. A picture the person chose skips only the resolution-quality
+     * verdicts; a rejected one, and one refused for any other reason, stays refused.
+     */
+    private fun isRefused(record: WallpaperRecord, chosen: Boolean): Boolean {
+        if (record.isRejected) return true
+        if (record.isBaselineRestore || record.evaluation.isEligible) return false
+        return !(chosen && ChosenWallpaper.isQualityVerdict(record.evaluation.rejectionReasonCode))
     }
 
     /** Fetched and imported pictures are planned per display set; seeds and the baseline copy are not. */
