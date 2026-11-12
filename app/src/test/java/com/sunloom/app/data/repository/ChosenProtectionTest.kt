@@ -103,4 +103,29 @@ class ChosenProtectionTest {
         assertNotNull(repo.getWallpaperById("chosen-evening"))
         assertNull("an unchosen stale row is dropped", repo.getWallpaperById("other"))
     }
+
+    // --- the reserve top-up ---
+
+    @Test
+    fun `a side with a usable chosen picture does not ask for downloads, one without still does`() {
+        fetched("day", retrievedAt = 1_000L)
+        fetched("eve", retrievedAt = 2_000L)
+        choose(maxCacheBytes = 500L * 1024 * 1024)
+        assertTrue("nothing chosen, the reserve is empty", repo.needsTopUp())
+
+        choose(day = "day", maxCacheBytes = 500L * 1024 * 1024)
+        assertTrue("the evening is still automatic", repo.needsTopUp())
+
+        choose(day = "day", evening = "eve", maxCacheBytes = 500L * 1024 * 1024)
+        assertEquals("both sides are held", false, repo.needsTopUp())
+    }
+
+    @Test
+    fun `a chosen picture that is not usable does not hold its side`() {
+        fetched("day", retrievedAt = 1_000L)
+        staleRow("eve") // no file
+        choose(day = "day", evening = "eve", maxCacheBytes = 500L * 1024 * 1024)
+
+        assertTrue(repo.needsTopUp())
+    }
 }

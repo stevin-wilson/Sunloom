@@ -19,6 +19,8 @@ import com.sunloom.app.data.sources.SourceRegistry
 import com.sunloom.app.data.sources.WallpaperSourceAdapter
 import com.sunloom.app.data.sources.WikimediaFeaturedSourceAdapter
 import com.sunloom.app.domain.evaluator.ImageEvaluator
+import com.sunloom.app.domain.matcher.ChosenSlot
+import com.sunloom.app.domain.matcher.ChosenWallpaper
 import com.sunloom.app.domain.model.BlocklistEntry
 import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.FollowOsVerification
@@ -855,7 +857,10 @@ class LocalLibraryRepository(
         val usable = all.filter { it.provenance.sourceId in preferences.enabledSources }
         val bytes = all.filter { !it.isRejected }.sumOf { it.fileSizeBytes }
         return com.sunloom.app.domain.matcher.ReserveBuffer.needsTopUp(
-            usable, preferences.enabledCategories, bytes, preferences.maxCacheBytes
+            usable, preferences.enabledCategories, bytes, preferences.maxCacheBytes,
+            heldSides = ChosenSlot.entries.filter { slot ->
+                ChosenWallpaper.resolve(preferences, slot.side, ::getWallpaperById) { File(it).exists() } != null
+            }.map { it.side }.toSet()
         )
     }
 
