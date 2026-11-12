@@ -40,9 +40,17 @@ internal object RefreshSchedulePolicy {
     fun fallbackChangeDelayMs(mode: ScheduleMode?): Long =
         if (mode == ScheduleMode.FOLLOW_OS_THEME) FOLLOW_OS_POLL_MINUTES * 60_000L else 6L * 3_600_000L
 
-    /** A follow-OS poll must not rotate the wallpaper when the one on screen already suits the current theme. */
-    fun isRedundantFollowOsChange(mode: ScheduleMode, currentSuitsTarget: Boolean?, intervalDue: Boolean = false): Boolean =
-        mode == ScheduleMode.FOLLOW_OS_THEME && currentSuitsTarget == true && !intervalDue
+    /**
+     * A follow-OS poll must not rotate the wallpaper when the one on screen already suits the current theme, unless the
+     * interval is due or a chosen picture is due because the theme just flipped.
+     */
+    fun isRedundantFollowOsChange(
+        mode: ScheduleMode,
+        currentSuitsTarget: Boolean?,
+        intervalDue: Boolean = false,
+        chosenDue: Boolean = false
+    ): Boolean =
+        mode == ScheduleMode.FOLLOW_OS_THEME && currentSuitsTarget == true && !intervalDue && !chosenDue
 
     const val FOLLOW_OS_POLL_MINUTES = 15L
 

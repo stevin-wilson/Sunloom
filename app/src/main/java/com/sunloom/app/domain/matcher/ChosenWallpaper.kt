@@ -33,4 +33,20 @@ object ChosenWallpaper {
         val id = slotId(preferences, target) ?: return null
         return lookup(id)?.takeIf { isUsable(it, fileExists) }
     }
+
+    /** What a change run does about the chosen picture for the current side. */
+    enum class Decision { APPLY_CHOSEN, LEAVE_ALONE, AUTOMATIC }
+
+    /** A period starts when the side differs from the one last seen; with none remembered, it counts as starting. */
+    fun periodStarted(lastTargetSeen: BrightnessClass?, target: BrightnessClass): Boolean = lastTargetSeen != target
+
+    /**
+     * A chosen picture is applied when its period starts and left alone inside it (so the interval does not rotate it);
+     * without a usable one the normal choice applies.
+     */
+    fun decide(chosenUsable: Boolean, periodStarted: Boolean): Decision = when {
+        !chosenUsable -> Decision.AUTOMATIC
+        periodStarted -> Decision.APPLY_CHOSEN
+        else -> Decision.LEAVE_ALONE
+    }
 }
