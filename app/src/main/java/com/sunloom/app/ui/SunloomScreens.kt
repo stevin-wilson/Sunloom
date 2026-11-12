@@ -151,6 +151,7 @@ fun SunloomApp(
     val onToggleKeepSpecific = actions.onToggleKeepSpecific
     val onUpdateFixedHours = actions.onUpdateFixedHours
     val onUpdateChangeEvery = actions.onUpdateChangeEvery
+    val onSetChosenWallpaper = actions.onSetChosenWallpaper
     val onUpdateCustomCoordinates = actions.onUpdateCustomCoordinates
     val onUpdateMaxCacheBytes = actions.onUpdateMaxCacheBytes
     val onToggleBatterySaverDeferral = actions.onToggleBatterySaverDeferral
@@ -212,8 +213,9 @@ fun SunloomApp(
                 showMessage(attributionCopiedMessage)
             }
         }
-    val wallpaperActions = remember(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage) {
-        WallpaperActions(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage)
+    val onSetChosenForMenus = actions.onSetChosenWallpaper
+    val wallpaperActions = remember(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage, onSetChosenForMenus) {
+        WallpaperActions(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage, onSetChosenForMenus)
     }
     val dropTarget = remember(onDropImages) {
         object : DragAndDropTarget {
@@ -425,6 +427,7 @@ fun SunloomApp(
                     onPickLocalPhoto = onPickLocalPhoto,
                     onUpdateFixedHours = onUpdateFixedHours,
                     onUpdateChangeEvery = onUpdateChangeEvery,
+                    onSetChosenWallpaper = onSetChosenWallpaper,
                     onUpdateCustomCoordinates = onUpdateCustomCoordinates,
                     onUpdateMaxCacheBytes = onUpdateMaxCacheBytes,
                     onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
@@ -637,6 +640,7 @@ fun DesktopWorkspaceScreen(
     onPickLocalPhoto: (asBaselineRestore: Boolean) -> Unit,
     onUpdateFixedHours: (lightHour: Int, darkHour: Int) -> Unit = { _, _ -> },
     onUpdateChangeEvery: (hours: Int) -> Unit = {},
+    onSetChosenWallpaper: (com.sunloom.app.domain.matcher.ChosenSlot, String?) -> Unit = { _, _ -> },
     onUpdateCustomCoordinates: (lat: Double, lon: Double, label: String) -> Unit = { _, _, _ -> },
     onUpdateMaxCacheBytes: (Long) -> Unit = {},
     onToggleBatterySaverDeferral: (Boolean) -> Unit = {},
@@ -706,6 +710,7 @@ fun DesktopWorkspaceScreen(
                             onToggleBlurredFill = onToggleBlurredFill,
                             onUpdateFixedHours = onUpdateFixedHours,
                             onUpdateChangeEvery = onUpdateChangeEvery,
+                            onSetChosenWallpaper = onSetChosenWallpaper,
                             onUpdateCustomCoordinates = onUpdateCustomCoordinates,
                             onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
                             onUpdateDisplayPolicy = onUpdateDisplayPolicy,

@@ -46,6 +46,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.sunloom.app.domain.matcher.ChosenSlot
+import com.sunloom.app.domain.matcher.ChosenWallpaper
+import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.model.DisplayPolicy
 import com.sunloom.app.domain.model.LockWorkspacePolicy
 import com.sunloom.app.domain.model.ScheduleMode
@@ -126,6 +132,128 @@ private fun ChangeEverySection(prefs: UserPreferences, onUpdateChangeEvery: (Int
     }
 }
 
+/** What a Daytime or Evening card shows: nothing chosen, a picture that can be shown, or one that cannot right now. */
+internal sealed interface ChosenCardState {
+    data object Automatic : ChosenCardState
+    data class Chosen(val record: WallpaperRecord) : ChosenCardState
+    data object Unavailable : ChosenCardState
+}
+
+internal fun chosenCardState(
+    prefs: UserPreferences,
+    slot: ChosenSlot,
+    records: List<WallpaperRecord>,
+    fileExists: (String) -> Boolean
+): ChosenCardState {
+    val id = slot.pickOf(prefs)?.takeIf { it.isNotBlank() } ?: return ChosenCardState.Automatic
+    val record = records.firstOrNull { it.id == id }
+    return if (record != null && ChosenWallpaper.isUsable(record, fileExists)) {
+        ChosenCardState.Chosen(record)
+    } else {
+        ChosenCardState.Unavailable
+    }
+}
+
+/** When a slot's picture is shown, in the words of the current schedule; null when the schedule is Manual. */
+internal fun chosenWhenNote(prefs: UserPreferences, slot: ChosenSlot): Int? = when (prefs.scheduleMode) {
+    ScheduleMode.SUNRISE_SUNSET ->
+        if (slot == ChosenSlot.DAYTIME) R.string.chosen_when_daytime_sun else R.string.chosen_when_evening_sun
+    ScheduleMode.FOLLOW_OS_THEME ->
+        if (slot == ChosenSlot.DAYTIME) R.string.chosen_when_daytime_os else R.string.chosen_when_evening_os
+    ScheduleMode.FIXED_CLOCK ->
+        if (slot == ChosenSlot.DAYTIME) R.string.chosen_when_daytime_clock else R.string.chosen_when_evening_clock
+    ScheduleMode.MANUAL_ONLY -> null
+}
+
+/**
+ * The Daytime and Evening wallpaper cards (Article III §1, v0.59). A picture is chosen from its own menu; the card
+ * shows the choice, when it is used, and a Clear button. It never hides: when it cannot work it says why.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChosenWallpaperSection(uiState: SunloomUiState, onSetChosen: (ChosenSlot, String?) -> Unit) {
+    val prefs = uiState.preferences
+    val unavailable = changeEveryUnavailableNote(prefs)
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
+        ChosenSlot.entries.forEach { slot ->
+            val key = if (slot == ChosenSlot.DAYTIME) "daytime" else "evening"
+            val title = stringResource(if (slot == ChosenSlot.DAYTIME) R.string.chosen_daytime_title else R.string.chosen_evening_title)
+            val state = chosenCardState(prefs, slot, uiState.libraryWallpapers) { java.io.File(it).exists() }
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.m),
+                verticalArrangement = Arrangement.spacedBy(Spacing.s),
+                itemVerticalAlignment = Alignment.CenterVertically
+            ) {
+                if (state is ChosenCardState.Chosen) {
+                    WallpaperPreviewSurface(
+                        record = state.record,
+                        showLegibilityZones = false,
+                        modifier = Modifier.width(96.dp).aspectRatio(16f / 10f),
+                        maxDecodeWidth = 320,
+                        maxDecodeHeight = 320
+                    )
+                }
+                Column(modifier = Modifier.widthIn(min = 160.dp)) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.sectionHeading().testTag("chosen_title_$key")
+                    )
+                    Text(
+                        text = when (state) {
+                            ChosenCardState.Automatic -> stringResource(R.string.chosen_automatic)
+                            is ChosenCardState.Chosen -> state.record.title
+                            ChosenCardState.Unavailable -> stringResource(R.string.chosen_unavailable)
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.testTag("chosen_state_$key")
+                    )
+                    chosenWhenNote(prefs, slot)?.let {
+                        Text(
+                            stringResource(it),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag("chosen_when_$key")
+                        )
+                    }
+                }
+                if (state != ChosenCardState.Automatic) {
+                    val clearLabel = stringResource(R.string.chosen_clear_description, title)
+                    TextButton(
+                        onClick = { onSetChosen(slot, null) },
+                        modifier = Modifier
+                            .defaultMinSize(minHeight = 48.dp)
+                            .desktopControl(MaterialTheme.shapes.small)
+                            .semantics { contentDescription = clearLabel }
+                            .testTag("chosen_clear_$key")
+                    ) { Text(stringResource(R.string.chosen_clear)) }
+                }
+            }
+        }
+        if (unavailable != null) {
+            Text(
+                text = stringResource(unavailable),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.testTag("chosen_note")
+            )
+        }
+        Text(
+            text = stringResource(R.string.chosen_how_to_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = stringResource(R.string.chosen_small_picture_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag("chosen_small_picture_hint")
+        )
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun DisplaysAndSchedulePane(
@@ -136,6 +264,7 @@ internal fun DisplaysAndSchedulePane(
     onToggleBlurredFill: (Boolean) -> Unit,
     onUpdateFixedHours: (lightHour: Int, darkHour: Int) -> Unit,
     onUpdateChangeEvery: (hours: Int) -> Unit = {},
+    onSetChosenWallpaper: (ChosenSlot, String?) -> Unit = { _, _ -> },
     onUpdateCustomCoordinates: (lat: Double, lon: Double, label: String) -> Unit,
     onToggleBatterySaverDeferral: (Boolean) -> Unit,
     onUpdateDisplayPolicy: (DisplayPolicy) -> Unit = {},
@@ -315,6 +444,8 @@ internal fun DisplaysAndSchedulePane(
                     prefs = uiState.preferences,
                     onUpdateChangeEvery = onUpdateChangeEvery
                 )
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                ChosenWallpaperSection(uiState = uiState, onSetChosen = onSetChosenWallpaper)
             }
         }
 

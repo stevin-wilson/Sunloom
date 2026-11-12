@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.domain.matcher.ChosenSlot
 import com.sunloom.app.domain.model.DisplayPolicy
 import com.sunloom.app.domain.model.LockWorkspacePolicy
 import com.sunloom.app.domain.model.SafeCategory
@@ -38,6 +39,7 @@ data class SunloomActions(
     val onToggleKeepSpecific: (String) -> Unit,
     val onUpdateFixedHours: (lightHour: Int, darkHour: Int) -> Unit,
     val onUpdateChangeEvery: (hours: Int) -> Unit,
+    val onSetChosenWallpaper: (ChosenSlot, String?) -> Unit,
     val onUpdateCustomCoordinates: (lat: Double, lon: Double, label: String) -> Unit,
     val onUpdateMaxCacheBytes: (Long) -> Unit,
     val onToggleBatterySaverDeferral: (Boolean) -> Unit,
@@ -87,6 +89,7 @@ data class SunloomActions(
             onToggleKeepSpecific = { _ -> },
             onUpdateFixedHours = { _, _ -> },
             onUpdateChangeEvery = { _ -> },
+            onSetChosenWallpaper = { _, _ -> },
             onUpdateCustomCoordinates = { _, _, _ -> },
             onUpdateMaxCacheBytes = { _ -> },
             onToggleBatterySaverDeferral = { _ -> },

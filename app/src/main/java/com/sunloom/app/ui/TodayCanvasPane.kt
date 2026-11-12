@@ -2,6 +2,7 @@ package com.sunloom.app.ui
 
 import com.sunloom.app.labels.title
 import com.sunloom.app.R
+import com.sunloom.app.domain.matcher.ChosenSlot
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -175,6 +176,12 @@ internal fun TodayCanvasPane(
                                 if (current.isFavorite) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
                                 "ctx_keep"
                             ) { dismiss(); onToggleKeep() }
+                            ContextMenuItem(stringResource(R.string.use_as_daytime_wallpaper), "ctx_use_daytime") {
+                                dismiss(); actions.setChosen(ChosenSlot.DAYTIME, current.id)
+                            }
+                            ContextMenuItem(stringResource(R.string.use_as_evening_wallpaper), "ctx_use_evening") {
+                                dismiss(); actions.setChosen(ChosenSlot.EVENING, current.id)
+                            }
                             ContextMenuItem(stringResource(R.string.about_this_image), "ctx_about") { dismiss(); showAbout = true }
                             ContextMenuItem(stringResource(R.string.copy_attribution), "ctx_copy_attribution") {
                                 dismiss(); actions.copyAttribution(current)

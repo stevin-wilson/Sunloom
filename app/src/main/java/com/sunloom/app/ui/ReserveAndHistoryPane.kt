@@ -2,6 +2,7 @@ package com.sunloom.app.ui
 
 import com.sunloom.app.labels.title
 import com.sunloom.app.R
+import com.sunloom.app.domain.matcher.ChosenSlot
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -496,6 +497,14 @@ private fun ReserveItemCard(
             ) {
                 dismiss()
                 onToggleKeepSpecific(item.id)
+            }
+            ContextMenuItem(stringResource(R.string.use_as_daytime_wallpaper), "ctx_use_daytime_${item.id}") {
+                dismiss()
+                actions.setChosen(ChosenSlot.DAYTIME, item.id)
+            }
+            ContextMenuItem(stringResource(R.string.use_as_evening_wallpaper), "ctx_use_evening_${item.id}") {
+                dismiss()
+                actions.setChosen(ChosenSlot.EVENING, item.id)
             }
             ContextMenuItem(stringResource(R.string.about_this_image), "ctx_about_${item.id}") {
                 dismiss()

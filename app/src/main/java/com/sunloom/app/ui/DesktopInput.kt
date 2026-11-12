@@ -157,7 +157,8 @@ class WallpaperActions(
     val saveAs: (com.sunloom.app.domain.model.WallpaperRecord) -> Unit = {},
     val copyAttribution: (com.sunloom.app.domain.model.WallpaperRecord) -> Unit = {},
     val removeMany: (Collection<String>) -> Unit = {},
-    val showMessage: (String) -> Unit = {}
+    val showMessage: (String) -> Unit = {},
+    val setChosen: (com.sunloom.app.domain.matcher.ChosenSlot, String?) -> Unit = { _, _ -> }
 )
 
 val LocalWallpaperActions = staticCompositionLocalOf { WallpaperActions() }

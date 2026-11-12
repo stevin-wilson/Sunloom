@@ -63,6 +63,23 @@
     </plurals>
     <string name="change_every_needs_automatic">Turn on automatic switching to use this.</string>
     <string name="change_every_needs_schedule">The schedule is set to Manual, so nothing changes by itself. Pick another schedule above.</string>
+    <string name="chosen_daytime_title">Daytime wallpaper</string>
+    <string name="chosen_evening_title">Evening wallpaper</string>
+    <string name="chosen_automatic">Automatic</string>
+    <string name="chosen_how_to_hint">To choose a picture, open its menu in Reserve or on Today and pick Use as daytime wallpaper or Use as evening wallpaper.</string>
+    <string name="chosen_unavailable">Not available, using the automatic choice.</string>
+    <string name="chosen_clear">Clear</string>
+    <string name="chosen_clear_description">Clear the %1$s</string>
+    <string name="chosen_when_daytime_sun">Shown from sunrise to sunset.</string>
+    <string name="chosen_when_evening_sun">Shown from sunset to sunrise.</string>
+    <string name="chosen_when_daytime_os">Shown while your device uses its light appearance.</string>
+    <string name="chosen_when_evening_os">Shown while your device uses its dark appearance.</string>
+    <string name="chosen_when_daytime_clock">Shown during your daytime hours.</string>
+    <string name="chosen_when_evening_clock">Shown during your evening hours.</string>
+    <string name="chosen_when_manual">Only used when the schedule is not Manual.</string>
+    <string name="chosen_small_picture_hint">A small picture is shown with a blurred background and can look soft. A chosen picture appears when its period starts, and stays until the next one.</string>
+    <string name="use_as_daytime_wallpaper">Use as daytime wallpaper</string>
+    <string name="use_as_evening_wallpaper">Use as evening wallpaper</string>
     <string name="automatic_switching_hint">Change the wallpaper by itself on the schedule below. Turn off to choose wallpapers only by hand.</string>
     <string name="sunloom">Sunloom</string>
     <string name="switch_between_bright_wallpapers_during">Switch between bright wallpapers during the day and calm dark wallpapers at night.</string>

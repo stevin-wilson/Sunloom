@@ -55,6 +55,13 @@ Photos the person adds follow the same path from L3 on (L1 and L2 do not apply t
   change attempt restarts it even if it fails (`ChangeCountdown`, `RefreshSchedulePolicy.changeDelayMs`). A Follow-OS
   poll also changes the wallpaper when the interval is due. It adds no download work: the 3-hour refresh and the matcher
   (which reuses the least recently shown picture when nothing unseen is left) are unchanged.
+- **Daytime / Evening wallpaper** (`UserPreferences.daytimePickId` / `eveningPickId`, `ChosenWallpaper`): the change run
+  asks `ChosenWallpaper.choose` once. A usable chosen picture is applied when the period starts (the side differs from
+  `last_target_seen`) and the run does nothing for that side inside the period. The apply path takes `chosen = true`, which
+  skips only the resolution-quality verdicts and falls back to the blurred frame fill; rejection, safety and unreadable
+  sizes still refuse. The side is recorded as handled only when the chosen picture reached the screen, so a failure is
+  retried at the next look. Chosen ids are kept with the current and previous picture by cache eviction and the daily
+  clean-up, `ReserveBuffer.needsTopUp` ignores a side that holds one, and Dislike/Remove clear the slot when committed.
 - **Recovery:** a time or time-zone change, a restart (`RECEIVE_BOOT_COMPLETED`) and opening the app all re-arm the
   schedule. If the database cannot open, automation pauses and a light *store-watch* job retries every 6 hours.
 - Every background run ends by folding the database's write-ahead log into the main file so a backup taken while the
@@ -70,7 +77,7 @@ Photos the person adds follow the same path from L3 on (L1 and L2 do not apply t
 | Quarantine | `noBackupFilesDir/quarantine/` | no |
 | Rendered offline seeds, previews | `cacheDir` (the system may reclaim it) | no |
 | Interface choices (grid or list, single-key shortcuts) | `shared_prefs/sunloom_ui.xml` | no |
-| Worked-out state (what a Follow-OS look verified, when the Change every wait started) | `shared_prefs/sunloom_state.xml` | no |
+| Worked-out state (what a Follow-OS look verified, when the Change every wait started, the side last handled for the Daytime/Evening wallpapers) | `shared_prefs/sunloom_state.xml` | no |
 | Crash log (last five) | app private storage | no |
 
 After a restore the database is back but the pictures are not; at start-up, rows whose file is missing are marked
