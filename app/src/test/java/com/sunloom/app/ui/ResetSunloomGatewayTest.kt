@@ -40,4 +40,19 @@ class ResetSunloomGatewayTest {
         assertTrue("the person's photos are gone", after.libraryWallpapers.none { it.id == "mine-1" })
         assertTrue("the offline reserve is rebuilt so setup can preview it", after.libraryWallpapers.isNotEmpty())
     }
+
+    @Test
+    fun `reset puts the Daytime and Evening wallpapers back to Automatic and forgets the side last seen`() = runBlocking {
+        val gateway = AndroidSunloomGateway(context)
+        val first = gateway.loadInitialSnapshot()
+        val ids = first.libraryWallpapers.map { it.id }
+        gateway.savePreferences(first.preferences.copy(daytimePickId = ids[0], eveningPickId = ids[1]))
+        context.appContainer().newRepository().setLastTargetSeen(com.sunloom.app.domain.model.BrightnessClass.DARK)
+
+        val after = gateway.resetSunloom()
+
+        assertEquals(null, after.preferences.daytimePickId)
+        assertEquals(null, after.preferences.eveningPickId)
+        assertEquals(null, context.appContainer().newRepository().getLastTargetSeen())
+    }
 }
