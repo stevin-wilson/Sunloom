@@ -56,6 +56,10 @@ downloads on Battery Saver*. **Sync Catalog Now** asks the sources for new pictu
 - **Follow system theme**: light when your device is light, dark when it is dark.
 - **Custom schedule**: you choose the hours.
 - **Manual only**: it changes only when you press Next.
+- **Change every**: off to begin with. Choose 3, 6 or 12 hours and Sunloom also changes the wallpaper during the day and
+  the evening, about that often, not only when they begin. The time is approximate, and the wait starts over whenever the
+  wallpaper changes. It does nothing while automatic switching is off or the schedule is Manual. Pictures you have not
+  seen yet come first; if there are none (for example on a metered connection), a picture shown least recently is reused.
 - **Displays**: what Sunloom found, and how one picture is fitted to all of them. *One wallpaper for all displays* is
   recommended. *Blurred frame fill* lets smaller pictures be used with a darkened blurred backdrop.
 - **Home & Lock screen**, **Home screen only** or **Lock screen only**.

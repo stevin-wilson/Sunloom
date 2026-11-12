@@ -50,6 +50,11 @@ Photos the person adds follow the same path from L3 on (L1 and L2 do not apply t
   device is low on storage, the network and Data Saver rules, the 300 MB daily budget, and whether the Reserve needs
   anything at all; if not it makes no request.
 - **Follow system theme** has no transition time, so it polls every 15 minutes and ends at once when nothing changed.
+- **Change every** (optional, 3, 6 or 12 hours) shortens the wait to the earlier of the next transition and the end of
+  the interval. The wait counts from the last change of any kind, or from the moment the interval was chosen, and a
+  change attempt restarts it even if it fails (`ChangeCountdown`, `RefreshSchedulePolicy.changeDelayMs`). A Follow-OS
+  poll also changes the wallpaper when the interval is due. It adds no download work: the 3-hour refresh and the matcher
+  (which reuses the least recently shown picture when nothing unseen is left) are unchanged.
 - **Recovery:** a time or time-zone change, a restart (`RECEIVE_BOOT_COMPLETED`) and opening the app all re-arm the
   schedule. If the database cannot open, automation pauses and a light *store-watch* job retries every 6 hours.
 - Every background run ends by folding the database's write-ahead log into the main file so a backup taken while the
@@ -65,6 +70,7 @@ Photos the person adds follow the same path from L3 on (L1 and L2 do not apply t
 | Quarantine | `noBackupFilesDir/quarantine/` | no |
 | Rendered offline seeds, previews | `cacheDir` (the system may reclaim it) | no |
 | Interface choices (grid or list, single-key shortcuts) | `shared_prefs/sunloom_ui.xml` | no |
+| Worked-out state (what a Follow-OS look verified, when the Change every wait started) | `shared_prefs/sunloom_state.xml` | no |
 | Crash log (last five) | app private storage | no |
 
 After a restore the database is back but the pictures are not; at start-up, rows whose file is missing are marked

@@ -6,6 +6,11 @@ the release's version as its notes.
 
 ## [Unreleased]
 
+### Added
+- **Change every** (Schedule): Off, 3, 6 or 12 hours. Sunloom also changes the wallpaper during the day and the evening,
+  about that often, in addition to the sunrise, sunset or hours you chose. Off to begin with, so nothing changes unless
+  you choose it.
+
 ### Fixed
 - **Check for updates** now works on a release candidate: it reads GitHub's list of releases and offers the highest newer
   version. A release-candidate build hears about the next candidate and the final release; a normal release hears only
