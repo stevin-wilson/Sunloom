@@ -59,8 +59,9 @@ Photos the person adds follow the same path from L3 on (L1 and L2 do not apply t
   asks `ChosenWallpaper.choose` once. A usable chosen picture is applied when the period starts (the side differs from
   `last_target_seen`) and the run does nothing for that side inside the period. The apply path takes `chosen = true`, which
   skips only the resolution-quality verdicts and falls back to the blurred frame fill; rejection, safety and unreadable
-  sizes still refuse. The side is recorded as handled only when the chosen picture reached the screen, so a failure is
-  retried at the next look. Chosen ids are kept with the current and previous picture by cache eviction and the daily
+  sizes still refuse. The side is recorded as handled once something reached the screen, so a chosen picture that fails
+  is replaced for that period instead of being retried at every look; if nothing reached the screen the period stays open.
+  Follow-OS polls that end early also record the side. Chosen ids are kept with the current and previous picture by cache eviction and the daily
   clean-up, `ReserveBuffer.needsTopUp` ignores a side that holds one, and Dislike/Remove clear the slot when committed.
 - **Recovery:** a time or time-zone change, a restart (`RECEIVE_BOOT_COMPLETED`) and opening the app all re-arm the
   schedule. If the database cannot open, automation pauses and a light *store-watch* job retries every 6 hours.

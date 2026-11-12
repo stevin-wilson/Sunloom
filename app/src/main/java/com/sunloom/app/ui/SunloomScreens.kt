@@ -213,9 +213,8 @@ fun SunloomApp(
                 showMessage(attributionCopiedMessage)
             }
         }
-    val onSetChosenForMenus = actions.onSetChosenWallpaper
-    val wallpaperActions = remember(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage, onSetChosenForMenus) {
-        WallpaperActions(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage, onSetChosenForMenus)
+    val wallpaperActions = remember(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage, onSetChosenWallpaper) {
+        WallpaperActions(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage, onSetChosenWallpaper)
     }
     val dropTarget = remember(onDropImages) {
         object : DragAndDropTarget {

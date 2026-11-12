@@ -352,7 +352,10 @@ class SunloomWallpaperScheduler(
                 // The theme and the wallpaper are exactly what the last poll verified (or the person chose the system
                 // default for this theme): nothing to read, nothing to do.
                 val verified = repo.getFollowOsVerifiedKey()
-                if (RefreshSchedulePolicy.canSkipFollowOsPoll(prefs.scheduleMode, verified, targetBrightness, currentId, intervalDue)) {
+                val chosenDue = choice is ChosenWallpaper.Choice.Chosen
+                if (!chosenDue &&
+                    RefreshSchedulePolicy.canSkipFollowOsPoll(prefs.scheduleMode, verified, targetBrightness, currentId, intervalDue)) {
+                    repo.setLastTargetSeen(targetBrightness) // the period passed without a change; the next flip is a new one
                     rearmChange(appContext, prefs, nowZoned)
                     return null
                 }
@@ -360,9 +363,10 @@ class SunloomWallpaperScheduler(
                 val suits = current?.takeIf { it.localFilePath.isNotBlank() && File(it.localFilePath).exists() }
                     ?.let { BrightnessFit.accepts(it.evaluation, targetBrightness) }
                 if (RefreshSchedulePolicy.isRedundantFollowOsChange(
-                        prefs.scheduleMode, suits, intervalDue, chosenDue = choice is ChosenWallpaper.Choice.Chosen
+                        prefs.scheduleMode, suits, intervalDue, chosenDue = chosenDue
                     )) {
                     repo.setFollowOsVerified(targetBrightness, currentId)
+                    repo.setLastTargetSeen(targetBrightness)
                     rearmChange(appContext, prefs, nowZoned)
                     return null
                 }
@@ -405,14 +409,12 @@ class SunloomWallpaperScheduler(
             val currentGeometryKey = platform.computeDisplayGeometryKey(connectedDisplays, prefs.displayPolicy)
             // The chosen picture goes first; if it cannot be shown, the usual candidates follow for this one change.
             val chosenFirst = (choice as? ChosenWallpaper.Choice.Chosen)?.record
-            val outcome = applyFirstThatWorks(
+            val finalStatus = applyFirstThatWorks(
                 attempts = listOfNotNull(chosenFirst) + rankedCandidates.filter { it.id != chosenFirst?.id },
                 chosenId = chosenFirst?.id, repo = repo, platform = platform, prefs = prefs,
                 connectedDisplays = connectedDisplays, display = display
             )
-            val finalStatus = outcome.status
             if (finalStatus == WallpaperStatus.APPLIED_SUCCESSFULLY) repo.setLastAppliedDisplayGeometryKey(currentGeometryKey)
-            val appliedId = outcome.appliedId
 
             // If active wallpaper was invalidated during gate re-validation and no replacement applied, restore baseline
             if (finalStatus != WallpaperStatus.APPLIED_SUCCESSFULLY &&
@@ -440,15 +442,13 @@ class SunloomWallpaperScheduler(
                 }
             }
 
-            if (ChosenWallpaper.shouldRememberTarget(choice, finalStatus, appliedId)) repo.setLastTargetSeen(targetBrightness)
+            if (ChosenWallpaper.shouldRememberTarget(choice, finalStatus)) repo.setLastTargetSeen(targetBrightness)
 
             if (RefreshSchedulePolicy.shouldRearmAfterChange(finalStatus)) {
                 rearmChange(appContext, prefs, nowZoned)
             }
             return finalStatus
         }
-
-        private class ApplyOutcome(val status: WallpaperStatus?, val appliedId: String?)
 
         /** Tries [attempts] in order until one is on screen; a system that refuses wallpapers ends the walk at once. */
         private fun applyFirstThatWorks(
@@ -459,7 +459,7 @@ class SunloomWallpaperScheduler(
             prefs: UserPreferences,
             connectedDisplays: List<DisplayProfile>,
             display: DisplayProfile
-        ): ApplyOutcome {
+        ): WallpaperStatus? {
             var status: WallpaperStatus? = null
             for (candidate in attempts) {
                 status = platform.applyWallpaperAtomically(
@@ -472,10 +472,10 @@ class SunloomWallpaperScheduler(
                     chosen = candidate.id == chosenId,
                     onApplied = { repo.recordWallpaperApplied(candidate.id) }
                 )
-                if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) return ApplyOutcome(status, candidate.id)
+                if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) return status
                 if (status == WallpaperStatus.UNSUPPORTED_BY_SYSTEM) break
             }
-            return ApplyOutcome(status, null)
+            return status
         }
 
         private fun rearmChange(appContext: Context, prefs: UserPreferences, nowZoned: ZonedDateTime) {

@@ -92,12 +92,13 @@ object ChosenWallpaper {
     }
 
     /**
-     * Whether the run may record [Choice]'s side as handled. A chosen picture that did not end up on screen keeps the
-     * period open, so the next look tries it again instead of giving up on it until the next flip.
+     * Whether the run may record [Choice]'s side as handled: once something reached the screen. A chosen picture that
+     * failed and was replaced is not retried at every look (that would change the wallpaper each Follow-OS poll); the
+     * period keeps the replacement. When nothing reached the screen the period stays open.
      */
-    fun shouldRememberTarget(choice: Choice, status: WallpaperStatus?, appliedId: String?): Boolean = when (choice) {
+    fun shouldRememberTarget(choice: Choice, status: WallpaperStatus?): Boolean = when (choice) {
         Choice.LeaveAlone -> true
         Choice.Automatic -> status == WallpaperStatus.APPLIED_SUCCESSFULLY
-        is Choice.Chosen -> status == WallpaperStatus.APPLIED_SUCCESSFULLY && appliedId == choice.record.id
+        is Choice.Chosen -> status == WallpaperStatus.APPLIED_SUCCESSFULLY
     }
 }

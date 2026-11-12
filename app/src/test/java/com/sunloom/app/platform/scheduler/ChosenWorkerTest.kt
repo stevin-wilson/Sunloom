@@ -186,7 +186,7 @@ class ChosenWorkerTest {
     }
 
     @Test
-    fun `when the chosen picture cannot be put on screen another is used and the period stays open`() {
+    fun `when the chosen picture cannot be put on screen another is used for this period`() {
         val pick = dark()
         choose(day = pick.id)
         repo.setLastTargetSeen(BrightnessClass.DARK)
@@ -196,7 +196,46 @@ class ChosenWorkerTest {
 
         assertEquals(WallpaperStatus.APPLIED_SUCCESSFULLY, status)
         assertNotEquals(pick.id, repo.getCurrentWallpaperId())
-        assertEquals("the side is not marked handled, so the next look tries the chosen picture again", BrightnessClass.DARK, repo.getLastTargetSeen())
+        assertEquals("the period is handled, so a failing picture is not retried at every look", BrightnessClass.LIGHT, repo.getLastTargetSeen())
+    }
+
+    @Test
+    fun `nothing reaching the screen keeps the period open`() {
+        choose(day = dark().id)
+        repo.setLastTargetSeen(BrightnessClass.DARK)
+        failApplies = 10 // every apply is refused
+
+        run(noon)
+
+        assertEquals(BrightnessClass.DARK, repo.getLastTargetSeen())
+    }
+
+    @Test
+    fun `a Follow-OS poll that finds nothing to do still remembers the side`() {
+        repo.savePreferences(repo.loadPreferences().copy(scheduleMode = ScheduleMode.FOLLOW_OS_THEME))
+        val suiting = light()
+        repo.recordWallpaperApplied(suiting.id)
+        repo.setFollowOsVerified(BrightnessClass.LIGHT, suiting.id)
+        repo.setLastTargetSeen(BrightnessClass.DARK)
+
+        assertNull(run(noon)) // the light wallpaper already suits the light theme
+
+        assertEquals(BrightnessClass.LIGHT, repo.getLastTargetSeen())
+    }
+
+    @Test
+    fun `a Follow-OS poll does not skip a chosen picture that is due`() {
+        repo.savePreferences(repo.loadPreferences().copy(scheduleMode = ScheduleMode.FOLLOW_OS_THEME))
+        val suiting = light()
+        val pick = seeds.first { it.id != suiting.id && it.evaluation.brightnessClass == BrightnessClass.LIGHT }
+        repo.recordWallpaperApplied(suiting.id)
+        repo.setFollowOsVerified(BrightnessClass.LIGHT, suiting.id)
+        repo.setLastTargetSeen(BrightnessClass.DARK)
+        choose(day = pick.id)
+
+        run(noon)
+
+        assertEquals(pick.id, repo.getCurrentWallpaperId())
     }
 
     @Test

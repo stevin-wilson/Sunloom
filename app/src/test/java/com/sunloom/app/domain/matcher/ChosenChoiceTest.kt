@@ -89,24 +89,28 @@ class ChosenChoiceTest {
 
     @Test
     fun `the side is remembered once the chosen picture is on screen`() {
-        assertTrue(ChosenWallpaper.shouldRememberTarget(Choice.Chosen(d), WallpaperStatus.APPLIED_SUCCESSFULLY, appliedId = "d"))
+        assertTrue(ChosenWallpaper.shouldRememberTarget(Choice.Chosen(d), WallpaperStatus.APPLIED_SUCCESSFULLY))
     }
 
     @Test
-    fun `the side is not remembered when the chosen picture failed, even if another picture took its place`() {
-        assertFalse(ChosenWallpaper.shouldRememberTarget(Choice.Chosen(d), WallpaperStatus.FAILED_TEMPORARILY, appliedId = null))
-        assertFalse(ChosenWallpaper.shouldRememberTarget(Choice.Chosen(d), WallpaperStatus.APPLIED_SUCCESSFULLY, appliedId = "other"))
+    fun `the side is remembered when another picture took the place of a chosen one that failed, so it is not retried every look`() {
+        assertTrue(ChosenWallpaper.shouldRememberTarget(Choice.Chosen(d), WallpaperStatus.APPLIED_SUCCESSFULLY))
+    }
+
+    @Test
+    fun `the side is not remembered when nothing at all reached the screen`() {
+        assertFalse(ChosenWallpaper.shouldRememberTarget(Choice.Chosen(d), WallpaperStatus.FAILED_TEMPORARILY))
     }
 
     @Test
     fun `an automatic run remembers the side when it applied something`() {
-        assertTrue(ChosenWallpaper.shouldRememberTarget(Choice.Automatic, WallpaperStatus.APPLIED_SUCCESSFULLY, appliedId = "x"))
-        assertFalse(ChosenWallpaper.shouldRememberTarget(Choice.Automatic, WallpaperStatus.FAILED_TEMPORARILY, appliedId = null))
-        assertFalse(ChosenWallpaper.shouldRememberTarget(Choice.Automatic, null, appliedId = null))
+        assertTrue(ChosenWallpaper.shouldRememberTarget(Choice.Automatic, WallpaperStatus.APPLIED_SUCCESSFULLY))
+        assertFalse(ChosenWallpaper.shouldRememberTarget(Choice.Automatic, WallpaperStatus.FAILED_TEMPORARILY))
+        assertFalse(ChosenWallpaper.shouldRememberTarget(Choice.Automatic, null))
     }
 
     @Test
     fun `leaving a chosen picture alone keeps the side remembered`() {
-        assertTrue(ChosenWallpaper.shouldRememberTarget(Choice.LeaveAlone, null, appliedId = null))
+        assertTrue(ChosenWallpaper.shouldRememberTarget(Choice.LeaveAlone, null))
     }
 }
