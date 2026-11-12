@@ -21,6 +21,7 @@ import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
 import com.sunloom.app.appContainer
 import com.sunloom.app.data.repository.LocalLibraryRepository
+import com.sunloom.app.domain.matcher.ChosenWallpaper
 import com.sunloom.app.domain.model.CropRect
 import com.sunloom.app.domain.model.DisplayPolicy
 import com.sunloom.app.domain.model.DisplayProfile
@@ -339,11 +340,12 @@ class GoogleBookPlatformAdapter(
         dryRunPreviewOnly: Boolean = false,
         connectedDisplays: List<DisplayProfile>? = null,
         displayPolicy: DisplayPolicy = DisplayPolicy.SAME_ON_ALL_DISPLAYS,
+        chosen: Boolean = false,
         onApplied: () -> Unit = {}
     ): WallpaperStatus = ApplyLock.run {
         // [onApplied] runs inside the lock, so the app and the background worker cannot interleave an apply with the
         // record of it and leave the wallpaper on screen different from the one recorded as active (Article V §2).
-        applyWallpaperLocked(record, policy, targetDisplay, dryRunPreviewOnly, connectedDisplays, displayPolicy)
+        applyWallpaperLocked(record, policy, targetDisplay, dryRunPreviewOnly, connectedDisplays, displayPolicy, chosen)
             .also { if (it == WallpaperStatus.APPLIED_SUCCESSFULLY) onApplied() }
     }
 
@@ -353,7 +355,8 @@ class GoogleBookPlatformAdapter(
         targetDisplay: DisplayProfile?,
         dryRunPreviewOnly: Boolean,
         connectedDisplays: List<DisplayProfile>?,
-        displayPolicy: DisplayPolicy
+        displayPolicy: DisplayPolicy,
+        chosen: Boolean
     ): WallpaperStatus {
         if (!gateway.isWallpaperSupported() || !gateway.isSetWallpaperAllowed()) {
             return WallpaperStatus.UNSUPPORTED_BY_SYSTEM
@@ -367,13 +370,19 @@ class GoogleBookPlatformAdapter(
         val effectiveDisplay = effectiveDisplays.maxByOrNull { it.widthPx.toLong() * it.heightPx.toLong() }
             ?: return WallpaperStatus.FAILED_TEMPORARILY
 
-        if (record.isRejected || (!record.isBaselineRestore && !record.evaluation.isEligible)) {
+        // A picture the person chose skips only the resolution-quality verdicts; everything else still refuses it.
+        val skipsQualityVerdict = chosen && ChosenWallpaper.isQualityVerdict(record.evaluation.rejectionReasonCode)
+        if (record.isRejected || (!record.isBaselineRestore && !record.evaluation.isEligible && !skipsQualityVerdict)) {
             return WallpaperStatus.FAILED_TEMPORARILY
         }
 
-        val allowBlurred = record.provenance.sourceId == SourceIds.USER_LOCAL ||
+        // A chosen picture is never refused for being small: it is planned sharp when it can be, blurred when it cannot.
+        val allowBlurred = chosen || record.provenance.sourceId == SourceIds.USER_LOCAL ||
             record.evaluation.cropRect?.usesBlurredFrameFill == true
 
+        // A chosen picture the planner cannot place (too small even for its blurred-fill floor) is not refused: it is
+        // laid out whole on a blurred frame fill, the way a user's own photo is.
+        var chosenNeedsBlurredFill = false
         val envelopePlan: EnvelopePlan? = if (canPlanEnvelope(record)) {
             envelopePlanner.planEnvelope(
                 sourceWidth = record.provenance.originalWidth,
@@ -384,6 +393,9 @@ class GoogleBookPlatformAdapter(
                 policy = displayPolicy,
                 allowBlurredFrameFill = allowBlurred
             ) ?: if (record.provenance.sourceId == SourceIds.USER_LOCAL) {
+                null
+            } else if (chosen) {
+                chosenNeedsBlurredFill = true
                 null
             } else {
                 return WallpaperStatus.FAILED_TEMPORARILY
@@ -400,7 +412,8 @@ class GoogleBookPlatformAdapter(
         val maxDecodeW = effectiveDisplays.maxOf { it.widthPx }
         val maxDecodeH = effectiveDisplays.maxOf { it.heightPx }
         val sourceBitmap = decodeBitmapBounded(
-            file, maxDecodeW, maxDecodeH, decodeTargetFor(record, envelopePlan, effectiveDisplay, effectiveDisplays)
+            file, maxDecodeW, maxDecodeH,
+            if (chosenNeedsBlurredFill) null else decodeTargetFor(record, envelopePlan, effectiveDisplay, effectiveDisplays)
         ) ?: return WallpaperStatus.FAILED_TEMPORARILY
 
         var preparedBitmap: Bitmap? = null
@@ -408,6 +421,7 @@ class GoogleBookPlatformAdapter(
             preparedBitmap = when {
                 // A user's picture stored as blurred fill stays blurred whatever a re-plan would now choose: it was
                 // kept whole on purpose. The planner still tells us which displays the fill must be laid out for.
+                chosenNeedsBlurredFill -> renderBlurredFrameFillBitmap(sourceBitmap, effectiveDisplay, effectiveDisplays)
                 keepsStoredBlurredFill(record) -> renderBlurredFrameFillBitmap(
                     sourceBitmap,
                     effectiveDisplay,

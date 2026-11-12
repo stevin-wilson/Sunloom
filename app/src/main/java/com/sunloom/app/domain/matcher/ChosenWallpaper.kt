@@ -19,6 +19,18 @@ object ChosenWallpaper {
         BrightnessClass.NEUTRAL -> null
     }?.takeIf { it.isNotBlank() }
 
+    /**
+     * The evaluation verdicts that are about resolution and composition only. A chosen picture overrides these (it is
+     * shown with a blurred frame fill instead); no other verdict, and no missing one, is overridden.
+     */
+    private val QUALITY_VERDICTS = setOf(
+        "INSUFFICIENT_POST_CROP_RESOLUTION",
+        "COMPOSITION_CROPS_TOO_MUCH",
+        "RESOLUTION_BELOW_DISPLAY_TARGET"
+    )
+
+    fun isQualityVerdict(reasonCode: String?): Boolean = reasonCode in QUALITY_VERDICTS
+
     /** Whether [record] can be shown as a chosen picture. [fileExists] is asked about the stored path. */
     fun isUsable(record: WallpaperRecord, fileExists: (String) -> Boolean): Boolean =
         !record.isRejected && !record.isBaselineRestore && record.status != WallpaperStatus.DISABLED_BY_USER &&
