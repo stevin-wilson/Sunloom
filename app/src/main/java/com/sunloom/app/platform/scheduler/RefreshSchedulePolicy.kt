@@ -41,8 +41,8 @@ internal object RefreshSchedulePolicy {
         if (mode == ScheduleMode.FOLLOW_OS_THEME) FOLLOW_OS_POLL_MINUTES * 60_000L else 6L * 3_600_000L
 
     /** A follow-OS poll must not rotate the wallpaper when the one on screen already suits the current theme. */
-    fun isRedundantFollowOsChange(mode: ScheduleMode, currentSuitsTarget: Boolean?): Boolean =
-        mode == ScheduleMode.FOLLOW_OS_THEME && currentSuitsTarget == true
+    fun isRedundantFollowOsChange(mode: ScheduleMode, currentSuitsTarget: Boolean?, intervalDue: Boolean = false): Boolean =
+        mode == ScheduleMode.FOLLOW_OS_THEME && currentSuitsTarget == true && !intervalDue
 
     const val FOLLOW_OS_POLL_MINUTES = 15L
 
@@ -52,8 +52,15 @@ internal object RefreshSchedulePolicy {
      */
     fun followOsVerifiedKey(target: BrightnessClass, currentId: String?): String = FollowOsVerification.key(target, currentId)
 
-    fun canSkipFollowOsPoll(mode: ScheduleMode, storedKey: String?, target: BrightnessClass, currentId: String?): Boolean =
-        mode == ScheduleMode.FOLLOW_OS_THEME && storedKey != null && storedKey == followOsVerifiedKey(target, currentId)
+    fun canSkipFollowOsPoll(
+        mode: ScheduleMode,
+        storedKey: String?,
+        target: BrightnessClass,
+        currentId: String?,
+        intervalDue: Boolean = false
+    ): Boolean =
+        mode == ScheduleMode.FOLLOW_OS_THEME && !intervalDue && storedKey != null &&
+            storedKey == followOsVerifiedKey(target, currentId)
 
     /**
      * The inexact alarm backstops a delayed change job that Doze might hold for hours. Follow-OS has no transition to be
@@ -71,6 +78,28 @@ internal object RefreshSchedulePolicy {
     /** The interval is an addition to automatic changes: it does nothing when they are off, paused or manual. */
     fun intervalApplies(changeEveryHours: Int, scheduleChanges: Boolean): Boolean =
         scheduleChanges && UserPreferences.sanitizeChangeEveryHours(changeEveryHours) > 0
+
+    /** Whether the wait since [countdownStartMs] has run out. Without a countdown nothing is due yet. */
+    fun isIntervalDue(changeEveryHours: Int, scheduleChanges: Boolean, countdownStartMs: Long?, nowMs: Long): Boolean =
+        intervalApplies(changeEveryHours, scheduleChanges) && countdownStartMs != null &&
+            nowMs >= countdownStartMs + UserPreferences.sanitizeChangeEveryHours(changeEveryHours) * 3_600_000L
+
+    /**
+     * How long to wait before the next look: the schedule's own wait (its next transition, or the mode's fallback when
+     * it has none, such as the 15-minute Follow-OS look), brought forward to meet the interval when that is sooner.
+     */
+    fun changeDelayMs(
+        mode: ScheduleMode?,
+        transitionDelayMs: Long?,
+        changeEveryHours: Int,
+        scheduleChanges: Boolean,
+        countdownStartMs: Long?,
+        nowMs: Long
+    ): Long {
+        val scheduled = transitionDelayMs ?: fallbackChangeDelayMs(mode)
+        if (!intervalApplies(changeEveryHours, scheduleChanges)) return scheduled
+        return nextChangeDelayMs(scheduled, changeEveryHours, countdownStartMs, nowMs) ?: scheduled
+    }
 
     /**
      * The wait until the next change: the earlier of the next transition and the interval after the last change.

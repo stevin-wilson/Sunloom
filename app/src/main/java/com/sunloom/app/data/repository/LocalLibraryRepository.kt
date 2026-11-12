@@ -92,7 +92,7 @@ class LocalLibraryRepository(
          * `sunloom_preferences`, the file Auto Backup restores - a restored "verified" claim would vouch for images the
          * restore did not bring back. The backup rules list the files they include, and this is not one of them.
          */
-        private const val STATE_FILE = "sunloom_state"
+        internal const val STATE_FILE = "sunloom_state"
         private const val KEY_LAST_HYGIENE = "last_storage_hygiene_ms"
         private const val HYGIENE_INTERVAL_MS = 24L * 60 * 60 * 1000
 
@@ -270,6 +270,7 @@ class LocalLibraryRepository(
 
     fun savePreferences(updated: UserPreferences) {
         val saved = preferencesStore.save(updated)
+        if (saved.changeEveryChanged) ChangeCountdown.start(appContext, System.currentTimeMillis())
         // Resolution rejections made under the old blur-fill setting no longer apply (Article XI §3).
         if (saved.blurredFillChanged) store.clearTransientRejections()
         syncSourceEnabledStates(saved.enabledSources)
@@ -300,6 +301,9 @@ class LocalLibraryRepository(
             clearInvalidatedActiveWallpaper(currentId)
         }
     }
+
+    /** When the "Change every" wait started; see [ChangeCountdown]. */
+    fun getChangeCountdownStartMs(): Long? = ChangeCountdown.read(appContext)
 
     fun getCurrentWallpaperId(): String? = prefs.getString("current_wallpaper_id", null)
     fun getPreviousWallpaperId(): String? = prefs.getString("previous_wallpaper_id", null)
@@ -332,6 +336,7 @@ class LocalLibraryRepository(
     fun markSystemDefaultChosen(target: BrightnessClass) = setFollowOsVerified(target, null)
 
     fun recordWallpaperApplied(wallpaperId: String) {
+        ChangeCountdown.start(appContext, System.currentTimeMillis()) // any change restarts the "Change every" wait
         val current = getCurrentWallpaperId()
         statePrefs.edit { remove(KEY_FOLLOW_OS_VERIFIED) } // a new wallpaper (or leaving the system default) must be verified afresh
         prefs.edit {

@@ -81,4 +81,66 @@ class ChangeIntervalPolicyTest {
         assertEquals(false, RefreshSchedulePolicy.intervalApplies(3, scheduleChanges = false))
         assertEquals(false, RefreshSchedulePolicy.intervalApplies(0, scheduleChanges = true))
     }
+
+    // --- when the interval is due, and what the delay is ---
+
+    @Test
+    fun `the interval is due once the wait since the countdown started has passed`() {
+        assertEquals(false, RefreshSchedulePolicy.isIntervalDue(3, true, now - 2 * hour, now))
+        assertEquals(true, RefreshSchedulePolicy.isIntervalDue(3, true, now - 3 * hour, now))
+        assertEquals(true, RefreshSchedulePolicy.isIntervalDue(3, true, now - 9 * hour, now))
+    }
+
+    @Test
+    fun `the interval is never due when off, when changes are not scheduled, or before a countdown exists`() {
+        assertEquals(false, RefreshSchedulePolicy.isIntervalDue(0, true, now - 9 * hour, now))
+        assertEquals(false, RefreshSchedulePolicy.isIntervalDue(3, false, now - 9 * hour, now))
+        assertEquals(false, RefreshSchedulePolicy.isIntervalDue(3, true, null, now))
+    }
+
+    @Test
+    fun `a Follow-OS poll that would be skipped is not skipped when the interval is due`() {
+        val key = RefreshSchedulePolicy.followOsVerifiedKey(com.sunloom.app.domain.model.BrightnessClass.LIGHT, "w1")
+        val follow = com.sunloom.app.domain.model.ScheduleMode.FOLLOW_OS_THEME
+        val light = com.sunloom.app.domain.model.BrightnessClass.LIGHT
+        assertTrue(RefreshSchedulePolicy.canSkipFollowOsPoll(follow, key, light, "w1", intervalDue = false))
+        assertEquals(false, RefreshSchedulePolicy.canSkipFollowOsPoll(follow, key, light, "w1", intervalDue = true))
+    }
+
+    @Test
+    fun `a wallpaper that suits the theme is not left alone when the interval is due`() {
+        val follow = com.sunloom.app.domain.model.ScheduleMode.FOLLOW_OS_THEME
+        assertTrue(RefreshSchedulePolicy.isRedundantFollowOsChange(follow, currentSuitsTarget = true, intervalDue = false))
+        assertEquals(false, RefreshSchedulePolicy.isRedundantFollowOsChange(follow, currentSuitsTarget = true, intervalDue = true))
+    }
+
+    @Test
+    fun `the armed delay is the transition when the interval is off`() {
+        val mode = com.sunloom.app.domain.model.ScheduleMode.SUNRISE_SUNSET
+        assertEquals(5 * hour, RefreshSchedulePolicy.changeDelayMs(mode, 5 * hour, 0, true, now - hour, now))
+    }
+
+    @Test
+    fun `the armed delay is the earlier of the transition and the interval`() {
+        val mode = com.sunloom.app.domain.model.ScheduleMode.SUNRISE_SUNSET
+        assertEquals(2 * hour, RefreshSchedulePolicy.changeDelayMs(mode, 5 * hour, 3, true, now - hour, now))
+        assertEquals(hour, RefreshSchedulePolicy.changeDelayMs(mode, hour, 6, true, now, now))
+    }
+
+    @Test
+    fun `without a transition the mode's own fallback is what the interval is compared with`() {
+        val follow = com.sunloom.app.domain.model.ScheduleMode.FOLLOW_OS_THEME
+        // Follow OS looks every 15 minutes; a 3 hour interval does not make it look less often.
+        assertEquals(15 * 60_000L, RefreshSchedulePolicy.changeDelayMs(follow, null, 3, true, now, now))
+        // Shortly before the interval is due, the look is brought forward to meet it.
+        assertEquals(10 * 60_000L, RefreshSchedulePolicy.changeDelayMs(follow, null, 3, true, now - 3 * hour + 10 * 60_000L, now))
+        // No transition and a fixed mode: the 6 hour fallback is shortened by a 3 hour interval.
+        assertEquals(3 * hour, RefreshSchedulePolicy.changeDelayMs(com.sunloom.app.domain.model.ScheduleMode.FIXED_CLOCK, null, 3, true, now, now))
+    }
+
+    @Test
+    fun `the armed delay ignores the interval when changes are not scheduled`() {
+        val mode = com.sunloom.app.domain.model.ScheduleMode.SUNRISE_SUNSET
+        assertEquals(5 * hour, RefreshSchedulePolicy.changeDelayMs(mode, 5 * hour, 3, false, now - 9 * hour, now))
+    }
 }
