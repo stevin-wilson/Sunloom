@@ -6,6 +6,7 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import com.sunloom.app.R
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -63,6 +64,68 @@ internal fun automaticSwitchingNote(prefs: UserPreferences): Int? = when {
     else -> null
 }
 
+/**
+ * Why "Change every" cannot be used right now, or null when it can. Disabled with a reason, rather than hidden, so
+ * the page does not jump around and the person learns what to switch on.
+ */
+internal fun changeEveryUnavailableNote(prefs: UserPreferences): Int? = when {
+    !prefs.autoChangeEnabled -> R.string.change_every_needs_automatic
+    prefs.scheduleMode == ScheduleMode.MANUAL_ONLY -> R.string.change_every_needs_schedule
+    else -> null
+}
+
+/** The "Change every" choices: extra changes inside each daytime or evening period (Article III §1, v0.58). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChangeEverySection(prefs: UserPreferences, onUpdateChangeEvery: (Int) -> Unit) {
+    val unavailable = changeEveryUnavailableNote(prefs)
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
+        Text(stringResource(R.string.change_every_title), style = MaterialTheme.typography.labelLarge)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+            verticalArrangement = Arrangement.spacedBy(Spacing.s)
+        ) {
+            UserPreferences.CHANGE_EVERY_CHOICES_HOURS.forEach { hours ->
+                FilterChip(
+                    selected = prefs.changeEveryHours == hours,
+                    enabled = unavailable == null,
+                    onClick = { onUpdateChangeEvery(hours) },
+                    label = {
+                        Text(
+                            if (hours == 0) {
+                                stringResource(R.string.change_every_off)
+                            } else {
+                                pluralStringResource(R.plurals.change_every_hours, hours, hours)
+                            }
+                        )
+                    },
+                    modifier = Modifier.desktopControl(MaterialTheme.shapes.small).testTag("change_every_$hours")
+                )
+            }
+        }
+        if (unavailable != null) {
+            Text(
+                text = stringResource(unavailable),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.testTag("change_every_note")
+            )
+        } else {
+            Text(
+                text = if (prefs.changeEveryHours == 0) {
+                    stringResource(R.string.change_every_hint_off)
+                } else {
+                    pluralStringResource(R.plurals.change_every_hint_on, prefs.changeEveryHours, prefs.changeEveryHours)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("change_every_hint")
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun DisplaysAndSchedulePane(
@@ -72,6 +135,7 @@ internal fun DisplaysAndSchedulePane(
     onUpdateLockPolicy: (LockWorkspacePolicy) -> Unit,
     onToggleBlurredFill: (Boolean) -> Unit,
     onUpdateFixedHours: (lightHour: Int, darkHour: Int) -> Unit,
+    onUpdateChangeEvery: (hours: Int) -> Unit = {},
     onUpdateCustomCoordinates: (lat: Double, lon: Double, label: String) -> Unit,
     onToggleBatterySaverDeferral: (Boolean) -> Unit,
     onUpdateDisplayPolicy: (DisplayPolicy) -> Unit = {},
@@ -245,6 +309,12 @@ internal fun DisplaysAndSchedulePane(
                         }
                     }
                 }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                ChangeEverySection(
+                    prefs = uiState.preferences,
+                    onUpdateChangeEvery = onUpdateChangeEvery
+                )
             }
         }
 

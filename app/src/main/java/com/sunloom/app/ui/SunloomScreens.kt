@@ -150,6 +150,7 @@ fun SunloomApp(
     val onDeleteFromReserve = actions.onDeleteFromReserve
     val onToggleKeepSpecific = actions.onToggleKeepSpecific
     val onUpdateFixedHours = actions.onUpdateFixedHours
+    val onUpdateChangeEvery = actions.onUpdateChangeEvery
     val onUpdateCustomCoordinates = actions.onUpdateCustomCoordinates
     val onUpdateMaxCacheBytes = actions.onUpdateMaxCacheBytes
     val onToggleBatterySaverDeferral = actions.onToggleBatterySaverDeferral
@@ -423,6 +424,7 @@ fun SunloomApp(
                     onToggleWifiOnly = onToggleWifiOnly,
                     onPickLocalPhoto = onPickLocalPhoto,
                     onUpdateFixedHours = onUpdateFixedHours,
+                    onUpdateChangeEvery = onUpdateChangeEvery,
                     onUpdateCustomCoordinates = onUpdateCustomCoordinates,
                     onUpdateMaxCacheBytes = onUpdateMaxCacheBytes,
                     onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
@@ -634,6 +636,7 @@ fun DesktopWorkspaceScreen(
     onToggleWifiOnly: (Boolean) -> Unit,
     onPickLocalPhoto: (asBaselineRestore: Boolean) -> Unit,
     onUpdateFixedHours: (lightHour: Int, darkHour: Int) -> Unit = { _, _ -> },
+    onUpdateChangeEvery: (hours: Int) -> Unit = {},
     onUpdateCustomCoordinates: (lat: Double, lon: Double, label: String) -> Unit = { _, _, _ -> },
     onUpdateMaxCacheBytes: (Long) -> Unit = {},
     onToggleBatterySaverDeferral: (Boolean) -> Unit = {},
@@ -702,6 +705,7 @@ fun DesktopWorkspaceScreen(
                             onUpdateLockPolicy = onUpdateLockPolicy,
                             onToggleBlurredFill = onToggleBlurredFill,
                             onUpdateFixedHours = onUpdateFixedHours,
+                            onUpdateChangeEvery = onUpdateChangeEvery,
                             onUpdateCustomCoordinates = onUpdateCustomCoordinates,
                             onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
                             onUpdateDisplayPolicy = onUpdateDisplayPolicy,
