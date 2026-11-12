@@ -15,6 +15,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.sunloom.app.appContainer
+import com.sunloom.app.data.repository.ChangeCountdown
 import com.sunloom.app.data.repository.LibraryStoreUnavailableException
 import com.sunloom.app.data.repository.LocalLibraryRepository
 import com.sunloom.app.domain.matcher.BrightnessFit
@@ -211,12 +212,11 @@ class SunloomWallpaperScheduler(
             ZoneId.systemDefault()
         }
         val currentZoned = nowZoned ?: ZonedDateTime.now(zoneId)
-        val delayMs = if (effectivePrefs != null) {
-            solarCalculator.computeNextTransitionDelayMs(effectivePrefs, currentZoned)
-                ?: RefreshSchedulePolicy.fallbackChangeDelayMs(effectivePrefs.scheduleMode)
-        } else {
-            RefreshSchedulePolicy.fallbackChangeDelayMs(null)
+        // An interval restored from a backup has no countdown on this device yet: start one rather than wait forever.
+        if (effectivePrefs != null && RefreshSchedulePolicy.intervalApplies(effectivePrefs.changeEveryHours, true)) {
+            ChangeCountdown.startIfMissing(context, currentZoned.toInstant().toEpochMilli())
         }
+        val delayMs = armedDelayMs(solarCalculator, effectivePrefs, currentZoned, ChangeCountdown.read(context))
 
         // 1. ChangeWorker: OneTimeWorkRequest targeted to exact transition delay (offline, no battery-not-low gate)
         val changeRequest = OneTimeWorkRequestBuilder<ChangeWorker>()
@@ -271,6 +271,27 @@ class SunloomWallpaperScheduler(
     }
 
     companion object {
+        /**
+         * How long to wait before the next change: the schedule's own wait (its next transition), brought forward to meet
+         * the "Change every" interval when that is sooner (Article X §1, v0.58).
+         */
+        internal fun armedDelayMs(
+            solar: SolarCalculator,
+            preferences: UserPreferences?,
+            nowZoned: ZonedDateTime,
+            countdownStartMs: Long?
+        ): Long {
+            val mode = preferences?.scheduleMode
+            return RefreshSchedulePolicy.changeDelayMs(
+                mode = mode,
+                transitionDelayMs = preferences?.let { solar.computeNextTransitionDelayMs(it, nowZoned) },
+                changeEveryHours = preferences?.changeEveryHours ?: 0,
+                scheduleChanges = mode != ScheduleMode.MANUAL_ONLY,
+                countdownStartMs = countdownStartMs,
+                nowMs = nowZoned.toInstant().toEpochMilli()
+            )
+        }
+
         const val WORK_NAME = "sunloom_periodic_schedule_work"
         const val WORK_NAME_CHANGE = "sunloom_change_work"
         const val WORK_NAME_REFRESH = "sunloom_refresh_work"
@@ -313,24 +334,31 @@ class SunloomWallpaperScheduler(
 
             // Follow-OS mode polls every few minutes. When the wallpaper on screen already suits the theme there is
             // nothing to do, and the library pass below (healing, revalidation, reconcile) would only cost battery.
+            val nowMs = nowZoned.toInstant().toEpochMilli()
+            // A due "Change every" interval makes a Follow-OS poll look further than the theme alone would.
+            val intervalDue = RefreshSchedulePolicy.isIntervalDue(prefs.changeEveryHours, true, repo.getChangeCountdownStartMs(), nowMs)
             if (prefs.scheduleMode == ScheduleMode.FOLLOW_OS_THEME) {
                 val currentId = repo.getCurrentWallpaperId()
                 // The theme and the wallpaper are exactly what the last poll verified (or the person chose the system
                 // default for this theme): nothing to read, nothing to do.
                 val verified = repo.getFollowOsVerifiedKey()
-                if (RefreshSchedulePolicy.canSkipFollowOsPoll(prefs.scheduleMode, verified, targetBrightness, currentId)) {
+                if (RefreshSchedulePolicy.canSkipFollowOsPoll(prefs.scheduleMode, verified, targetBrightness, currentId, intervalDue)) {
                     rearmChange(appContext, prefs, nowZoned)
                     return null
                 }
                 val current = currentId?.let { repo.getWallpaperById(it) }
                 val suits = current?.takeIf { it.localFilePath.isNotBlank() && File(it.localFilePath).exists() }
                     ?.let { BrightnessFit.accepts(it.evaluation, targetBrightness) }
-                if (RefreshSchedulePolicy.isRedundantFollowOsChange(prefs.scheduleMode, suits)) {
+                if (RefreshSchedulePolicy.isRedundantFollowOsChange(prefs.scheduleMode, suits, intervalDue)) {
                     repo.setFollowOsVerified(targetBrightness, currentId)
                     rearmChange(appContext, prefs, nowZoned)
                     return null
                 }
             }
+
+            // This run goes on to change the wallpaper, so the "Change every" wait starts over now, whatever the outcome:
+            // a change that keeps failing must not be retried every minute because its interval is still overdue.
+            if (RefreshSchedulePolicy.intervalApplies(prefs.changeEveryHours, true)) ChangeCountdown.start(appContext, nowMs)
 
             val connectedDisplays = platform.getConnectedDisplays()
             val display = platform.getPrimaryOrSharpestDisplayOrNull(connectedDisplays)

@@ -133,6 +133,70 @@ class FollowOsPollTest {
         assertEquals("the second poll read nothing", 0, store.reads)
     }
 
+    // --- the "Change every" interval in Follow-OS mode ---
+
+    private fun chooseInterval(hours: Int, startedAgoMs: Long) {
+        repo.savePreferences(repo.loadPreferences().copy(changeEveryHours = hours))
+        com.sunloom.app.data.repository.ChangeCountdown.start(context, System.currentTimeMillis() - startedAgoMs)
+    }
+
+    private val hourMs = 3_600_000L
+
+    @Test
+    fun `an interval that is not due yet leaves a verified poll as cheap as before`() {
+        setCurrent("w1")
+        repo.setFollowOsVerified(light, "w1")
+        chooseInterval(3, startedAgoMs = hourMs)
+        store.reads = 0
+
+        assertNull(poll())
+
+        assertEquals(0, store.reads)
+    }
+
+    @Test
+    fun `an interval that is due makes a poll look even though the theme and wallpaper are unchanged`() {
+        setCurrent("w1")
+        repo.setFollowOsVerified(light, "w1")
+        chooseInterval(3, startedAgoMs = 4 * hourMs)
+
+        assertTrue(pollReached())
+    }
+
+    @Test
+    fun `a due interval changes a wallpaper that already suits the theme`() {
+        val file = File(context.cacheDir, "suits_interval.jpg").apply { writeBytes(ByteArray(10)) }
+        store.upsertWallpaper(testWallpaper("w1", localFilePath = file.absolutePath, fileSizeBytes = 10, brightness = light))
+        setCurrent("w1")
+        chooseInterval(3, startedAgoMs = 4 * hourMs)
+
+        assertTrue("it goes on to pick another instead of leaving it alone", pollReached())
+    }
+
+    @Test
+    fun `a poll that goes on restarts the countdown, so a failed attempt is not retried every minute`() {
+        setCurrent("w1")
+        repo.setFollowOsVerified(light, "w1")
+        chooseInterval(3, startedAgoMs = 4 * hourMs)
+        val before = System.currentTimeMillis()
+
+        poll()
+
+        assertTrue((repo.getChangeCountdownStartMs() ?: 0L) >= before)
+    }
+
+    @Test
+    fun `a poll that is skipped does not restart the countdown`() {
+        setCurrent("w1")
+        repo.setFollowOsVerified(light, "w1")
+        chooseInterval(3, startedAgoMs = hourMs)
+        val started = repo.getChangeCountdownStartMs()
+
+        poll()
+
+        assertEquals(started, repo.getChangeCountdownStartMs())
+    }
+
     // --- state that must not survive a restore ---
 
     @Test
