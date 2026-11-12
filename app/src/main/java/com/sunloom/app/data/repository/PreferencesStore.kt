@@ -61,6 +61,7 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             deferOnBatterySaver = prefs.getBoolean("defer_battery_saver", true),
             maxCacheBytes = prefs.getLong("max_cache_bytes", UserPreferences.DEFAULT_MAX_CACHE_BYTES),
             baselineRestorePath = prefs.getString("baseline_restore_path", null),
+            changeEveryHours = UserPreferences.sanitizeChangeEveryHours(prefs.getInt("change_every_hours", 0)),
             dryRunPreviewOnly = false
         )
     }
@@ -146,6 +147,7 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             putBoolean("defer_battery_saver", updated.deferOnBatterySaver)
             putLong("max_cache_bytes", updated.maxCacheBytes)
             putString("baseline_restore_path", updated.baselineRestorePath)
+            putInt("change_every_hours", UserPreferences.sanitizeChangeEveryHours(updated.changeEveryHours))
             remove("dry_run_preview_only")
             // A save is a deliberate choice, so it settles the one-time cache-default migration instead of leaving it
             // to override what was just saved.

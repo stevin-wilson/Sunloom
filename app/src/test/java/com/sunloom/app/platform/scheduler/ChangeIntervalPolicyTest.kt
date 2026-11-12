@@ -1,6 +1,7 @@
 package com.sunloom.app.platform.scheduler
 
 import com.sunloom.app.Requirement
+import com.sunloom.app.domain.model.UserPreferences
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -65,12 +66,12 @@ class ChangeIntervalPolicyTest {
 
     @Test
     fun `only the offered intervals are valid and anything else means off`() {
-        assertEquals(listOf(0, 1, 3, 6, 12), RefreshSchedulePolicy.CHANGE_EVERY_CHOICES_HOURS)
-        assertEquals(3, RefreshSchedulePolicy.sanitizeChangeEveryHours(3))
-        assertEquals(0, RefreshSchedulePolicy.sanitizeChangeEveryHours(5))
-        assertEquals(0, RefreshSchedulePolicy.sanitizeChangeEveryHours(-1))
-        assertEquals(0, RefreshSchedulePolicy.sanitizeChangeEveryHours(24))
-        assertTrue(RefreshSchedulePolicy.CHANGE_EVERY_CHOICES_HOURS.first() == 0)
+        assertEquals(listOf(0, 1, 3, 6, 12), UserPreferences.CHANGE_EVERY_CHOICES_HOURS)
+        assertEquals(3, UserPreferences.sanitizeChangeEveryHours(3))
+        assertEquals(0, UserPreferences.sanitizeChangeEveryHours(5))
+        assertEquals(0, UserPreferences.sanitizeChangeEveryHours(-1))
+        assertEquals(0, UserPreferences.sanitizeChangeEveryHours(24))
+        assertTrue(UserPreferences.CHANGE_EVERY_CHOICES_HOURS.first() == 0)
     }
 
     @Test

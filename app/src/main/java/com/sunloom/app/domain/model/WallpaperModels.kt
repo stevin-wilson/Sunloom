@@ -378,9 +378,20 @@ data class UserPreferences(
     val deferOnBatterySaver: Boolean = true,
     val maxCacheBytes: Long = DEFAULT_MAX_CACHE_BYTES,
     val baselineRestorePath: String? = null,
+    /**
+     * "Change every": extra changes inside each light or dark period, in hours. 0 is Off, which keeps the wallpaper
+     * changing only at the schedule's light/dark transitions. Offered choices: 0, 1, 3, 6, 12.
+     */
+    val changeEveryHours: Int = 0,
     val dryRunPreviewOnly: Boolean = false
 ) {
     companion object {
+        /** The "Change every" choices in hours; 0 is Off. */
+        val CHANGE_EVERY_CHOICES_HOURS: List<Int> = listOf(0, 1, 3, 6, 12)
+
+        /** Anything that is not an offered choice (a stale or hand-edited value) means Off. */
+        fun sanitizeChangeEveryHours(hours: Int): Int = if (hours in CHANGE_EVERY_CHOICES_HOURS) hours else 0
+
         /** Default reserve (cache) ceiling: 1 GiB. Matches the "1 GB cap" choice in Diagnostics. */
         const val DEFAULT_MAX_CACHE_BYTES: Long = 1024L * 1024L * 1024L
 

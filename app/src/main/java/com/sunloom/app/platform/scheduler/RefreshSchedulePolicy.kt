@@ -3,6 +3,7 @@ package com.sunloom.app.platform.scheduler
 import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.FollowOsVerification
 import com.sunloom.app.domain.model.ScheduleMode
+import com.sunloom.app.domain.model.UserPreferences
 import com.sunloom.app.domain.model.WallpaperStatus
 
 /**
@@ -64,18 +65,12 @@ internal object RefreshSchedulePolicy {
     fun shouldReactToThemeChange(mode: ScheduleMode, previousNight: Boolean?, nowNight: Boolean): Boolean =
         mode == ScheduleMode.FOLLOW_OS_THEME && previousNight != null && previousNight != nowNight
 
-    /** The "Change every" choices in hours; 0 is Off. */
-    val CHANGE_EVERY_CHOICES_HOURS: List<Int> = listOf(0, 1, 3, 6, 12)
-
     /** Shortest wait before an overdue interval change, so a long sleep makes one change, not a burst. */
     const val MIN_CHANGE_DELAY_MS = 60_000L
 
-    /** Anything that is not an offered choice (a stale or hand-edited value) means Off. */
-    fun sanitizeChangeEveryHours(hours: Int): Int = if (hours in CHANGE_EVERY_CHOICES_HOURS) hours else 0
-
     /** The interval is an addition to automatic changes: it does nothing when they are off, paused or manual. */
     fun intervalApplies(changeEveryHours: Int, scheduleChanges: Boolean): Boolean =
-        scheduleChanges && sanitizeChangeEveryHours(changeEveryHours) > 0
+        scheduleChanges && UserPreferences.sanitizeChangeEveryHours(changeEveryHours) > 0
 
     /**
      * The wait until the next change: the earlier of the next transition and the interval after the last change.
@@ -84,7 +79,7 @@ internal object RefreshSchedulePolicy {
      * (Article III §3). Null means there is nothing to wait for and the caller uses its own fallback.
      */
     fun nextChangeDelayMs(transitionDelayMs: Long?, changeEveryHours: Int, lastChangeEpochMs: Long?, nowEpochMs: Long): Long? {
-        val hours = sanitizeChangeEveryHours(changeEveryHours)
+        val hours = UserPreferences.sanitizeChangeEveryHours(changeEveryHours)
         if (hours == 0) return transitionDelayMs
         val intervalMs = hours * 3_600_000L
         // A last change in the future (the clock was stepped back) counts as just now.
