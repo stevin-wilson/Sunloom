@@ -5,6 +5,22 @@ import com.sunloom.app.domain.model.UserPreferences
 import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.model.WallpaperStatus
 
+/** The two places a picture can be chosen for: the daytime (the light side) and the evening (the dark side). */
+enum class ChosenSlot(val side: BrightnessClass) {
+    DAYTIME(BrightnessClass.LIGHT),
+    EVENING(BrightnessClass.DARK);
+
+    fun pickOf(preferences: UserPreferences): String? = when (this) {
+        DAYTIME -> preferences.daytimePickId
+        EVENING -> preferences.eveningPickId
+    }
+
+    fun with(preferences: UserPreferences, id: String?): UserPreferences = when (this) {
+        DAYTIME -> preferences.copy(daytimePickId = id)
+        EVENING -> preferences.copy(eveningPickId = id)
+    }
+}
+
 /**
  * Article III §1 (v0.59): the picture a person chose for the daytime or the evening. It is used whenever it can be
  * shown at all: its size, its brightness class and the source and category switches do not count against it. It is

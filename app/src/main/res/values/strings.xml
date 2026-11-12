@@ -165,6 +165,13 @@
     <string name="msg_restored_googlebookos_system_default_wallpaper">Switched to the system wallpaper.</string>
     <string name="msg_system_wallpaper_restore_was_not">System wallpaper restore was not permitted by OS policy.</string>
     <string name="msg_wallpaper_not_found">Wallpaper not found.</string>
+    <string name="msg_chosen_saved_daytime">Daytime wallpaper set to \'%1$s\'. It appears when the daytime starts.</string>
+    <string name="msg_chosen_saved_evening">Evening wallpaper set to \'%1$s\'. It appears when the evening starts.</string>
+    <string name="msg_chosen_saved_automatic_off">\'%1$s\' is saved. It is used once automatic changes are on.</string>
+    <string name="msg_chosen_already_shown">Saved. \'%1$s\' is on screen now.</string>
+    <string name="msg_chosen_cleared_daytime">Daytime wallpaper is Automatic again.</string>
+    <string name="msg_chosen_cleared_evening">Evening wallpaper is Automatic again.</string>
+    <string name="msg_chosen_unavailable">That picture can\'t be used right now.</string>
     <string name="msg_added_to_favorites">Kept \'%1$s\'</string>
     <string name="msg_removed_from_favorites">No longer keeping \'%1$s\'</string>
     <string name="msg_disliked_it_won_t_be">Disliked \'%1$s\'. It won\'t be shown again.</string>
