@@ -402,7 +402,7 @@ class AndroidSunloomGateway(
             connectedDisplays = connectedDisplays,
             displayPolicy = prefs.displayPolicy,
             // A picture the person chose for the daytime or evening is shown even when it is small for the display.
-            chosen = record.id == prefs.daytimePickId || record.id == prefs.eveningPickId,
+            chosen = ChosenWallpaper.isChosen(prefs, record.id),
             onApplied = { repo.recordWallpaperApplied(record.id) }
         )
         return if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) {

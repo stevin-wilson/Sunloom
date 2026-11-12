@@ -19,6 +19,7 @@ import com.sunloom.app.data.repository.ChangeCountdown
 import com.sunloom.app.data.repository.LibraryStoreUnavailableException
 import com.sunloom.app.data.repository.LocalLibraryRepository
 import com.sunloom.app.domain.matcher.BrightnessFit
+import com.sunloom.app.domain.matcher.ChosenSlot
 import com.sunloom.app.domain.matcher.ChosenWallpaper
 import com.sunloom.app.domain.matcher.SubjectFit
 import com.sunloom.app.domain.matcher.TasteProfile
@@ -344,9 +345,12 @@ class SunloomWallpaperScheduler(
                 prefs.changeEveryHours, prefs.changesBySchedule, repo.getChangeCountdownStartMs(), nowMs
             )
             // A chosen Daytime or Evening picture is applied when its period starts and left alone inside it.
-            val choice = ChosenWallpaper.choose(
-                prefs, targetBrightness, repo.getLastTargetSeen(), repo::getWallpaperById
-            ) { path -> File(path).exists() }
+            val anyChosen = ChosenSlot.entries.any { ChosenWallpaper.slotId(prefs, it.side) != null }
+            val choice = if (!anyChosen) {
+                ChosenWallpaper.Choice.Automatic // nothing chosen: skip the library lookup and the state read on every poll
+            } else {
+                ChosenWallpaper.choose(prefs, targetBrightness, repo.getLastTargetSeen(), repo::getWallpaperById) { File(it).exists() }
+            }
             if (prefs.scheduleMode == ScheduleMode.FOLLOW_OS_THEME) {
                 val currentId = repo.getCurrentWallpaperId()
                 // The theme and the wallpaper are exactly what the last poll verified (or the person chose the system

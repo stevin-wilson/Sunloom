@@ -178,7 +178,10 @@ private fun ChosenWallpaperSection(uiState: SunloomUiState, onSetChosen: (Chosen
         ChosenSlot.entries.forEach { slot ->
             val key = if (slot == ChosenSlot.DAYTIME) "daytime" else "evening"
             val title = stringResource(if (slot == ChosenSlot.DAYTIME) R.string.chosen_daytime_title else R.string.chosen_evening_title)
-            val state = chosenCardState(prefs, slot, uiState.libraryWallpapers) { java.io.File(it).exists() }
+            // Remembered: it stats a file, which must not repeat on every recomposition of the pane.
+            val state = remember(slot.pickOf(prefs), uiState.libraryWallpapers) {
+                chosenCardState(prefs, slot, uiState.libraryWallpapers) { java.io.File(it).exists() }
+            }
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.m),

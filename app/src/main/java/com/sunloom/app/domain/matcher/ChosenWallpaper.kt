@@ -29,11 +29,11 @@ enum class ChosenSlot(val side: BrightnessClass) {
  */
 object ChosenWallpaper {
     /** The slot for [target]: the light side is the daytime, the dark side the evening, a balanced target has none. */
-    fun slotId(preferences: UserPreferences, target: BrightnessClass): String? = when (target) {
-        BrightnessClass.LIGHT -> preferences.daytimePickId
-        BrightnessClass.DARK -> preferences.eveningPickId
-        BrightnessClass.NEUTRAL -> null
-    }?.takeIf { it.isNotBlank() }
+    fun slotId(preferences: UserPreferences, target: BrightnessClass): String? =
+        ChosenSlot.entries.firstOrNull { it.side == target }?.pickOf(preferences)?.takeIf { it.isNotBlank() }
+
+    /** Whether [id] is the picture of either slot. */
+    fun isChosen(preferences: UserPreferences, id: String): Boolean = ChosenSlot.entries.any { it.pickOf(preferences) == id }
 
     /**
      * The evaluation verdicts that are about resolution and composition only. A chosen picture overrides these (it is
@@ -96,9 +96,6 @@ object ChosenWallpaper {
      * failed and was replaced is not retried at every look (that would change the wallpaper each Follow-OS poll); the
      * period keeps the replacement. When nothing reached the screen the period stays open.
      */
-    fun shouldRememberTarget(choice: Choice, status: WallpaperStatus?): Boolean = when (choice) {
-        Choice.LeaveAlone -> true
-        Choice.Automatic -> status == WallpaperStatus.APPLIED_SUCCESSFULLY
-        is Choice.Chosen -> status == WallpaperStatus.APPLIED_SUCCESSFULLY
-    }
+    fun shouldRememberTarget(choice: Choice, status: WallpaperStatus?): Boolean =
+        choice == Choice.LeaveAlone || status == WallpaperStatus.APPLIED_SUCCESSFULLY
 }

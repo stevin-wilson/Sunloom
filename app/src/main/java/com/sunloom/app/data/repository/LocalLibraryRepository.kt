@@ -417,12 +417,9 @@ class LocalLibraryRepository(
     /** A refused picture cannot stay a chosen one: each slot that holds [wallpaperId] goes back to Automatic. */
     private fun clearChosenSlotsHolding(wallpaperId: String) {
         val current = loadPreferences()
-        if (current.daytimePickId != wallpaperId && current.eveningPickId != wallpaperId) return
+        if (!ChosenWallpaper.isChosen(current, wallpaperId)) return
         savePreferences(
-            current.copy(
-                daytimePickId = current.daytimePickId.takeUnless { it == wallpaperId },
-                eveningPickId = current.eveningPickId.takeUnless { it == wallpaperId }
-            )
+            ChosenSlot.entries.fold(current) { prefs, slot -> if (slot.pickOf(prefs) == wallpaperId) slot.with(prefs, null) else prefs }
         )
     }
 
@@ -854,12 +851,13 @@ class LocalLibraryRepository(
     /** True while Light or Dark holds fewer unseen fetched images than the target and the cache has room. */
     fun needsTopUp(preferences: UserPreferences = loadPreferences()): Boolean {
         val all = getAllWallpapers()
+        val byId = all.associateBy { it.id }
         val usable = all.filter { it.provenance.sourceId in preferences.enabledSources }
         val bytes = all.filter { !it.isRejected }.sumOf { it.fileSizeBytes }
         return com.sunloom.app.domain.matcher.ReserveBuffer.needsTopUp(
             usable, preferences.enabledCategories, bytes, preferences.maxCacheBytes,
             heldSides = ChosenSlot.entries.filter { slot ->
-                ChosenWallpaper.resolve(preferences, slot.side, ::getWallpaperById) { File(it).exists() } != null
+                ChosenWallpaper.resolve(preferences, slot.side, byId::get) { File(it).exists() } != null
             }.map { it.side }.toSet()
         )
     }
@@ -961,7 +959,7 @@ class LocalLibraryRepository(
 
     /** Pictures clean-up must leave alone: the current and previous wallpaper, and the chosen Daytime and Evening ones. */
     private fun idsToKeep(preferences: UserPreferences): Set<String> =
-        setOfNotNull(getCurrentWallpaperId(), getPreviousWallpaperId(), preferences.daytimePickId, preferences.eveningPickId)
+        setOfNotNull(getCurrentWallpaperId(), getPreviousWallpaperId()) + ChosenSlot.entries.mapNotNull { it.pickOf(preferences) }
 
     fun enforceCacheLimit() {
         val prefs = loadPreferences()
