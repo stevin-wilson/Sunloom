@@ -76,7 +76,6 @@
     <string name="chosen_when_evening_os">Shown while your device uses its dark appearance.</string>
     <string name="chosen_when_daytime_clock">Shown during your daytime hours.</string>
     <string name="chosen_when_evening_clock">Shown during your evening hours.</string>
-    <string name="chosen_when_manual">Only used when the schedule is not Manual.</string>
     <string name="chosen_small_picture_hint">A small picture is shown with a blurred background and can look soft. A chosen picture appears when its period starts, and stays until the next one.</string>
     <string name="use_as_daytime_wallpaper">Use as daytime wallpaper</string>
     <string name="use_as_evening_wallpaper">Use as evening wallpaper</string>
