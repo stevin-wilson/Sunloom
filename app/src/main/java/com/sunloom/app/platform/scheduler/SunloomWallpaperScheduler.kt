@@ -19,9 +19,12 @@ import com.sunloom.app.data.repository.ChangeCountdown
 import com.sunloom.app.data.repository.LibraryStoreUnavailableException
 import com.sunloom.app.data.repository.LocalLibraryRepository
 import com.sunloom.app.domain.matcher.BrightnessFit
+import com.sunloom.app.domain.matcher.ChosenWallpaper
 import com.sunloom.app.domain.matcher.SubjectFit
 import com.sunloom.app.domain.matcher.TasteProfile
 import com.sunloom.app.domain.matcher.WallpaperMatcher
+import com.sunloom.app.domain.model.DisplayProfile
+import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.model.ScheduleMode
 import com.sunloom.app.domain.model.UserPreferences
 import com.sunloom.app.domain.model.WallpaperStatus
@@ -340,6 +343,10 @@ class SunloomWallpaperScheduler(
             val intervalDue = RefreshSchedulePolicy.isIntervalDue(
                 prefs.changeEveryHours, prefs.changesBySchedule, repo.getChangeCountdownStartMs(), nowMs
             )
+            // A chosen Daytime or Evening picture is applied when its period starts and left alone inside it.
+            val choice = ChosenWallpaper.choose(
+                prefs, targetBrightness, repo.getLastTargetSeen(), repo::getWallpaperById
+            ) { path -> File(path).exists() }
             if (prefs.scheduleMode == ScheduleMode.FOLLOW_OS_THEME) {
                 val currentId = repo.getCurrentWallpaperId()
                 // The theme and the wallpaper are exactly what the last poll verified (or the person chose the system
@@ -352,7 +359,9 @@ class SunloomWallpaperScheduler(
                 val current = currentId?.let { repo.getWallpaperById(it) }
                 val suits = current?.takeIf { it.localFilePath.isNotBlank() && File(it.localFilePath).exists() }
                     ?.let { BrightnessFit.accepts(it.evaluation, targetBrightness) }
-                if (RefreshSchedulePolicy.isRedundantFollowOsChange(prefs.scheduleMode, suits, intervalDue)) {
+                if (RefreshSchedulePolicy.isRedundantFollowOsChange(
+                        prefs.scheduleMode, suits, intervalDue, chosenDue = choice is ChosenWallpaper.Choice.Chosen
+                    )) {
                     repo.setFollowOsVerified(targetBrightness, currentId)
                     rearmChange(appContext, prefs, nowZoned)
                     return null
@@ -362,6 +371,12 @@ class SunloomWallpaperScheduler(
             // This run goes on to change the wallpaper, so the "Change every" wait starts over now, whatever the outcome:
             // a change that keeps failing must not be retried every minute because its interval is still overdue.
             if (prefs.changeEveryActive) ChangeCountdown.start(appContext, nowMs)
+
+            // Inside the period of a usable chosen picture nothing replaces it, and the interval does not rotate it.
+            if (choice == ChosenWallpaper.Choice.LeaveAlone) {
+                rearmChange(appContext, prefs, nowZoned)
+                return null
+            }
 
             val connectedDisplays = platform.getConnectedDisplays()
             val display = platform.getPrimaryOrSharpestDisplayOrNull(connectedDisplays)
@@ -388,26 +403,16 @@ class SunloomWallpaperScheduler(
             )
 
             val currentGeometryKey = platform.computeDisplayGeometryKey(connectedDisplays, prefs.displayPolicy)
-            var finalStatus: WallpaperStatus? = null
-            for (candidate in rankedCandidates) {
-                val status = platform.applyWallpaperAtomically(
-                    record = candidate,
-                    policy = prefs.lockWorkspacePolicy,
-                    targetDisplay = display,
-                    dryRunPreviewOnly = prefs.dryRunPreviewOnly,
-                    connectedDisplays = connectedDisplays,
-                    displayPolicy = prefs.displayPolicy,
-                    onApplied = { repo.recordWallpaperApplied(candidate.id) }
-                )
-                finalStatus = status
-                if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) {
-                    repo.setLastAppliedDisplayGeometryKey(currentGeometryKey)
-                    break
-                }
-                if (status == WallpaperStatus.UNSUPPORTED_BY_SYSTEM) {
-                    break
-                }
-            }
+            // The chosen picture goes first; if it cannot be shown, the usual candidates follow for this one change.
+            val chosenFirst = (choice as? ChosenWallpaper.Choice.Chosen)?.record
+            val outcome = applyFirstThatWorks(
+                attempts = listOfNotNull(chosenFirst) + rankedCandidates.filter { it.id != chosenFirst?.id },
+                chosenId = chosenFirst?.id, repo = repo, platform = platform, prefs = prefs,
+                connectedDisplays = connectedDisplays, display = display
+            )
+            val finalStatus = outcome.status
+            if (finalStatus == WallpaperStatus.APPLIED_SUCCESSFULLY) repo.setLastAppliedDisplayGeometryKey(currentGeometryKey)
+            val appliedId = outcome.appliedId
 
             // If active wallpaper was invalidated during gate re-validation and no replacement applied, restore baseline
             if (finalStatus != WallpaperStatus.APPLIED_SUCCESSFULLY &&
@@ -435,10 +440,42 @@ class SunloomWallpaperScheduler(
                 }
             }
 
+            if (ChosenWallpaper.shouldRememberTarget(choice, finalStatus, appliedId)) repo.setLastTargetSeen(targetBrightness)
+
             if (RefreshSchedulePolicy.shouldRearmAfterChange(finalStatus)) {
                 rearmChange(appContext, prefs, nowZoned)
             }
             return finalStatus
+        }
+
+        private class ApplyOutcome(val status: WallpaperStatus?, val appliedId: String?)
+
+        /** Tries [attempts] in order until one is on screen; a system that refuses wallpapers ends the walk at once. */
+        private fun applyFirstThatWorks(
+            attempts: List<WallpaperRecord>,
+            chosenId: String?,
+            repo: LocalLibraryRepository,
+            platform: GoogleBookPlatformAdapter,
+            prefs: UserPreferences,
+            connectedDisplays: List<DisplayProfile>,
+            display: DisplayProfile
+        ): ApplyOutcome {
+            var status: WallpaperStatus? = null
+            for (candidate in attempts) {
+                status = platform.applyWallpaperAtomically(
+                    record = candidate,
+                    policy = prefs.lockWorkspacePolicy,
+                    targetDisplay = display,
+                    dryRunPreviewOnly = prefs.dryRunPreviewOnly,
+                    connectedDisplays = connectedDisplays,
+                    displayPolicy = prefs.displayPolicy,
+                    chosen = candidate.id == chosenId,
+                    onApplied = { repo.recordWallpaperApplied(candidate.id) }
+                )
+                if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) return ApplyOutcome(status, candidate.id)
+                if (status == WallpaperStatus.UNSUPPORTED_BY_SYSTEM) break
+            }
+            return ApplyOutcome(status, null)
         }
 
         private fun rearmChange(appContext: Context, prefs: UserPreferences, nowZoned: ZonedDateTime) {
