@@ -408,7 +408,20 @@ class LocalLibraryRepository(
         )
         if (existing.localFilePath.isNotBlank()) runCatching { File(existing.localFilePath).delete() }
         if (existing.croppedFilePath.isNotBlank()) runCatching { File(existing.croppedFilePath).delete() }
+        clearChosenSlotsHolding(existing.id)
         clearInvalidatedActiveWallpaper(existing.id)
+    }
+
+    /** A refused picture cannot stay a chosen one: each slot that holds [wallpaperId] goes back to Automatic. */
+    private fun clearChosenSlotsHolding(wallpaperId: String) {
+        val current = loadPreferences()
+        if (current.daytimePickId != wallpaperId && current.eveningPickId != wallpaperId) return
+        savePreferences(
+            current.copy(
+                daytimePickId = current.daytimePickId.takeUnless { it == wallpaperId },
+                eveningPickId = current.eveningPickId.takeUnless { it == wallpaperId }
+            )
+        )
     }
 
     /**
