@@ -107,4 +107,26 @@ class ReserveBufferTest {
         val allSeen = List(300) { row(BrightnessClass.LIGHT, applied = 2) }
         assertTrue(ReserveBuffer.needsTopUp(allSeen, all, bytesUsed = 1L, maxBytes = Long.MAX_VALUE))
     }
+
+    @Test
+    fun `a side held by a chosen picture does not ask for a top up`() {
+        val target = ReserveBuffer.TARGET_UNSEEN_PER_MODE
+        val lightOnly = List(target) { row(BrightnessClass.LIGHT) }
+        fun top(held: Set<BrightnessClass>) =
+            ReserveBuffer.needsTopUp(lightOnly, all, bytesUsed = 1L, maxBytes = Long.MAX_VALUE, heldSides = held)
+
+        assertTrue("dark side empty and not held", top(emptySet()))
+        assertFalse("the evening is chosen, so the dark side never rotates", top(setOf(BrightnessClass.DARK)))
+        assertTrue("holding the already-full side changes nothing", top(setOf(BrightnessClass.LIGHT)))
+    }
+
+    @Test
+    fun `with both sides held no top up is needed`() {
+        assertFalse(
+            ReserveBuffer.needsTopUp(
+                emptyList(), all, bytesUsed = 1L, maxBytes = Long.MAX_VALUE,
+                heldSides = setOf(BrightnessClass.LIGHT, BrightnessClass.DARK)
+            )
+        )
+    }
 }

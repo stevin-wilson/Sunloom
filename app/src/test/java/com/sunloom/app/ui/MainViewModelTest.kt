@@ -55,6 +55,13 @@ class MainViewModelTest {
             return state
         }
 
+        val chosenCalls = mutableListOf<Pair<com.sunloom.app.domain.matcher.ChosenSlot, String?>>()
+        override suspend fun setChosenWallpaper(slot: com.sunloom.app.domain.matcher.ChosenSlot, recordId: String?): SunloomUiState {
+            chosenCalls += slot to recordId
+            state = state.copy(preferences = slot.with(state.preferences, recordId), statusBannerMessage = "chosen:$recordId")
+            return state
+        }
+
         var lastExcludeIds: Set<String>? = null
         val importApplyFlags = mutableListOf<Boolean>()
         var duringImport: (() -> Unit)? = null
@@ -570,5 +577,23 @@ class MainViewModelTest {
         assertFalse(asyncVm.uiState.value.isInitialLoading)
         assertEquals(1, gateway.loadCount)
         assertEquals("seed-1", asyncVm.uiState.value.currentWallpaper?.id)
+    }
+
+    @Test
+    fun `choosing a picture for the daytime goes to the gateway and shows its message`() {
+        viewModel.setChosenWallpaper(com.sunloom.app.domain.matcher.ChosenSlot.DAYTIME, "seed-1")
+
+        assertEquals(listOf(com.sunloom.app.domain.matcher.ChosenSlot.DAYTIME to "seed-1"), fakeGateway.chosenCalls)
+        assertEquals("seed-1", viewModel.uiState.value.preferences.daytimePickId)
+        assertEquals("chosen:seed-1", viewModel.uiState.value.statusBannerMessage)
+    }
+
+    @Test
+    fun `clearing the evening picture goes to the gateway with no id`() {
+        viewModel.setChosenWallpaper(com.sunloom.app.domain.matcher.ChosenSlot.EVENING, "seed-2")
+        viewModel.setChosenWallpaper(com.sunloom.app.domain.matcher.ChosenSlot.EVENING, null)
+
+        assertNull(viewModel.uiState.value.preferences.eveningPickId)
+        assertEquals(com.sunloom.app.domain.matcher.ChosenSlot.EVENING to null, fakeGateway.chosenCalls.last())
     }
 }

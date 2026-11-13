@@ -10,6 +10,8 @@ import com.sunloom.app.appContainer
 import com.sunloom.app.data.cache.BoundedCacheManager
 import com.sunloom.app.data.repository.LibraryStoreUnavailableException
 import com.sunloom.app.data.repository.LocalLibraryRepository
+import com.sunloom.app.domain.matcher.ChosenSlot
+import com.sunloom.app.domain.matcher.ChosenWallpaper
 import com.sunloom.app.domain.matcher.SubjectFit
 import com.sunloom.app.domain.matcher.TasteProfile
 import com.sunloom.app.domain.matcher.WallpaperMatcher
@@ -20,6 +22,7 @@ import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.model.WallpaperStatus
 import com.sunloom.app.domain.solar.SolarCalculator
 import com.sunloom.app.platform.GoogleBookPlatformAdapter
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -338,6 +341,36 @@ class AndroidSunloomGateway(
         buildSnapshot(repo, msg, preloadedPrefs = cleanPreferences)
     }
 
+    override suspend fun setChosenWallpaper(slot: ChosenSlot, recordId: String?): SunloomUiState = withGatewayIo { repo ->
+        val prefs = repo.loadPreferences()
+        if (recordId == null) {
+            repo.savePreferences(slot.with(prefs, null))
+            val cleared = if (slot == ChosenSlot.DAYTIME) R.string.msg_chosen_cleared_daytime else R.string.msg_chosen_cleared_evening
+            return@withGatewayIo buildSnapshot(repo, context.getString(cleared))
+        }
+        val record = repo.getWallpaperById(recordId)?.takeIf { ChosenWallpaper.isUsable(it) { path -> File(path).exists() } }
+            ?: return@withGatewayIo buildSnapshot(repo, context.getString(R.string.msg_chosen_unavailable))
+        val updated = slot.with(prefs, recordId)
+        repo.savePreferences(updated)
+        val target = solarCalculator.resolveSolarSnapshot(updated, isSystemInDarkTheme()).targetBrightness
+        when {
+            !updated.changesBySchedule ->
+                buildSnapshot(repo, context.getString(R.string.msg_chosen_saved_automatic_off, record.title), preloadedPrefs = updated)
+            slot.side != target -> {
+                val saved = if (slot == ChosenSlot.DAYTIME) R.string.msg_chosen_saved_daytime else R.string.msg_chosen_saved_evening
+                buildSnapshot(repo, context.getString(saved, record.title), preloadedPrefs = updated)
+            }
+            repo.getCurrentWallpaperId() == recordId -> {
+                repo.setLastTargetSeen(target)
+                buildSnapshot(repo, context.getString(R.string.msg_chosen_already_shown, record.title), preloadedPrefs = updated)
+            }
+            else -> applyRecordAndBuildSnapshot(repo, record, updated).also {
+                // Only a picture that reached the screen settles the period; a failed one is tried again at the next look.
+                if (repo.getCurrentWallpaperId() == recordId) repo.setLastTargetSeen(target)
+            }
+        }
+    }
+
     override suspend fun applyWallpaper(recordId: String): SunloomUiState = withGatewayIo { repo ->
         applyWallpaperInternal(repo, recordId)
     }
@@ -368,7 +401,9 @@ class AndroidSunloomGateway(
             dryRunPreviewOnly = prefs.dryRunPreviewOnly,
             connectedDisplays = connectedDisplays,
             displayPolicy = prefs.displayPolicy,
-                    onApplied = { repo.recordWallpaperApplied(record.id) }
+            // A picture the person chose for the daytime or evening is shown even when it is small for the display.
+            chosen = ChosenWallpaper.isChosen(prefs, record.id),
+            onApplied = { repo.recordWallpaperApplied(record.id) }
         )
         return if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) {
             repo.setLastAppliedDisplayGeometryKey(

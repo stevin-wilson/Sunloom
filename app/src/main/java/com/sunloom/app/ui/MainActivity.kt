@@ -189,6 +189,8 @@ class MainActivity : ComponentActivity() {
                     onToggleBlurredFill = { fill -> viewModel.updatePreferences { it.copy(allowBlurredFrameFill = fill) } },
                     onToggleWifiOnly = { wifi -> viewModel.updatePreferences { it.copy(wifiOnlyDownloads = wifi) } },
                     onUpdateFixedHours = { lightH, darkH -> viewModel.updateFixedHours(lightH, darkH) },
+                    onUpdateChangeEvery = { hours -> viewModel.updatePreferences { it.copy(changeEveryHours = hours) } },
+                    onSetChosenWallpaper = { slot, id -> viewModel.setChosenWallpaper(slot, id) },
                     onUpdateCustomCoordinates = { lat, lon, label -> viewModel.updateCustomCoordinates(lat, lon, label) },
                     onUpdateMaxCacheBytes = { bytes -> viewModel.updateMaxCacheBytes(bytes) },
                     onToggleBatterySaverDeferral = { enabled -> viewModel.toggleBatterySaverDeferral(enabled) },

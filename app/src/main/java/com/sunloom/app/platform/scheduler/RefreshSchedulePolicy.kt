@@ -3,6 +3,7 @@ package com.sunloom.app.platform.scheduler
 import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.FollowOsVerification
 import com.sunloom.app.domain.model.ScheduleMode
+import com.sunloom.app.domain.model.UserPreferences
 import com.sunloom.app.domain.model.WallpaperStatus
 
 /**
@@ -39,9 +40,17 @@ internal object RefreshSchedulePolicy {
     fun fallbackChangeDelayMs(mode: ScheduleMode?): Long =
         if (mode == ScheduleMode.FOLLOW_OS_THEME) FOLLOW_OS_POLL_MINUTES * 60_000L else 6L * 3_600_000L
 
-    /** A follow-OS poll must not rotate the wallpaper when the one on screen already suits the current theme. */
-    fun isRedundantFollowOsChange(mode: ScheduleMode, currentSuitsTarget: Boolean?): Boolean =
-        mode == ScheduleMode.FOLLOW_OS_THEME && currentSuitsTarget == true
+    /**
+     * A follow-OS poll must not rotate the wallpaper when the one on screen already suits the current theme, unless the
+     * interval is due or a chosen picture is due because the theme just flipped.
+     */
+    fun isRedundantFollowOsChange(
+        mode: ScheduleMode,
+        currentSuitsTarget: Boolean?,
+        intervalDue: Boolean = false,
+        chosenDue: Boolean = false
+    ): Boolean =
+        mode == ScheduleMode.FOLLOW_OS_THEME && currentSuitsTarget == true && !intervalDue && !chosenDue
 
     const val FOLLOW_OS_POLL_MINUTES = 15L
 
@@ -51,8 +60,15 @@ internal object RefreshSchedulePolicy {
      */
     fun followOsVerifiedKey(target: BrightnessClass, currentId: String?): String = FollowOsVerification.key(target, currentId)
 
-    fun canSkipFollowOsPoll(mode: ScheduleMode, storedKey: String?, target: BrightnessClass, currentId: String?): Boolean =
-        mode == ScheduleMode.FOLLOW_OS_THEME && storedKey != null && storedKey == followOsVerifiedKey(target, currentId)
+    fun canSkipFollowOsPoll(
+        mode: ScheduleMode,
+        storedKey: String?,
+        target: BrightnessClass,
+        currentId: String?,
+        intervalDue: Boolean = false
+    ): Boolean =
+        mode == ScheduleMode.FOLLOW_OS_THEME && !intervalDue && storedKey != null &&
+            storedKey == followOsVerifiedKey(target, currentId)
 
     /**
      * The inexact alarm backstops a delayed change job that Doze might hold for hours. Follow-OS has no transition to be
@@ -63,6 +79,52 @@ internal object RefreshSchedulePolicy {
     /** While the app is running, a change of the system theme is acted on at once instead of at the next poll. */
     fun shouldReactToThemeChange(mode: ScheduleMode, previousNight: Boolean?, nowNight: Boolean): Boolean =
         mode == ScheduleMode.FOLLOW_OS_THEME && previousNight != null && previousNight != nowNight
+
+    /** Shortest wait before an overdue interval change, so a long sleep makes one change, not a burst. */
+    const val MIN_CHANGE_DELAY_MS = 60_000L
+
+    /** The interval is an addition to automatic changes: it does nothing when they are off, paused or manual. */
+    fun intervalApplies(changeEveryHours: Int, scheduleChanges: Boolean): Boolean =
+        scheduleChanges && UserPreferences.sanitizeChangeEveryHours(changeEveryHours) > 0
+
+    private fun intervalMs(changeEveryHours: Int): Long = UserPreferences.sanitizeChangeEveryHours(changeEveryHours) * 3_600_000L
+
+    /** Whether the wait since [countdownStartMs] has run out. Without a countdown nothing is due yet. */
+    fun isIntervalDue(changeEveryHours: Int, scheduleChanges: Boolean, countdownStartMs: Long?, nowMs: Long): Boolean =
+        intervalApplies(changeEveryHours, scheduleChanges) && countdownStartMs != null &&
+            nowMs >= countdownStartMs + intervalMs(changeEveryHours)
+
+    /**
+     * How long to wait before the next look: the schedule's own wait (its next transition, or the mode's fallback when
+     * it has none, such as the 15-minute Follow-OS look), brought forward to meet the interval when that is sooner.
+     */
+    fun changeDelayMs(
+        mode: ScheduleMode?,
+        transitionDelayMs: Long?,
+        changeEveryHours: Int,
+        scheduleChanges: Boolean,
+        countdownStartMs: Long?,
+        nowMs: Long
+    ): Long {
+        val scheduled = transitionDelayMs ?: fallbackChangeDelayMs(mode)
+        if (!intervalApplies(changeEveryHours, scheduleChanges)) return scheduled
+        return nextChangeDelayMs(scheduled, changeEveryHours, countdownStartMs, nowMs) ?: scheduled
+    }
+
+    /**
+     * The wait until the next change: the earlier of the next transition and the interval after the last change.
+     * Anchoring to the last change means saving an unrelated setting (which re-arms the work) does not restart the
+     * countdown. An overdue interval waits one minute, so a long sleep makes a single change, not a burst
+     * (Article III §3). Null means there is nothing to wait for and the caller uses its own fallback.
+     */
+    fun nextChangeDelayMs(transitionDelayMs: Long?, changeEveryHours: Int, lastChangeEpochMs: Long?, nowEpochMs: Long): Long? {
+        val intervalMs = intervalMs(changeEveryHours)
+        if (intervalMs == 0L) return transitionDelayMs
+        // A last change in the future (the clock was stepped back) counts as just now.
+        val last = lastChangeEpochMs?.coerceAtMost(nowEpochMs) ?: nowEpochMs
+        val intervalDelay = (last + intervalMs - nowEpochMs).coerceAtLeast(MIN_CHANGE_DELAY_MS)
+        return if (transitionDelayMs == null) intervalDelay else minOf(transitionDelayMs, intervalDelay)
+    }
 
     /** How often a suspended automation checks whether the library store opens again (Article VII §6). */
     const val STORE_WATCH_INTERVAL_HOURS = 6L

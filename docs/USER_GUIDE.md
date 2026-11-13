@@ -56,6 +56,18 @@ downloads on Battery Saver*. **Sync Catalog Now** asks the sources for new pictu
 - **Follow system theme**: light when your device is light, dark when it is dark.
 - **Custom schedule**: you choose the hours.
 - **Manual only**: it changes only when you press Next.
+- **Change every**: off to begin with. Choose 3, 6 or 12 hours and Sunloom also changes the wallpaper during the day and
+  the evening, about that often, not only when they begin. The time is approximate, and the wait starts over whenever the
+  wallpaper changes, and when you switch automatic switching back on. It does nothing while automatic switching is off,
+  paused or the schedule is Manual. Pictures you have not
+  seen yet come first; if there are none (for example on a metered connection), a picture shown least recently is reused.
+- **Daytime wallpaper** and **Evening wallpaper**: Automatic until you choose. To choose, open a picture's menu (right-click,
+  or the Menu key) in the Reserve or on Today and pick *Use as daytime wallpaper* or *Use as evening wallpaper*. If it is
+  that period now, it is shown at once; otherwise it is shown when that period starts. It stays until the next period, so
+  Next, Previous and a change in the system settings hold. It works only while automatic switching is on and the schedule
+  is not Manual. A picture too small for your display is shown with a blurred background and can look soft. Press
+  *Clear* to go back to Automatic. Disliking or removing the picture also clears it. After restoring a backup the
+  picture file may be missing; the card then says *Not available* and the usual choice is used.
 - **Displays**: what Sunloom found, and how one picture is fitted to all of them. *One wallpaper for all displays* is
   recommended. *Blurred frame fill* lets smaller pictures be used with a darkened blurred backdrop.
 - **Home & Lock screen**, **Home screen only** or **Lock screen only**.

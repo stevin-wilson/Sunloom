@@ -45,6 +45,87 @@ class PreferencesStoreTest {
     }
 
     @Test
+    fun `change every is off by default and survives saving`() {
+        assertEquals(0, store.load().changeEveryHours)
+
+        store.save(UserPreferences(changeEveryHours = 3))
+
+        assertEquals(3, store.load().changeEveryHours)
+    }
+
+    @Test
+    fun `a stored change every that is not an offered choice reads as off`() {
+        raw.edit().putInt("change_every_hours", 5).commit()
+        assertEquals(0, store.load().changeEveryHours)
+
+        raw.edit().putInt("change_every_hours", -2).commit()
+        assertEquals(0, store.load().changeEveryHours)
+    }
+
+    @Test
+    fun `saving a value that is not an offered choice stores off`() {
+        store.save(UserPreferences(changeEveryHours = 7))
+
+        assertEquals(0, raw.getInt("change_every_hours", -1))
+        assertEquals(0, store.load().changeEveryHours)
+    }
+
+    @Test
+    fun `the interval an older version once stored does not switch change every on`() {
+        raw.edit().putInt("rotation_interval_hours", 3).commit()
+
+        assertEquals(0, store.load().changeEveryHours)
+    }
+
+    @Test
+    fun `both chosen wallpapers are Automatic by default and survive saving`() {
+        assertEquals(null, store.load().daytimePickId)
+        assertEquals(null, store.load().eveningPickId)
+
+        store.save(UserPreferences(daytimePickId = "d1", eveningPickId = "e1"))
+
+        assertEquals("d1", store.load().daytimePickId)
+        assertEquals("e1", store.load().eveningPickId)
+    }
+
+    @Test
+    fun `choosing one side leaves the other alone`() {
+        store.save(UserPreferences(daytimePickId = "d1"))
+
+        assertEquals("d1", store.load().daytimePickId)
+        assertEquals(null, store.load().eveningPickId)
+    }
+
+    @Test
+    fun `clearing a chosen wallpaper removes it from the file`() {
+        store.save(UserPreferences(daytimePickId = "d1", eveningPickId = "e1"))
+
+        store.save(UserPreferences(daytimePickId = null, eveningPickId = "e1"))
+
+        assertFalse(raw.contains("daytime_pick_id"))
+        assertEquals(null, store.load().daytimePickId)
+        assertEquals("e1", store.load().eveningPickId)
+    }
+
+    @Test
+    fun `a blank chosen wallpaper reads and saves as Automatic`() {
+        raw.edit().putString("daytime_pick_id", "  ").commit()
+        assertEquals(null, store.load().daytimePickId)
+
+        store.save(UserPreferences(eveningPickId = ""))
+
+        assertFalse(raw.contains("evening_pick_id"))
+        assertEquals(null, store.load().eveningPickId)
+    }
+
+    @Test
+    fun `a stored chosen wallpaper of the wrong type reads as Automatic`() {
+        raw.edit().putInt("daytime_pick_id", 7).commit()
+
+        assertEquals(null, store.load().daytimePickId)
+    }
+
+    @Test
     fun `the update-check choice is off by default and survives saving`() {
         assertFalse(store.load().weeklyUpdateCheck)
         assertEquals(0L, store.load().lastUpdateCheckEpochMs)

@@ -150,6 +150,8 @@ fun SunloomApp(
     val onDeleteFromReserve = actions.onDeleteFromReserve
     val onToggleKeepSpecific = actions.onToggleKeepSpecific
     val onUpdateFixedHours = actions.onUpdateFixedHours
+    val onUpdateChangeEvery = actions.onUpdateChangeEvery
+    val onSetChosenWallpaper = actions.onSetChosenWallpaper
     val onUpdateCustomCoordinates = actions.onUpdateCustomCoordinates
     val onUpdateMaxCacheBytes = actions.onUpdateMaxCacheBytes
     val onToggleBatterySaverDeferral = actions.onToggleBatterySaverDeferral
@@ -211,8 +213,8 @@ fun SunloomApp(
                 showMessage(attributionCopiedMessage)
             }
         }
-    val wallpaperActions = remember(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage) {
-        WallpaperActions(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage)
+    val wallpaperActions = remember(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage, onSetChosenWallpaper) {
+        WallpaperActions(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage, onSetChosenWallpaper)
     }
     val dropTarget = remember(onDropImages) {
         object : DragAndDropTarget {
@@ -423,6 +425,8 @@ fun SunloomApp(
                     onToggleWifiOnly = onToggleWifiOnly,
                     onPickLocalPhoto = onPickLocalPhoto,
                     onUpdateFixedHours = onUpdateFixedHours,
+                    onUpdateChangeEvery = onUpdateChangeEvery,
+                    onSetChosenWallpaper = onSetChosenWallpaper,
                     onUpdateCustomCoordinates = onUpdateCustomCoordinates,
                     onUpdateMaxCacheBytes = onUpdateMaxCacheBytes,
                     onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
@@ -634,6 +638,8 @@ fun DesktopWorkspaceScreen(
     onToggleWifiOnly: (Boolean) -> Unit,
     onPickLocalPhoto: (asBaselineRestore: Boolean) -> Unit,
     onUpdateFixedHours: (lightHour: Int, darkHour: Int) -> Unit = { _, _ -> },
+    onUpdateChangeEvery: (hours: Int) -> Unit = {},
+    onSetChosenWallpaper: (com.sunloom.app.domain.matcher.ChosenSlot, String?) -> Unit = { _, _ -> },
     onUpdateCustomCoordinates: (lat: Double, lon: Double, label: String) -> Unit = { _, _, _ -> },
     onUpdateMaxCacheBytes: (Long) -> Unit = {},
     onToggleBatterySaverDeferral: (Boolean) -> Unit = {},
@@ -702,6 +708,8 @@ fun DesktopWorkspaceScreen(
                             onUpdateLockPolicy = onUpdateLockPolicy,
                             onToggleBlurredFill = onToggleBlurredFill,
                             onUpdateFixedHours = onUpdateFixedHours,
+                            onUpdateChangeEvery = onUpdateChangeEvery,
+                            onSetChosenWallpaper = onSetChosenWallpaper,
                             onUpdateCustomCoordinates = onUpdateCustomCoordinates,
                             onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
                             onUpdateDisplayPolicy = onUpdateDisplayPolicy,

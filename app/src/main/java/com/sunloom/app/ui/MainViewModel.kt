@@ -533,6 +533,18 @@ class MainViewModel(
         launchApplyMutation { gateway.applyWallpaper(recordId) }
     }
 
+    /**
+     * Sets or clears (null) the picture for the Daytime or Evening slot. Setting may put the picture on screen at once
+     * (when it is the current period's slot), so it shows the apply spinner; clearing changes nothing on screen.
+     */
+    fun setChosenWallpaper(slot: com.sunloom.app.domain.matcher.ChosenSlot, recordId: String?) {
+        if (recordId == null) {
+            launchGatewayMutation(preferenceEdit = true) { gateway.setChosenWallpaper(slot, null) }
+        } else {
+            launchApplyMutation { gateway.setChosenWallpaper(slot, recordId) }
+        }
+    }
+
     fun toggleKeepCurrentWallpaper() {
         val current = _uiState.value.currentWallpaper ?: return
         toggleKeepSpecificWallpaper(current.id)

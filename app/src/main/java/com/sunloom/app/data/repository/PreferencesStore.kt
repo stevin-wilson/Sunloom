@@ -61,6 +61,9 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             deferOnBatterySaver = prefs.getBoolean("defer_battery_saver", true),
             maxCacheBytes = prefs.getLong("max_cache_bytes", UserPreferences.DEFAULT_MAX_CACHE_BYTES),
             baselineRestorePath = prefs.getString("baseline_restore_path", null),
+            changeEveryHours = UserPreferences.sanitizeChangeEveryHours(prefs.getInt("change_every_hours", 0)),
+            daytimePickId = pickId(DAYTIME_PICK_KEY),
+            eveningPickId = pickId(EVENING_PICK_KEY),
             dryRunPreviewOnly = false
         )
     }
@@ -146,6 +149,9 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             putBoolean("defer_battery_saver", updated.deferOnBatterySaver)
             putLong("max_cache_bytes", updated.maxCacheBytes)
             putString("baseline_restore_path", updated.baselineRestorePath)
+            putInt("change_every_hours", UserPreferences.sanitizeChangeEveryHours(updated.changeEveryHours))
+            putPickId(DAYTIME_PICK_KEY, updated.daytimePickId)
+            putPickId(EVENING_PICK_KEY, updated.eveningPickId)
             remove("dry_run_preview_only")
             // A save is a deliberate choice, so it settles the one-time cache-default migration instead of leaving it
             // to override what was just saved.
@@ -155,7 +161,16 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
         return SaveResult(enabledAdmittedSources, blurredFillChanged)
     }
 
+    /** A chosen-wallpaper id: blank, missing or stored as something else reads as Automatic (null). */
+    private fun pickId(key: String): String? = (prefs.all[key] as? String)?.takeIf { it.isNotBlank() }
+
+    private fun SharedPreferences.Editor.putPickId(key: String, id: String?) {
+        if (id.isNullOrBlank()) remove(key) else putString(key, id)
+    }
+
     private companion object {
+        private const val DAYTIME_PICK_KEY = "daytime_pick_id"
+        private const val EVENING_PICK_KEY = "evening_pick_id"
         /** One writer at a time across every repository in the process; each has its own store on the same file. */
         val LOCK = Any()
         private const val KEY_SWITCHED_OFF_APPLIED = "default_off_applied_sources"
