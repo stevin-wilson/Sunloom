@@ -7,7 +7,9 @@ import android.net.Uri
 import com.sunloom.app.domain.evaluator.ImageEvaluator
 import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.CandidateAsset
+import com.sunloom.app.domain.model.CropRect
 import com.sunloom.app.domain.model.DisplayProfile
+import com.sunloom.app.domain.model.ImageEvaluationResult
 import com.sunloom.app.domain.model.LicenseType
 import com.sunloom.app.domain.model.ProvenanceRecord
 import com.sunloom.app.domain.model.RejectionRecord
@@ -17,6 +19,7 @@ import com.sunloom.app.domain.model.SafetyVerdict
 import com.sunloom.app.domain.model.WallpaperRecord
 import com.sunloom.app.domain.model.WallpaperStatus
 import com.sunloom.app.domain.safety.GateTrace
+import com.sunloom.app.domain.safety.ImageHeaderBounds
 import com.sunloom.app.domain.safety.SafetyGate
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -240,128 +243,25 @@ internal class UserImportPipeline(
         }
         val stageFile = File(quarantineDir, "uri_stage_${System.nanoTime()}.tmp")
         try {
-            val bytes = runCatching {
-                appContext.contentResolver.openInputStream(uri)?.use { stream ->
-                    val out = ByteArrayOutputStream()
-                    val buffer = ByteArray(16 * 1024)
-                    var total = 0L
-                    while (true) {
-                        val read = stream.read(buffer)
-                        if (read < 0) break
-                        total += read
-                        require(total <= SafetyGate.MAX_PAYLOAD_BYTES) { "File exceeds maximum payload size." }
-                        out.write(buffer, 0, read)
-                    }
-                    out.toByteArray()
-                }
-            }.getOrNull() ?: return null
-
+            val bytes = readBoundedBytes(uri) ?: return null
             FileOutputStream(stageFile).use { it.write(bytes) }
 
             val bounds = SafetyGate.inspectImageHeaderBounds(bytes) ?: return null
-            val candidate = CandidateAsset(
-                id = id,
-                title = title,
-                description = "",
-                category = SafeCategory.USER_LOCAL,
-                rawCategoriesAndTags = emptyList(),
-                downloadUrl = "",
-                isUserLocal = true,
-                provenance = ProvenanceRecord(
-                    sourceId = SourceIds.USER_LOCAL,
-                    sourceName = "User Local File",
-                    assetId = id,
-                    originalPageUrl = "",
-                    creatorName = "User-provided",
-                    creatorPageUrl = "",
-                    licenseType = LicenseType.USER_OWNED,
-                    attributionText = "User-provided — not verified by Sunloom's automated license gate ($title)",
-                    retrievedAtEpochMs = System.currentTimeMillis(),
-                    originalWidth = bounds.width,
-                    originalHeight = bounds.height,
-                    renditionWidth = display.widthPx,
-                    renditionHeight = display.heightPx,
-                    safetyClassification = SafetyClassification.SAFE,
-                    safetyClassificationSource = "Direct User Selection",
-                    sha256Checksum = ""
-                )
-            )
+            val candidate = userLocalCandidate(id, title, bounds, display)
+            val payloadVerdict = approvedPayload(candidate, bytes, bounds, asBaselineRestore) ?: return null
 
-            val payloadVerdict = safetyGate.evaluatePayload(
-                candidate = candidate,
-                bytes = bytes,
-                blockedAssetIds = if (asBaselineRestore) emptySet() else repository.getPermanentBlockedAssetIds(),
-                blockedPerceptualHashes = if (asBaselineRestore) emptySet() else repository.getPermanentBlockedPerceptualHashes(),
-                blockedSha256Checksums = if (asBaselineRestore) emptySet() else repository.getPermanentBlockedSha256s(),
-                headerBounds = bounds
-            )
-            if (payloadVerdict !is SafetyVerdict.Approved) {
-                if (payloadVerdict is SafetyVerdict.Rejected) {
-                    repository.recordRejection(
-                        RejectionRecord(
-                            assetId = id,
-                            sourceId = SourceIds.USER_LOCAL,
-                            reasonCode = payloadVerdict.reasonCode,
-                            explanation = payloadVerdict.explanation,
-                            timestampEpochMs = System.currentTimeMillis(),
-                            isPermanent = payloadVerdict.reasonCode.startsWith("BLOCKLISTED")
-                        )
-                    )
-                }
+            val sample = sampleForEvaluation(bytes, bounds, stageFile) ?: return null
+            val dHash = SafetyGate.computePerceptualDHashFromPixels(sample.rgbGrid, SAMPLE_GRID_W, SAMPLE_GRID_H)
+            if (!asBaselineRestore && matchesBlockedLookalike(dHash)) {
+                recordUserRejection(
+                    id, "BLOCKLISTED_USER_IMPORT",
+                    "Imported image matches a permanently rejected wallpaper in your blocklist.", isPermanent = true
+                )
                 return null
             }
 
-            val exifOrientation = readExifOrientation(stageFile)
-            val (origW, origH) = orientedDimensions(bounds.width, bounds.height, exifOrientation)
-
-            val sampled = decodeSampledBitmapSafely(bytes, bounds.width, bounds.height, maxEdgePx = 512) ?: return null
-            val orientedSample = applyExifOrientationIfNeeded(stageFile, sampled)
-            if (orientedSample != sampled) sampled.recycle()
-
-            val gridW = 32
-            val gridH = 20
-            val rgbGrid = sampleBitmapToRgbGrid(orientedSample, gridW, gridH)
-            val evalGrid = sampleBitmapToEvaluationGrid(orientedSample, gridW, gridH)
-            orientedSample.recycle()
-
-            val dHash = SafetyGate.computePerceptualDHashFromPixels(rgbGrid, gridW, gridH)
-            if (!asBaselineRestore && dHash.isNotBlank()) {
-                val blockedPhashes = repository.getPermanentBlockedPerceptualHashes()
-                if (blockedPhashes.any { SafetyGate.isNearDuplicateDHash(dHash, it) }) {
-                    repository.recordRejection(
-                        RejectionRecord(
-                            assetId = id,
-                            sourceId = SourceIds.USER_LOCAL,
-                            reasonCode = "BLOCKLISTED_USER_IMPORT",
-                            explanation = "Imported image matches a permanently rejected wallpaper in your blocklist.",
-                            timestampEpochMs = System.currentTimeMillis(),
-                            isPermanent = true
-                        )
-                    )
-                    return null
-                }
-            }
-
-            val eval = imageEvaluator.evaluateRgbGrid(
-                imageWidth = origW,
-                imageHeight = origH,
-                rgbGrid = evalGrid,
-                gridWidth = gridW,
-                gridHeight = gridH,
-                display = display,
-                allowBlurredFrameFill = true
-            )
-            val userEval = if (!eval.isEligible) {
-                eval.copy(
-                    isEligible = true,
-                    cropRect = eval.cropRect ?: com.sunloom.app.domain.model.CropRect.wholePictureBlurred(origW, origH, display)
-                )
-            } else {
-                eval
-            }
-
-            val ext = payloadVerdict.detectedFormat.fileExtension
-            val outFile = File(wallpaperDir, "$id.$ext")
+            val userEval = evaluateForUser(sample, display)
+            val outFile = File(wallpaperDir, "$id.${payloadVerdict.detectedFormat.fileExtension}")
             FileOutputStream(outFile).use { it.write(bytes) }
 
             val rendW = userEval.cropRect?.let { if (it.usesBlurredFrameFill) display.widthPx else it.width } ?: display.widthPx
@@ -376,8 +276,8 @@ internal class UserImportPipeline(
                 fileSizeBytes = outFile.length(),
                 isBaselineRestore = asBaselineRestore,
                 provenance = candidate.provenance.copy(
-                    originalWidth = origW,
-                    originalHeight = origH,
+                    originalWidth = sample.width,
+                    originalHeight = sample.height,
                     renditionWidth = rendW,
                     renditionHeight = rendH,
                     sha256Checksum = payloadVerdict.sha256Checksum,
@@ -390,7 +290,7 @@ internal class UserImportPipeline(
                 decisionExplanation = if (asBaselineRestore) {
                     "Saved as your permanent 'Home Base' Original Wallpaper Restore Point (Article II.2)."
                 } else {
-                    "Imported from local storage (${origW}×${origH}). ${userEval.explanation}"
+                    "Imported from local storage (${sample.width}×${sample.height}). ${userEval.explanation}"
                 }
             )
             repository.upsertWallpaper(record)
@@ -403,7 +303,131 @@ internal class UserImportPipeline(
         }
     }
 
+    /** The file's bytes, or null when it cannot be opened, cannot be read, or exceeds the payload limit. */
+    private fun readBoundedBytes(uri: Uri): ByteArray? = runCatching {
+        appContext.contentResolver.openInputStream(uri)?.use { stream ->
+            val out = ByteArrayOutputStream()
+            val buffer = ByteArray(16 * 1024)
+            var total = 0L
+            while (true) {
+                val read = stream.read(buffer)
+                if (read < 0) break
+                total += read
+                require(total <= SafetyGate.MAX_PAYLOAD_BYTES) { "File exceeds maximum payload size." }
+                out.write(buffer, 0, read)
+            }
+            out.toByteArray()
+        }
+    }.getOrNull()
+
+    private fun userLocalCandidate(id: String, title: String, bounds: ImageHeaderBounds, display: DisplayProfile) =
+        CandidateAsset(
+            id = id,
+            title = title,
+            description = "",
+            category = SafeCategory.USER_LOCAL,
+            rawCategoriesAndTags = emptyList(),
+            downloadUrl = "",
+            isUserLocal = true,
+            provenance = ProvenanceRecord(
+                sourceId = SourceIds.USER_LOCAL,
+                sourceName = "User Local File",
+                assetId = id,
+                originalPageUrl = "",
+                creatorName = "User-provided",
+                creatorPageUrl = "",
+                licenseType = LicenseType.USER_OWNED,
+                attributionText = "User-provided — not verified by Sunloom's automated license gate ($title)",
+                retrievedAtEpochMs = System.currentTimeMillis(),
+                originalWidth = bounds.width,
+                originalHeight = bounds.height,
+                renditionWidth = display.widthPx,
+                renditionHeight = display.heightPx,
+                safetyClassification = SafetyClassification.SAFE,
+                safetyClassificationSource = "Direct User Selection",
+                sha256Checksum = ""
+            )
+        )
+
+    /** The gate's approval, or null after recording why the picture was refused. A baseline restore ignores the blocklist. */
+    private fun approvedPayload(
+        candidate: CandidateAsset,
+        bytes: ByteArray,
+        bounds: ImageHeaderBounds,
+        asBaselineRestore: Boolean
+    ): SafetyVerdict.Approved? {
+        val verdict = safetyGate.evaluatePayload(
+            candidate = candidate,
+            bytes = bytes,
+            blockedAssetIds = if (asBaselineRestore) emptySet() else repository.getPermanentBlockedAssetIds(),
+            blockedPerceptualHashes = if (asBaselineRestore) emptySet() else repository.getPermanentBlockedPerceptualHashes(),
+            blockedSha256Checksums = if (asBaselineRestore) emptySet() else repository.getPermanentBlockedSha256s(),
+            headerBounds = bounds
+        )
+        if (verdict is SafetyVerdict.Rejected) {
+            recordUserRejection(
+                candidate.id, verdict.reasonCode, verdict.explanation,
+                isPermanent = verdict.reasonCode.startsWith("BLOCKLISTED")
+            )
+        }
+        return verdict as? SafetyVerdict.Approved
+    }
+
+    private fun recordUserRejection(assetId: String, reasonCode: String, explanation: String, isPermanent: Boolean) {
+        repository.recordRejection(
+            RejectionRecord(
+                assetId = assetId,
+                sourceId = SourceIds.USER_LOCAL,
+                reasonCode = reasonCode,
+                explanation = explanation,
+                timestampEpochMs = System.currentTimeMillis(),
+                isPermanent = isPermanent
+            )
+        )
+    }
+
+    /** The picture reduced to the small grids the evaluator and the perceptual hash read, with its upright size. */
+    private class UriSample(val width: Int, val height: Int, val rgbGrid: IntArray, val evalGrid: IntArray)
+
+    private fun sampleForEvaluation(bytes: ByteArray, bounds: ImageHeaderBounds, stageFile: File): UriSample? {
+        val exifOrientation = readExifOrientation(stageFile)
+        val (width, height) = orientedDimensions(bounds.width, bounds.height, exifOrientation)
+
+        val sampled = decodeSampledBitmapSafely(bytes, bounds.width, bounds.height, maxEdgePx = 512) ?: return null
+        val orientedSample = applyExifOrientationIfNeeded(stageFile, sampled)
+        if (orientedSample != sampled) sampled.recycle()
+
+        val rgbGrid = sampleBitmapToRgbGrid(orientedSample, SAMPLE_GRID_W, SAMPLE_GRID_H)
+        val evalGrid = sampleBitmapToEvaluationGrid(orientedSample, SAMPLE_GRID_W, SAMPLE_GRID_H)
+        orientedSample.recycle()
+        return UriSample(width, height, rgbGrid, evalGrid)
+    }
+
+    private fun matchesBlockedLookalike(dHash: String): Boolean =
+        dHash.isNotBlank() && repository.getPermanentBlockedPerceptualHashes().any { SafetyGate.isNearDuplicateDHash(dHash, it) }
+
+    /** A person's own picture is always usable: one that misses the quality floor is shown whole on a blurred frame. */
+    private fun evaluateForUser(sample: UriSample, display: DisplayProfile): ImageEvaluationResult {
+        val eval = imageEvaluator.evaluateRgbGrid(
+            imageWidth = sample.width,
+            imageHeight = sample.height,
+            rgbGrid = sample.evalGrid,
+            gridWidth = SAMPLE_GRID_W,
+            gridHeight = SAMPLE_GRID_H,
+            display = display,
+            allowBlurredFrameFill = true
+        )
+        if (eval.isEligible) return eval
+        return eval.copy(
+            isEligible = true,
+            cropRect = eval.cropRect ?: CropRect.wholePictureBlurred(sample.width, sample.height, display)
+        )
+    }
+
     companion object {
+        private const val SAMPLE_GRID_W = 32
+        private const val SAMPLE_GRID_H = 20
+
         /**
          * A personal photo's id. Unique by construction: several photos can arrive in the same millisecond (Share,
          * drag-and-drop, a multi-select), and an id built from the clock would let the second replace the first.
