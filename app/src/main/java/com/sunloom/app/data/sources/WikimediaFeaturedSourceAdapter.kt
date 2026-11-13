@@ -85,111 +85,117 @@ class WikimediaFeaturedSourceAdapter(
         val pages = root.obj("query")?.obj("pages") ?: return emptyList()
 
         for (key in pages.keys()) {
-            val page = pages.obj(key) ?: continue
-            val rawTitle = page.str("title", "").removePrefix("File:")
-            val imageInfoArr = page.arr("imageinfo") ?: continue
-            if (imageInfoArr.size == 0) continue
-
-            val info = imageInfoArr.obj(0) ?: continue
-            val width = info.int("width", 0).coerceAtLeast(0)
-            val height = info.int("height", 0).coerceAtLeast(0)
-            val thumbWidth = info.int("thumbwidth", width).coerceAtLeast(0)
-            val thumbHeight = info.int("thumbheight", height).coerceAtLeast(0)
-            val thumbUrl = info.str("thumburl", "")
-            val fullUrl = info.str("url", "")
-            val thumbValid = thumbUrl.startsWith("https://") && isSupportedImageUrl(thumbUrl)
-            val fullValid = fullUrl.startsWith("https://") &&
-                isSupportedImageUrl(fullUrl) &&
-                (width == 0 || (width in 1..8192 && height in 1..8192))
-            val preferFull = fullValid && thumbWidth in 1 until targetWidthPx && width > thumbWidth
-            val orderedUrls = buildList {
-                if (preferFull) {
-                    add(fullUrl)
-                    if (thumbValid) add(thumbUrl)
-                } else {
-                    if (thumbValid) add(thumbUrl)
-                    if (fullValid) add(fullUrl)
-                }
-            }.distinct()
-            if (orderedUrls.isEmpty()) continue
-            val downloadUrl = orderedUrls.first()
-            val fallbackUrls = orderedUrls.drop(1)
-            val descriptionUrl = info.str("descriptionurl", "").takeIf { it.startsWith("https://") }.orEmpty()
-
-            val ext = info.obj("extmetadata")
-            // Reject files with non-empty personality, trademark, or insignia restrictions
-            val restrictions = ext?.obj("Restrictions")?.str("value", "")?.trim().orEmpty()
-            if (restrictions.isNotEmpty()) {
-                continue
-            }
-
-            val artistHtml = ext?.obj("Artist")?.str("value", "") ?: ""
-            val artistClean = stripHtml(artistHtml)
-            val extractedCreatorUrl = extractFirstHttpsHref(artistHtml)
-
-            val licenseCode = ext?.obj("License")?.str("value", "") ?: ""
-            val licenseShort = ext?.obj("LicenseShortName")?.str("value", "") ?: ""
-            val usageTerms = ext?.obj("UsageTerms")?.str("value", "") ?: ""
-            val licenseUrl = ext?.obj("LicenseUrl")?.str("value", "")?.trim().orEmpty()
-            val descriptionHtml = ext?.obj("ImageDescription")?.str("value", rawTitle) ?: rawTitle
-            val descriptionClean = stripHtml(descriptionHtml).ifBlank { rawTitle }
-
-            // Zero injected tags: use only actual categories returned by Wikimedia Commons
-            val categoriesRaw = ext?.obj("Categories")?.str("value", "") ?: ""
-            val categoryTokens = categoriesRaw.split("|")
-                .map { it.removePrefix("Category:").trim() }
-                .filter { it.isNotEmpty() }
-
-            val (licenseType, licenseVersion) = mapLicenseAndVersion(
-                code = licenseCode,
-                shortName = licenseShort,
-                usageTerms = usageTerms
-            )
-
-            val isPlaceholderCreator = isUnknownCreatorPlaceholder(artistClean)
-            val resolvedCreator = when {
-                !isPlaceholderCreator && artistClean.isNotBlank() -> artistClean
-                licenseType == LicenseType.CC0 || licenseType == LicenseType.PUBLIC_DOMAIN ->
-                    "Archival / Public Domain (Wikimedia Commons)"
-                else -> "" // Leave empty so L1 rejects CC BY / CC BY-SA with unknown author
-            }
-            val cleanTitle = rawTitle.substringBeforeLast('.').replace('_', ' ').trim()
-
-            out.add(
-                CandidateAsset(
-                    id = "wiki-$key",
-                    title = cleanTitle.ifBlank { "Wikimedia Featured Photograph" },
-                    description = descriptionClean,
-                    category = targetCategory,
-                    rawCategoriesAndTags = categoryTokens,
-                    downloadUrl = downloadUrl,
-                    fallbackDownloadUrls = fallbackUrls,
-                    provenance = ProvenanceRecord(
-                        sourceId = sourceId,
-                        sourceName = sourceName,
-                        assetId = "wiki-$key",
-                        originalPageUrl = descriptionUrl,
-                        creatorName = resolvedCreator,
-                        creatorPageUrl = extractedCreatorUrl,
-                        licenseType = licenseType,
-                        attributionText = "${resolvedCreator.ifBlank { "Unknown" }} (${licenseShort.ifBlank { licenseType.label }} via Wikimedia Commons)",
-                        retrievedAtEpochMs = System.currentTimeMillis(),
-                        originalWidth = width,
-                        originalHeight = height,
-                        renditionWidth = thumbWidth,
-                        renditionHeight = thumbHeight,
-                        safetyClassification = SafetyClassification.SAFE,
-                        safetyClassificationSource = "Wikimedia Featured Pictures Curated Query ($targetCategory)",
-                        sha256Checksum = "",
-                        licenseUrl = licenseUrl.ifBlank { licenseType.defaultUrl },
-                        licenseVersion = licenseVersion,
-                        adapterVersion = SourceRegistry.get(sourceId)?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
-                        safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION
-                    )
-                )
-            )
+            pages.obj(key)?.let { page -> parsePage(key, page, targetCategory, targetWidthPx)?.let(out::add) }
         }
         return out
+    }
+
+    private fun parsePage(
+        key: String,
+        page: SimpleJson.JsonObj,
+        targetCategory: SafeCategory,
+        targetWidthPx: Int
+    ): CandidateAsset? {
+        val rawTitle = page.str("title", "").removePrefix("File:")
+        val imageInfoArr = page.arr("imageinfo") ?: return null
+        if (imageInfoArr.size == 0) return null
+
+        val info = imageInfoArr.obj(0) ?: return null
+        val width = info.int("width", 0).coerceAtLeast(0)
+        val height = info.int("height", 0).coerceAtLeast(0)
+        val thumbWidth = info.int("thumbwidth", width).coerceAtLeast(0)
+        val thumbHeight = info.int("thumbheight", height).coerceAtLeast(0)
+        val thumbUrl = info.str("thumburl", "")
+        val fullUrl = info.str("url", "")
+        val thumbValid = thumbUrl.startsWith("https://") && isSupportedImageUrl(thumbUrl)
+        val fullValid = fullUrl.startsWith("https://") &&
+            isSupportedImageUrl(fullUrl) &&
+            (width == 0 || (width in 1..8192 && height in 1..8192))
+        val preferFull = fullValid && thumbWidth in 1 until targetWidthPx && width > thumbWidth
+        val orderedUrls = buildList {
+            if (preferFull) {
+                add(fullUrl)
+                if (thumbValid) add(thumbUrl)
+            } else {
+                if (thumbValid) add(thumbUrl)
+                if (fullValid) add(fullUrl)
+            }
+        }.distinct()
+        if (orderedUrls.isEmpty()) return null
+        val downloadUrl = orderedUrls.first()
+        val fallbackUrls = orderedUrls.drop(1)
+        val descriptionUrl = info.str("descriptionurl", "").takeIf { it.startsWith("https://") }.orEmpty()
+
+        val ext = info.obj("extmetadata")
+        // Reject files with non-empty personality, trademark, or insignia restrictions
+        val restrictions = ext?.obj("Restrictions")?.str("value", "")?.trim().orEmpty()
+        if (restrictions.isNotEmpty()) {
+            return null
+        }
+
+        val artistHtml = ext?.obj("Artist")?.str("value", "") ?: ""
+        val artistClean = stripHtml(artistHtml)
+        val extractedCreatorUrl = extractFirstHttpsHref(artistHtml)
+
+        val licenseCode = ext?.obj("License")?.str("value", "") ?: ""
+        val licenseShort = ext?.obj("LicenseShortName")?.str("value", "") ?: ""
+        val usageTerms = ext?.obj("UsageTerms")?.str("value", "") ?: ""
+        val licenseUrl = ext?.obj("LicenseUrl")?.str("value", "")?.trim().orEmpty()
+        val descriptionHtml = ext?.obj("ImageDescription")?.str("value", rawTitle) ?: rawTitle
+        val descriptionClean = stripHtml(descriptionHtml).ifBlank { rawTitle }
+
+        // Zero injected tags: use only actual categories returned by Wikimedia Commons
+        val categoriesRaw = ext?.obj("Categories")?.str("value", "") ?: ""
+        val categoryTokens = categoriesRaw.split("|")
+            .map { it.removePrefix("Category:").trim() }
+            .filter { it.isNotEmpty() }
+
+        val (licenseType, licenseVersion) = mapLicenseAndVersion(
+            code = licenseCode,
+            shortName = licenseShort,
+            usageTerms = usageTerms
+        )
+
+        val isPlaceholderCreator = isUnknownCreatorPlaceholder(artistClean)
+        val resolvedCreator = when {
+            !isPlaceholderCreator && artistClean.isNotBlank() -> artistClean
+            licenseType == LicenseType.CC0 || licenseType == LicenseType.PUBLIC_DOMAIN ->
+                "Archival / Public Domain (Wikimedia Commons)"
+            else -> "" // Leave empty so L1 rejects CC BY / CC BY-SA with unknown author
+        }
+        val cleanTitle = rawTitle.substringBeforeLast('.').replace('_', ' ').trim()
+
+        return CandidateAsset(
+            id = "wiki-$key",
+            title = cleanTitle.ifBlank { "Wikimedia Featured Photograph" },
+            description = descriptionClean,
+            category = targetCategory,
+            rawCategoriesAndTags = categoryTokens,
+            downloadUrl = downloadUrl,
+            fallbackDownloadUrls = fallbackUrls,
+            provenance = ProvenanceRecord(
+                sourceId = sourceId,
+                sourceName = sourceName,
+                assetId = "wiki-$key",
+                originalPageUrl = descriptionUrl,
+                creatorName = resolvedCreator,
+                creatorPageUrl = extractedCreatorUrl,
+                licenseType = licenseType,
+                attributionText = "${resolvedCreator.ifBlank { "Unknown" }} (${licenseShort.ifBlank { licenseType.label }} via Wikimedia Commons)",
+                retrievedAtEpochMs = System.currentTimeMillis(),
+                originalWidth = width,
+                originalHeight = height,
+                renditionWidth = thumbWidth,
+                renditionHeight = thumbHeight,
+                safetyClassification = SafetyClassification.SAFE,
+                safetyClassificationSource = "Wikimedia Featured Pictures Curated Query ($targetCategory)",
+                sha256Checksum = "",
+                licenseUrl = licenseUrl.ifBlank { licenseType.defaultUrl },
+                licenseVersion = licenseVersion,
+                adapterVersion = SourceRegistry.get(sourceId)?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
+                safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION
+            )
+        )
     }
 
     private fun isSupportedImageUrl(url: String): Boolean =

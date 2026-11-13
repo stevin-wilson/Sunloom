@@ -95,123 +95,127 @@ class NasaLibrarySourceAdapter(
         val items = root.obj("collection")?.arr("items") ?: return emptyList()
 
         for (i in 0 until items.size) {
-            val item = items.obj(i) ?: continue
-            val dataArr = item.arr("data") ?: continue
-            if (dataArr.size == 0) continue
-            val data = dataArr.obj(0) ?: continue
-
-            val nasaId = data.str("nasa_id", "").trim().ifBlank { continue }
-            val center = data.str("center", "NASA").trim()
-            // Only the centres that publish scenery are admitted. Kennedy (launch, ground-operations and visit
-            // photography) and the headquarters ids (which can carry another centre's label) are events, not scenes.
-            if (center.uppercase(Locale.ROOT) !in ADMITTED_CENTERS || isHeadquartersId(nasaId)) continue
-
-            val title = data.str("title", "").trim().ifBlank { continue }
-            val description = data.str("description", title).trim()
-            val photographer = data.str("photographer", "").trim()
-            val secondaryCreator = data.str("secondary_creator", "").trim()
-
-            // Schedule A & Article VI §5: Reject any third-party copyright or non-NASA agency credit
-            if (hasThirdPartyCopyrightOrCredit(description, photographer, secondaryCreator)) {
-                continue
-            }
-
-            val resolvedCreator = photographer.ifBlank {
-                secondaryCreator.ifBlank { "$center Science Team (NASA)" }
-            }
-
-            // Zero injected tags: only include keywords returned by NASA
-            val keywordsArr = data.arr("keywords")
-            val tags = ArrayList<String>()
-            if (keywordsArr != null) {
-                for (k in 0 until keywordsArr.size) {
-                    val kw = keywordsArr.str(k, "").trim()
-                    if (kw.isNotBlank()) {
-                        tags.add(kw)
-                    }
-                }
-            }
-
-            if (NasaRecordPolicy.rejection(nasaId, title, description, tags) != null) continue
-
-            val linksArr = item.arr("links")
-            var downloadUrl = ""
-            var origWidth = 0
-            var origHeight = 0
-            var largestWidth = 0
-            var largestHeight = 0
-            if (linksArr != null) {
-                for (l in 0 until linksArr.size) {
-                    val linkObj = linksArr.obj(l) ?: continue
-                    val href = linkObj.str("href", "").trim()
-                    // NASA lists the pixel size of each rendition it offers: real numbers, not guesses.
-                    val linkWidth = linkObj.int("width", 0)
-                    val linkHeight = linkObj.int("height", 0)
-                    if (linkWidth.toLong() * linkHeight > largestWidth.toLong() * largestHeight) {
-                        largestWidth = linkWidth
-                        largestHeight = linkHeight
-                    }
-                    val isSizedOrig = href.contains("~orig.") && isHttpsImage(href) && linkWidth > 0 && linkHeight > 0
-                    if (origWidth == 0 && isSizedOrig) {
-                        origWidth = linkWidth
-                        origHeight = linkHeight
-                    }
-                    if (downloadUrl.isBlank() && isHttpsImage(href)) {
-                        // Prefer ~orig.jpg first; LocalLibraryRepository automatically falls back to ~large.jpg if ~orig.jpg is a .tif
-                        downloadUrl = href
-                            .replace("~thumb.jpg", "~orig.jpg")
-                            .replace("~medium.jpg", "~orig.jpg")
-                            .replace("~small.jpg", "~orig.jpg")
-                    }
-                }
-            }
-            if (downloadUrl.isBlank()) continue
-            val shape = if (origWidth > 0) {
-                NasaRecordPolicy.shapeRejection(origWidth, origHeight, isOriginal = true)
-            } else {
-                NasaRecordPolicy.shapeRejection(largestWidth, largestHeight, isOriginal = false)
-            }
-            if (shape != null) continue
-            val fallbackUrls = buildList {
-                val largeUrl = downloadUrl.replace("~orig.jpg", "~large.jpg")
-                if (largeUrl != downloadUrl) add(largeUrl)
-            }
-
-            out.add(
-                CandidateAsset(
-                    id = "nasa-$nasaId",
-                    title = title,
-                    description = description,
-                    category = defaultCategory,
-                    rawCategoriesAndTags = tags,
-                    downloadUrl = downloadUrl,
-                    fallbackDownloadUrls = fallbackUrls,
-                    provenance = ProvenanceRecord(
-                        sourceId = sourceId,
-                        sourceName = sourceName,
-                        assetId = "nasa-$nasaId",
-                        originalPageUrl = "https://images.nasa.gov/details/$nasaId",
-                        creatorName = resolvedCreator,
-                        creatorPageUrl = "",
-                        licenseType = LicenseType.PUBLIC_DOMAIN,
-                        attributionText = "Courtesy of $resolvedCreator / NASA (Public Domain)",
-                        retrievedAtEpochMs = System.currentTimeMillis(),
-                        originalWidth = origWidth,
-                        originalHeight = origHeight,
-                        renditionWidth = 0,
-                        renditionHeight = 0,
-                        safetyClassification = SafetyClassification.SAFE,
-                        safetyClassificationSource = "NASA Public Domain Catalog ($center)",
-                        sha256Checksum = "",
-                        licenseUrl = LicenseType.PUBLIC_DOMAIN.defaultUrl,
-                        licenseVersion = "1.0",
-                        adapterVersion = SourceRegistry.get(sourceId)?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
-                        safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION
-                    )
-                )
-            )
+            items.obj(i)?.let { item -> parseItem(item, defaultCategory)?.let(out::add) }
         }
         return out
+    }
+
+    private fun parseItem(
+        item: SimpleJson.JsonObj,
+        defaultCategory: SafeCategory
+    ): CandidateAsset? {
+        val dataArr = item.arr("data") ?: return null
+        if (dataArr.size == 0) return null
+        val data = dataArr.obj(0) ?: return null
+
+        val nasaId = data.str("nasa_id", "").trim().ifBlank { return null }
+        val center = data.str("center", "NASA").trim()
+        // Only the centres that publish scenery are admitted. Kennedy (launch, ground-operations and visit
+        // photography) and the headquarters ids (which can carry another centre's label) are events, not scenes.
+        if (center.uppercase(Locale.ROOT) !in ADMITTED_CENTERS || isHeadquartersId(nasaId)) return null
+
+        val title = data.str("title", "").trim().ifBlank { return null }
+        val description = data.str("description", title).trim()
+        val photographer = data.str("photographer", "").trim()
+        val secondaryCreator = data.str("secondary_creator", "").trim()
+
+        // Schedule A & Article VI §5: Reject any third-party copyright or non-NASA agency credit
+        if (hasThirdPartyCopyrightOrCredit(description, photographer, secondaryCreator)) {
+            return null
+        }
+
+        val resolvedCreator = photographer.ifBlank {
+            secondaryCreator.ifBlank { "$center Science Team (NASA)" }
+        }
+
+        // Zero injected tags: only include keywords returned by NASA
+        val keywordsArr = data.arr("keywords")
+        val tags = ArrayList<String>()
+        if (keywordsArr != null) {
+            for (k in 0 until keywordsArr.size) {
+                val kw = keywordsArr.str(k, "").trim()
+                if (kw.isNotBlank()) {
+                    tags.add(kw)
+                }
+            }
+        }
+
+        if (NasaRecordPolicy.rejection(nasaId, title, description, tags) != null) return null
+
+        val linksArr = item.arr("links")
+        var downloadUrl = ""
+        var origWidth = 0
+        var origHeight = 0
+        var largestWidth = 0
+        var largestHeight = 0
+        if (linksArr != null) {
+            for (l in 0 until linksArr.size) {
+                val linkObj = linksArr.obj(l) ?: return null
+                val href = linkObj.str("href", "").trim()
+                // NASA lists the pixel size of each rendition it offers: real numbers, not guesses.
+                val linkWidth = linkObj.int("width", 0)
+                val linkHeight = linkObj.int("height", 0)
+                if (linkWidth.toLong() * linkHeight > largestWidth.toLong() * largestHeight) {
+                    largestWidth = linkWidth
+                    largestHeight = linkHeight
+                }
+                val isSizedOrig = href.contains("~orig.") && isHttpsImage(href) && linkWidth > 0 && linkHeight > 0
+                if (origWidth == 0 && isSizedOrig) {
+                    origWidth = linkWidth
+                    origHeight = linkHeight
+                }
+                if (downloadUrl.isBlank() && isHttpsImage(href)) {
+                    // Prefer ~orig.jpg first; LocalLibraryRepository automatically falls back to ~large.jpg if ~orig.jpg is a .tif
+                    downloadUrl = href
+                        .replace("~thumb.jpg", "~orig.jpg")
+                        .replace("~medium.jpg", "~orig.jpg")
+                        .replace("~small.jpg", "~orig.jpg")
+                }
+            }
+        }
+        if (downloadUrl.isBlank()) return null
+        val shape = if (origWidth > 0) {
+            NasaRecordPolicy.shapeRejection(origWidth, origHeight, isOriginal = true)
+        } else {
+            NasaRecordPolicy.shapeRejection(largestWidth, largestHeight, isOriginal = false)
+        }
+        if (shape != null) return null
+        val fallbackUrls = buildList {
+            val largeUrl = downloadUrl.replace("~orig.jpg", "~large.jpg")
+            if (largeUrl != downloadUrl) add(largeUrl)
+        }
+
+        return CandidateAsset(
+            id = "nasa-$nasaId",
+            title = title,
+            description = description,
+            category = defaultCategory,
+            rawCategoriesAndTags = tags,
+            downloadUrl = downloadUrl,
+            fallbackDownloadUrls = fallbackUrls,
+            provenance = ProvenanceRecord(
+                sourceId = sourceId,
+                sourceName = sourceName,
+                assetId = "nasa-$nasaId",
+                originalPageUrl = "https://images.nasa.gov/details/$nasaId",
+                creatorName = resolvedCreator,
+                creatorPageUrl = "",
+                licenseType = LicenseType.PUBLIC_DOMAIN,
+                attributionText = "Courtesy of $resolvedCreator / NASA (Public Domain)",
+                retrievedAtEpochMs = System.currentTimeMillis(),
+                originalWidth = origWidth,
+                originalHeight = origHeight,
+                renditionWidth = 0,
+                renditionHeight = 0,
+                safetyClassification = SafetyClassification.SAFE,
+                safetyClassificationSource = "NASA Public Domain Catalog ($center)",
+                sha256Checksum = "",
+                licenseUrl = LicenseType.PUBLIC_DOMAIN.defaultUrl,
+                licenseVersion = "1.0",
+                adapterVersion = SourceRegistry.get(sourceId)?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
+                safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION
+            )
+        )
     }
 
     /**

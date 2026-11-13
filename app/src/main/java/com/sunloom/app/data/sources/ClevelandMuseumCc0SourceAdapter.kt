@@ -88,121 +88,146 @@ class ClevelandMuseumCc0SourceAdapter(
         val dataArr = root.arr("data") ?: return emptyList()
 
         for (i in 0 until dataArr.size) {
-            val item = dataArr.obj(i) ?: continue
-            val id = item.int("id", -1)
-            if (id <= 0) continue
-
-            // Fail-closed: literal license field must be "CC0"
-            val licenseStatus = item.str("share_license_status", "").trim()
-            if (!licenseStatus.equals("CC0", ignoreCase = true)) continue
-
-            val copyrightField = item.str("copyright", "").trim()
-            if (isCopyrightRestricted(copyrightField)) continue
-
-            val title = item.str("title").cleanedOrNull() ?: continue
-
-            val type = item.str("type", "").trim()
-            val department = item.str("department", "").trim()
-            if (!isTypeAndDepartmentAllowed(type = type, department = department)) {
-                continue
-            }
-
-            val imagesObj = item.obj("images") ?: continue
-            val printUrl = imagesObj.obj("print")?.str("url", "")?.trim().orEmpty()
-            val webUrl = imagesObj.obj("web")?.str("url", "")?.trim().orEmpty()
-            val fullObj = imagesObj.obj("full")
-            val fullUrl = fullObj?.str("url", "")?.trim().orEmpty()
-            val fullW = fullObj?.int("width", 0) ?: 0
-
-            val validUrls = buildList {
-                if (targetWidthPx > 3000) {
-                    if (isSupportedHttpsRasterUrl(fullUrl) && (fullW in 1..8192)) add(fullUrl)
-                    if (isSupportedHttpsRasterUrl(printUrl)) add(printUrl)
-                } else {
-                    if (isSupportedHttpsRasterUrl(printUrl)) add(printUrl)
-                    if (isSupportedHttpsRasterUrl(fullUrl) && (fullW in 1..8192)) add(fullUrl)
-                }
-                if (isSupportedHttpsRasterUrl(webUrl)) add(webUrl)
-            }.distinct()
-
-            if (validUrls.isEmpty()) continue
-            val primaryDownloadUrl = validUrls.first()
-            val fallbackUrls = validUrls.drop(1)
-            // The catalog states each rendition's pixel size: pass on that of the one we will download, so a
-            // portrait work or a rendition too small for the display is skipped before it costs a download.
-            val primaryRendition = listOf(
-                printUrl to imagesObj.obj("print"),
-                fullUrl to fullObj,
-                webUrl to imagesObj.obj("web")
-            ).firstOrNull { it.first == primaryDownloadUrl }?.second
-            val advertisedW = primaryRendition?.int("width", 0) ?: 0
-            val advertisedH = primaryRendition?.int("height", 0) ?: 0
-            val hasAdvertisedSize = advertisedW > 0 && advertisedH > 0
-
-            val creator = extractCreator(item)
-            val accession = item.str("accession_number", "").trim()
-            val rawPageUrl = item.str("url", "").trim()
-            val canonicalPageUrl = if (rawPageUrl.startsWith("https://") &&
-                SourceRegistry.isHostAllowed(extractHost(rawPageUrl), sourceId)
-            ) {
-                rawPageUrl
-            } else {
-                "https://www.clevelandart.org/art/${accession.ifEmpty { id.toString() }}"
-            }
-
-            // Zero synthetic tags: use only genuine CMA classification/medium/culture fields.
-            // Note: Do not copy combined department strings like "American Painting and Sculpture"
-            // into tags when `type` is "Painting", so Tier 2 "sculpture" doesn't false-reject paintings.
-            val tags = ArrayList<String>()
-            type.cleanedOrNull()?.let(tags::add)
-            item.str("collection").cleanedOrNull()?.let(tags::add)
-            item.str("technique").cleanedOrNull()?.let(tags::add)
-            item.arr("culture")?.let { tags.addAll(it.cleanStrings()) }
-
-            val description = item.str("tombstone").cleanedOrNull()
-                ?: "$title — $creator (Cleveland Museum of Art Open Access CC0)"
-
-            val resolvedCategory = when {
-                type.contains("textile", ignoreCase = true) && targetCategory == SafeCategory.ABSTRACT_PATTERNS ->
-                    SafeCategory.ABSTRACT_PATTERNS
-                else -> targetCategory
-            }
-
-            out.add(
-                CandidateAsset(
-                    id = "cma-$id",
-                    title = title,
-                    description = description,
-                    category = resolvedCategory,
-                    rawCategoriesAndTags = tags,
-                    downloadUrl = primaryDownloadUrl,
-                    fallbackDownloadUrls = fallbackUrls,
-                    provenance = ProvenanceRecord(
-                        sourceId = sourceId,
-                        sourceName = sourceName,
-                        assetId = "cma-$id",
-                        originalPageUrl = canonicalPageUrl,
-                        creatorName = creator,
-                        creatorPageUrl = "",
-                        licenseType = LicenseType.CC0,
-                        attributionText = "$creator — $title (CC0 1.0 Public Domain, Cleveland Museum of Art)",
-                        retrievedAtEpochMs = System.currentTimeMillis(),
-                        originalWidth = if (hasAdvertisedSize) advertisedW else 0,
-                        originalHeight = if (hasAdvertisedSize) advertisedH else 0,
-                        renditionWidth = 0,
-                        renditionHeight = 0,
-                        safetyClassification = SafetyClassification.SAFE,
-                        safetyClassificationSource = "CMA Open Access CC0 Type Filter (${type.ifBlank { "2D Artwork" }})",
-                        sha256Checksum = "",
-                        licenseUrl = LicenseType.CC0.defaultUrl,
-                        licenseVersion = "1.0",
-                        adapterVersion = SourceRegistry.get(sourceId)?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
-                        safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION
-                    )
-                )
-            )
+            dataArr.obj(i)?.let { item -> parseArtwork(item, targetCategory, targetWidthPx)?.let(out::add) }
         }
         return out
+    }
+
+    private fun parseArtwork(
+        item: SimpleJson.JsonObj,
+        targetCategory: SafeCategory,
+        targetWidthPx: Int
+    ): CandidateAsset? {
+        val id = item.int("id", -1)
+        if (id <= 0) return null
+
+        // Fail-closed: literal license field must be "CC0"
+        val licenseStatus = item.str("share_license_status", "").trim()
+        if (!licenseStatus.equals("CC0", ignoreCase = true)) return null
+
+        val copyrightField = item.str("copyright", "").trim()
+        if (isCopyrightRestricted(copyrightField)) return null
+
+        val title = item.str("title").cleanedOrNull() ?: return null
+
+        val type = item.str("type", "").trim()
+        val department = item.str("department", "").trim()
+        if (!isTypeAndDepartmentAllowed(type = type, department = department)) {
+            return null
+        }
+
+        val images = chooseImages(item.obj("images") ?: return null, targetWidthPx) ?: return null
+
+        val creator = extractCreator(item)
+        val canonicalPageUrl = canonicalPageUrl(item, id)
+
+        // Zero synthetic tags: use only genuine CMA classification/medium/culture fields.
+        // Note: Do not copy combined department strings like "American Painting and Sculpture"
+        // into tags when `type` is "Painting", so Tier 2 "sculpture" doesn't false-reject paintings.
+        val tags = ArrayList<String>()
+        type.cleanedOrNull()?.let(tags::add)
+        item.str("collection").cleanedOrNull()?.let(tags::add)
+        item.str("technique").cleanedOrNull()?.let(tags::add)
+        item.arr("culture")?.let { tags.addAll(it.cleanStrings()) }
+
+        val description = item.str("tombstone").cleanedOrNull()
+            ?: "$title — $creator (Cleveland Museum of Art Open Access CC0)"
+
+        val resolvedCategory = when {
+            type.contains("textile", ignoreCase = true) && targetCategory == SafeCategory.ABSTRACT_PATTERNS ->
+                SafeCategory.ABSTRACT_PATTERNS
+            else -> targetCategory
+        }
+
+        return CandidateAsset(
+            id = "cma-$id",
+            title = title,
+            description = description,
+            category = resolvedCategory,
+            rawCategoriesAndTags = tags,
+            downloadUrl = images.primaryUrl,
+            fallbackDownloadUrls = images.fallbackUrls,
+            provenance = ProvenanceRecord(
+                sourceId = sourceId,
+                sourceName = sourceName,
+                assetId = "cma-$id",
+                originalPageUrl = canonicalPageUrl,
+                creatorName = creator,
+                creatorPageUrl = "",
+                licenseType = LicenseType.CC0,
+                attributionText = "$creator — $title (CC0 1.0 Public Domain, Cleveland Museum of Art)",
+                retrievedAtEpochMs = System.currentTimeMillis(),
+                originalWidth = images.advertisedWidth,
+                originalHeight = images.advertisedHeight,
+                renditionWidth = 0,
+                renditionHeight = 0,
+                safetyClassification = SafetyClassification.SAFE,
+                safetyClassificationSource = "CMA Open Access CC0 Type Filter (${type.ifBlank { "2D Artwork" }})",
+                sha256Checksum = "",
+                licenseUrl = LicenseType.CC0.defaultUrl,
+                licenseVersion = "1.0",
+                adapterVersion = SourceRegistry.get(sourceId)?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
+                safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION
+            )
+        )
+    }
+
+    /** The renditions to download, best first, and the pixel size the catalog states for the first (0 when it states none). */
+    private class ImageChoice(
+        val primaryUrl: String,
+        val fallbackUrls: List<String>,
+        val advertisedWidth: Int,
+        val advertisedHeight: Int
+    )
+
+    private fun chooseImages(imagesObj: SimpleJson.JsonObj, targetWidthPx: Int): ImageChoice? {
+        val printUrl = imagesObj.obj("print")?.str("url", "")?.trim().orEmpty()
+        val webUrl = imagesObj.obj("web")?.str("url", "")?.trim().orEmpty()
+        val fullObj = imagesObj.obj("full")
+        val fullUrl = fullObj?.str("url", "")?.trim().orEmpty()
+        val fullW = fullObj?.int("width", 0) ?: 0
+
+        val validUrls = buildList {
+            if (targetWidthPx > 3000) {
+                if (isSupportedHttpsRasterUrl(fullUrl) && (fullW in 1..8192)) add(fullUrl)
+                if (isSupportedHttpsRasterUrl(printUrl)) add(printUrl)
+            } else {
+                if (isSupportedHttpsRasterUrl(printUrl)) add(printUrl)
+                if (isSupportedHttpsRasterUrl(fullUrl) && (fullW in 1..8192)) add(fullUrl)
+            }
+            if (isSupportedHttpsRasterUrl(webUrl)) add(webUrl)
+        }.distinct()
+
+        if (validUrls.isEmpty()) return null
+        val primaryDownloadUrl = validUrls.first()
+        // The catalog states each rendition's pixel size: pass on that of the one we will download, so a
+        // portrait work or a rendition too small for the display is skipped before it costs a download.
+        val primaryRendition = listOf(
+            printUrl to imagesObj.obj("print"),
+            fullUrl to fullObj,
+            webUrl to imagesObj.obj("web")
+        ).firstOrNull { it.first == primaryDownloadUrl }?.second
+        val advertisedW = primaryRendition?.int("width", 0) ?: 0
+        val advertisedH = primaryRendition?.int("height", 0) ?: 0
+        val hasAdvertisedSize = advertisedW > 0 && advertisedH > 0
+        return ImageChoice(
+            primaryUrl = primaryDownloadUrl,
+            fallbackUrls = validUrls.drop(1),
+            advertisedWidth = if (hasAdvertisedSize) advertisedW else 0,
+            advertisedHeight = if (hasAdvertisedSize) advertisedH else 0
+        )
+    }
+
+    private fun canonicalPageUrl(item: SimpleJson.JsonObj, id: Int): String {
+        val accession = item.str("accession_number", "").trim()
+        val rawPageUrl = item.str("url", "").trim()
+        return if (rawPageUrl.startsWith("https://") &&
+            SourceRegistry.isHostAllowed(extractHost(rawPageUrl), sourceId)
+        ) {
+            rawPageUrl
+        } else {
+            "https://www.clevelandart.org/art/${accession.ifEmpty { id.toString() }}"
+        }
     }
 
     /** A stated copyright that is not a public-domain or CC0 dedication. An empty field or the text "null" is no statement. */

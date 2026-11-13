@@ -68,69 +68,73 @@ class ArtInstituteCc0SourceAdapter(
         val dataArr = root.arr("data") ?: return emptyList()
 
         for (i in 0 until dataArr.size) {
-            val item = dataArr.obj(i) ?: continue
-            val id = item.int("id", -1)
-            val imageId = item.str("image_id").cleanedOrNull()
-            if (id <= 0 || imageId == null) continue
-
-            // Fail-closed: is_public_domain must be explicitly true (default false)
-            if (!item.bool("is_public_domain", false)) continue
-
-            val title = item.str("title", "").trim().ifBlank { continue }
-            val artist = item.str("artist_title").cleanedOrNull()
-                ?: "Unknown Artist (Art Institute of Chicago)"
-            val classification = item.str("classification_title", "").trim().lowercase(Locale.ROOT)
-
-            // Block sculpture, figurine, anatomy, or portrait classifications at source adapter level
-            if (classification.containsAnyOf("sculpture", "portrait", "nude", "armor", "weapon", "costume")) {
-                continue
-            }
-
-            // Zero injected tags: only include actual fields from the ArtIC response
-            val tags = ArrayList<String>()
-            classification.cleanedOrNull()?.let(tags::add)
-            item.arr("subject_titles")?.let { tags.addAll(it.cleanStrings()) }
-            item.arr("term_titles")?.let { tags.addAll(it.cleanStrings()) }
-
-            // Request ArtIC's largest public IIIF rendition (1686px; falls back to 843px if 1686px 403/404s)
-            val iiifUrl = "https://www.artic.edu/iiif/2/$imageId/full/1686,/0/default.jpg"
-            val iiifFallbackUrl = "https://www.artic.edu/iiif/2/$imageId/full/843,/0/default.jpg"
-            val pageUrl = "https://www.artic.edu/artworks/$id"
-
-            out.add(
-                CandidateAsset(
-                    id = "artic-$id",
-                    title = title,
-                    description = "$title — $artist (Art Institute of Chicago Open Access CC0)",
-                    category = category,
-                    rawCategoriesAndTags = tags,
-                    downloadUrl = iiifUrl,
-                    fallbackDownloadUrls = listOf(iiifFallbackUrl),
-                    provenance = ProvenanceRecord(
-                        sourceId = sourceId,
-                        sourceName = sourceName,
-                        assetId = "artic-$id",
-                        originalPageUrl = pageUrl,
-                        creatorName = artist,
-                        creatorPageUrl = "",
-                        licenseType = LicenseType.CC0,
-                        attributionText = "$artist — $title (CC0 1.0 Public Domain, Art Institute of Chicago)",
-                        retrievedAtEpochMs = System.currentTimeMillis(),
-                        originalWidth = 0,
-                        originalHeight = 0,
-                        renditionWidth = 0,
-                        renditionHeight = 0,
-                        safetyClassification = SafetyClassification.SAFE,
-                        safetyClassificationSource = "ArtIC Open Access Public Domain Filter (${classification.ifBlank { "Artwork" }})",
-                        sha256Checksum = "",
-                        licenseUrl = LicenseType.CC0.defaultUrl,
-                        licenseVersion = "1.0",
-                        adapterVersion = SourceRegistry.get(sourceId)?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
-                        safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION
-                    )
-                )
-            )
+            dataArr.obj(i)?.let { item -> parseArtwork(item, category)?.let(out::add) }
         }
         return out
+    }
+
+    private fun parseArtwork(
+        item: SimpleJson.JsonObj,
+        category: SafeCategory
+    ): CandidateAsset? {
+        val id = item.int("id", -1)
+        val imageId = item.str("image_id").cleanedOrNull()
+        if (id <= 0 || imageId == null) return null
+
+        // Fail-closed: is_public_domain must be explicitly true (default false)
+        if (!item.bool("is_public_domain", false)) return null
+
+        val title = item.str("title", "").trim().ifBlank { return null }
+        val artist = item.str("artist_title").cleanedOrNull()
+            ?: "Unknown Artist (Art Institute of Chicago)"
+        val classification = item.str("classification_title", "").trim().lowercase(Locale.ROOT)
+
+        // Block sculpture, figurine, anatomy, or portrait classifications at source adapter level
+        if (classification.containsAnyOf("sculpture", "portrait", "nude", "armor", "weapon", "costume")) {
+            return null
+        }
+
+        // Zero injected tags: only include actual fields from the ArtIC response
+        val tags = ArrayList<String>()
+        classification.cleanedOrNull()?.let(tags::add)
+        item.arr("subject_titles")?.let { tags.addAll(it.cleanStrings()) }
+        item.arr("term_titles")?.let { tags.addAll(it.cleanStrings()) }
+
+        // Request ArtIC's largest public IIIF rendition (1686px; falls back to 843px if 1686px 403/404s)
+        val iiifUrl = "https://www.artic.edu/iiif/2/$imageId/full/1686,/0/default.jpg"
+        val iiifFallbackUrl = "https://www.artic.edu/iiif/2/$imageId/full/843,/0/default.jpg"
+        val pageUrl = "https://www.artic.edu/artworks/$id"
+
+        return CandidateAsset(
+            id = "artic-$id",
+            title = title,
+            description = "$title — $artist (Art Institute of Chicago Open Access CC0)",
+            category = category,
+            rawCategoriesAndTags = tags,
+            downloadUrl = iiifUrl,
+            fallbackDownloadUrls = listOf(iiifFallbackUrl),
+            provenance = ProvenanceRecord(
+                sourceId = sourceId,
+                sourceName = sourceName,
+                assetId = "artic-$id",
+                originalPageUrl = pageUrl,
+                creatorName = artist,
+                creatorPageUrl = "",
+                licenseType = LicenseType.CC0,
+                attributionText = "$artist — $title (CC0 1.0 Public Domain, Art Institute of Chicago)",
+                retrievedAtEpochMs = System.currentTimeMillis(),
+                originalWidth = 0,
+                originalHeight = 0,
+                renditionWidth = 0,
+                renditionHeight = 0,
+                safetyClassification = SafetyClassification.SAFE,
+                safetyClassificationSource = "ArtIC Open Access Public Domain Filter (${classification.ifBlank { "Artwork" }})",
+                sha256Checksum = "",
+                licenseUrl = LicenseType.CC0.defaultUrl,
+                licenseVersion = "1.0",
+                adapterVersion = SourceRegistry.get(sourceId)?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
+                safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION
+            )
+        )
     }
 }

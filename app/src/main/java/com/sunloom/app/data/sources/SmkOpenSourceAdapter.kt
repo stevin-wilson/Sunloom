@@ -83,95 +83,100 @@ class SmkOpenSourceAdapter(
         val items = root.arr("items") ?: return emptyList()
 
         for (i in 0 until items.size) {
-            val item = items.obj(i) ?: continue
-            val publicDomain = item.bool("public_domain", false)
-            val rightsRaw = item.str("rights", "").trim()
-            val (licenseType, licenseVersion) = mapRightsToLicense(publicDomain, rightsRaw)
-            if (!licenseType.permitsWallpaperUse) continue
-
-            val objectNumber = item.str("object_number", "").trim()
-            val rawId = item.str("id", "").trim()
-            val stableKey = (objectNumber.ifEmpty { rawId })
-                .replace(SAFE_KEY_REGEX, "_")
-                .trim('_')
-            if (stableKey.isEmpty()) continue
-
-            val title = extractPreferredTitle(item)
-            if (title.isEmpty()) continue
-
-            val objectNames = extractStringOrObjectList(item.arr("object_names"), "name")
-            if (!isObjectNamesAllowed(objectNames)) continue
-
-            val iiifUrls = buildIiifRenditionChain(
-                iiifIdRaw = item.str("image_iiif_id", "").trim(),
-                imageNativeRaw = item.str("image_native", "").trim(),
-                targetWidthPx = targetWidthPx
-            )
-            if (iiifUrls.isEmpty()) continue
-
-            // The catalog states the original image's pixel size; use it to skip unsuitable works before downloading.
-            val (advertisedW, advertisedH) = item.int("image_width", 0).let { w ->
-                val h = item.int("image_height", 0)
-                if (w > 0 && h > 0) w to h else 0 to 0
-            }
-
-            val creator = extractCreator(item)
-            val frontendUrl = item.str("frontend_url", "").trim()
-            val canonicalPageUrl = if (frontendUrl.startsWith("https://") &&
-                SourceRegistry.isHostAllowed(extractHost(frontendUrl), sourceId)
-            ) {
-                frontendUrl
-            } else {
-                "https://open.smk.dk/en/artwork/image/${stableKey.lowercase(Locale.ROOT)}"
-            }
-
-            // Zero synthetic tags: collect genuine SMK object_names, techniques, and motif values
-            val tags = ArrayList<String>()
-            tags.addAll(objectNames)
-            tags.addAll(extractStringOrObjectList(item.arr("techniques"), "technique"))
-            tags.addAll(extractStringOrObjectList(item.arr("motif"), "name"))
-
-            val resolvedLicenseUrl = if (rightsRaw.startsWith("https://")) {
-                rightsRaw
-            } else {
-                licenseType.defaultUrl
-            }
-
-            out.add(
-                CandidateAsset(
-                    id = "smk-$stableKey",
-                    title = title,
-                    description = "$title — $creator (SMK Open Public Domain Collection)",
-                    category = targetCategory,
-                    rawCategoriesAndTags = tags.distinct(),
-                    downloadUrl = iiifUrls.first(),
-                    fallbackDownloadUrls = iiifUrls.drop(1),
-                    provenance = ProvenanceRecord(
-                        sourceId = sourceId,
-                        sourceName = sourceName,
-                        assetId = "smk-$stableKey",
-                        originalPageUrl = canonicalPageUrl,
-                        creatorName = creator,
-                        creatorPageUrl = "",
-                        licenseType = licenseType,
-                        attributionText = "$creator — $title (${licenseType.label}, SMK — Statens Museum for Kunst)",
-                        retrievedAtEpochMs = System.currentTimeMillis(),
-                        originalWidth = advertisedW,
-                        originalHeight = advertisedH,
-                        renditionWidth = 0,
-                        renditionHeight = 0,
-                        safetyClassification = SafetyClassification.SAFE,
-                        safetyClassificationSource = "SMK Open Public Domain Medium Filter (${objectNames.firstOrNull().orEmpty().ifBlank { "2D Artwork" }})",
-                        sha256Checksum = "",
-                        licenseUrl = resolvedLicenseUrl,
-                        licenseVersion = licenseVersion,
-                        adapterVersion = SourceRegistry.get(sourceId)?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
-                        safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION
-                    )
-                )
-            )
+            items.obj(i)?.let { item -> parseItem(item, targetCategory, targetWidthPx)?.let(out::add) }
         }
         return out
+    }
+
+    private fun parseItem(
+        item: SimpleJson.JsonObj,
+        targetCategory: SafeCategory,
+        targetWidthPx: Int
+    ): CandidateAsset? {
+        val publicDomain = item.bool("public_domain", false)
+        val rightsRaw = item.str("rights", "").trim()
+        val (licenseType, licenseVersion) = mapRightsToLicense(publicDomain, rightsRaw)
+        if (!licenseType.permitsWallpaperUse) return null
+
+        val objectNumber = item.str("object_number", "").trim()
+        val rawId = item.str("id", "").trim()
+        val stableKey = (objectNumber.ifEmpty { rawId })
+            .replace(SAFE_KEY_REGEX, "_")
+            .trim('_')
+        if (stableKey.isEmpty()) return null
+
+        val title = extractPreferredTitle(item)
+        if (title.isEmpty()) return null
+
+        val objectNames = extractStringOrObjectList(item.arr("object_names"), "name")
+        if (!isObjectNamesAllowed(objectNames)) return null
+
+        val iiifUrls = buildIiifRenditionChain(
+            iiifIdRaw = item.str("image_iiif_id", "").trim(),
+            imageNativeRaw = item.str("image_native", "").trim(),
+            targetWidthPx = targetWidthPx
+        )
+        if (iiifUrls.isEmpty()) return null
+
+        // The catalog states the original image's pixel size; use it to skip unsuitable works before downloading.
+        val (advertisedW, advertisedH) = item.int("image_width", 0).let { w ->
+            val h = item.int("image_height", 0)
+            if (w > 0 && h > 0) w to h else 0 to 0
+        }
+
+        val creator = extractCreator(item)
+        val frontendUrl = item.str("frontend_url", "").trim()
+        val canonicalPageUrl = if (frontendUrl.startsWith("https://") &&
+            SourceRegistry.isHostAllowed(extractHost(frontendUrl), sourceId)
+        ) {
+            frontendUrl
+        } else {
+            "https://open.smk.dk/en/artwork/image/${stableKey.lowercase(Locale.ROOT)}"
+        }
+
+        // Zero synthetic tags: collect genuine SMK object_names, techniques, and motif values
+        val tags = ArrayList<String>()
+        tags.addAll(objectNames)
+        tags.addAll(extractStringOrObjectList(item.arr("techniques"), "technique"))
+        tags.addAll(extractStringOrObjectList(item.arr("motif"), "name"))
+
+        val resolvedLicenseUrl = if (rightsRaw.startsWith("https://")) {
+            rightsRaw
+        } else {
+            licenseType.defaultUrl
+        }
+
+        return CandidateAsset(
+            id = "smk-$stableKey",
+            title = title,
+            description = "$title — $creator (SMK Open Public Domain Collection)",
+            category = targetCategory,
+            rawCategoriesAndTags = tags.distinct(),
+            downloadUrl = iiifUrls.first(),
+            fallbackDownloadUrls = iiifUrls.drop(1),
+            provenance = ProvenanceRecord(
+                sourceId = sourceId,
+                sourceName = sourceName,
+                assetId = "smk-$stableKey",
+                originalPageUrl = canonicalPageUrl,
+                creatorName = creator,
+                creatorPageUrl = "",
+                licenseType = licenseType,
+                attributionText = "$creator — $title (${licenseType.label}, SMK — Statens Museum for Kunst)",
+                retrievedAtEpochMs = System.currentTimeMillis(),
+                originalWidth = advertisedW,
+                originalHeight = advertisedH,
+                renditionWidth = 0,
+                renditionHeight = 0,
+                safetyClassification = SafetyClassification.SAFE,
+                safetyClassificationSource = "SMK Open Public Domain Medium Filter (${objectNames.firstOrNull().orEmpty().ifBlank { "2D Artwork" }})",
+                sha256Checksum = "",
+                licenseUrl = resolvedLicenseUrl,
+                licenseVersion = licenseVersion,
+                adapterVersion = SourceRegistry.get(sourceId)?.adapterVersion ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
+                safetyGateVersion = SafetyGate.COMPOSITE_GATE_VERSION
+            )
+        )
     }
 
     /**
