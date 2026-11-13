@@ -60,17 +60,17 @@ class WikimediaFeaturedSourceAdapter(
             if (index > 0 && spacingMs > 0L) {
                 delay(spacingMs)
             }
-            val rawQuery = searchQueriesByCategory[cat] ?: continue
-            val encodedQuery = URLEncoder.encode(rawQuery, "UTF-8")
-            val apiUrl = "https://commons.wikimedia.org/w/api.php?action=query" +
-                "&generator=search&gsrnamespace=6&gsrsearch=$encodedQuery" +
-                "&gsrlimit=$perCategoryLimit&gsroffset=${offset.coerceAtLeast(0) % SEARCH_OFFSET_SPAN}" +
-                "&prop=imageinfo&iiprop=url|size|extmetadata&iiurlwidth=$requestedThumbWidth&format=json"
-
-            val jsonText = httpClient.fetchTextOrNull(apiUrl) {
-                return results.take(limit)
-            } ?: continue
-            results.addAll(parseResponse(jsonText, cat, requestedThumbWidth))
+            val jsonText = searchQueriesByCategory[cat]?.let { rawQuery ->
+                val encodedQuery = URLEncoder.encode(rawQuery, "UTF-8")
+                val apiUrl = "https://commons.wikimedia.org/w/api.php?action=query" +
+                    "&generator=search&gsrnamespace=6&gsrsearch=$encodedQuery" +
+                    "&gsrlimit=$perCategoryLimit&gsroffset=${offset.coerceAtLeast(0) % SEARCH_OFFSET_SPAN}" +
+                    "&prop=imageinfo&iiprop=url|size|extmetadata&iiurlwidth=$requestedThumbWidth&format=json"
+                httpClient.fetchTextOrNull(apiUrl) {
+                    return results.take(limit)
+                }
+            }
+            jsonText?.let { results.addAll(parseResponse(it, cat, requestedThumbWidth)) }
         }
         return results.take(limit)
     }

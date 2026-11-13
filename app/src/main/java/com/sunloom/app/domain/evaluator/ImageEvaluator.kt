@@ -164,16 +164,19 @@ class ImageEvaluator(
         val yEndNorm = ((cropRect.top + cropRect.height).toDouble() / imageHeight.toDouble()).coerceIn(yStartNorm + 0.01, 1.0)
 
         val acc = CropAccumulator(gridWidth * gridHeight)
-        for (gy in 0 until gridHeight) {
-            if (gy < margins.top || gy >= gridHeight - margins.bottom) continue
+        val rows = (margins.top until gridHeight - margins.bottom).filter { gy ->
             val vGlobal = (gy + 0.5) / gridHeight.toDouble()
-            if (vGlobal < yStartNorm || vGlobal > yEndNorm) continue
+            vGlobal >= yStartNorm && vGlobal <= yEndNorm
+        }
+        val columns = (margins.left until gridWidth - margins.right).filter { gx ->
+            val uGlobal = (gx + 0.5) / gridWidth.toDouble()
+            uGlobal >= xStartNorm && uGlobal <= xEndNorm
+        }
+        for (gy in rows) {
+            val vGlobal = (gy + 0.5) / gridHeight.toDouble()
             val vCrop = ((vGlobal - yStartNorm) / (yEndNorm - yStartNorm)).coerceIn(0.0, 1.0)
-
-            for (gx in 0 until gridWidth) {
-                if (gx < margins.left || gx >= gridWidth - margins.right) continue
+            for (gx in columns) {
                 val uGlobal = (gx + 0.5) / gridWidth.toDouble()
-                if (uGlobal < xStartNorm || uGlobal > xEndNorm) continue
                 val uCrop = ((uGlobal - xStartNorm) / (xEndNorm - xStartNorm)).coerceIn(0.0, 1.0)
                 acc.add(rgbGrid[gy * gridWidth + gx], uCrop, vCrop)
             }

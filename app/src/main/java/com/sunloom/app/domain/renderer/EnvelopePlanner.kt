@@ -376,88 +376,96 @@ class EnvelopePlanner(
             }
         }
 
-        var bestWithFocal: EnvelopePlan? = null
-        var bestFallback: EnvelopePlan? = null
-
+        // The candidates are tried in order and the search stops at the first that keeps the subject in every display's
+        // slice; failing that, the one with the most native coverage wins (the earliest on a tie).
+        val evaluated = ArrayList<EnvelopeCandidate>()
         for (envAspect in candidateAspects) {
-            val envBounds = cropRenderer.computeAspectCropBounds(
-                sourceWidth = sourceWidth,
-                sourceHeight = sourceHeight,
-                focalX = focalX,
-                focalY = focalY,
-                targetAspect = envAspect
+            val candidate = evaluateEnvelopeCandidate(envAspect, sourceWidth, sourceHeight, focalX, focalY, subset, excluded)
+            if (candidate != null) evaluated.add(candidate)
+            if (candidate?.containsFocal == true) break
+        }
+        return evaluated.firstOrNull { it.containsFocal }?.plan
+            ?: evaluated.maxByOrNull { it.plan.envelopeCrop.pixelCoverageRatio }?.plan
+    }
+
+    /** One tried envelope aspect: the plan, and whether every display's slice keeps the subject in view. */
+    private class EnvelopeCandidate(val plan: EnvelopePlan, val containsFocal: Boolean)
+
+    /** The plan for envelope aspect [envAspect], or null when some display's slice falls below its quality floor. */
+    private fun evaluateEnvelopeCandidate(
+        envAspect: Double,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        focalX: Double,
+        focalY: Double,
+        subset: List<DisplayProfile>,
+        excluded: List<DisplayProfile>
+    ): EnvelopeCandidate? {
+        val envBounds = cropRenderer.computeAspectCropBounds(
+            sourceWidth = sourceWidth,
+            sourceHeight = sourceHeight,
+            focalX = focalX,
+            focalY = focalY,
+            targetAspect = envAspect
+        )
+        val (outW, outH) = CropRenderer.budgetedSize(envBounds.width, envBounds.height)
+
+        val fxPx = focalX.coerceIn(0.0, 1.0) * sourceWidth.toDouble()
+        val fyPx = focalY.coerceIn(0.0, 1.0) * sourceHeight.toDouble()
+        val uFocal = ((fxPx - envBounds.left) / envBounds.width.coerceAtLeast(1).toDouble()).coerceIn(0.0, 1.0)
+        val vFocal = ((fyPx - envBounds.top) / envBounds.height.coerceAtLeast(1).toDouble()).coerceIn(0.0, 1.0)
+
+        val perDisplay = LinkedHashMap<Int, CropRect>(subset.size)
+        var allPassFloor = true
+        var allContainFocal = true
+        var minCoverageAcrossSet = Double.POSITIVE_INFINITY
+
+        for (d in subset) {
+            val rD = d.aspectRatio
+            val (sliceW, sliceH) = centreSlice(outW, outH, rD)
+            val sliceLeft = (outW - sliceW) / 2
+            val sliceTop = (outH - sliceH) / 2
+
+            val cov = min(
+                sliceW.toDouble() / d.widthPx.toDouble(),
+                sliceH.toDouble() / d.heightPx.toDouble()
             )
-            val (outW, outH) = CropRenderer.budgetedSize(envBounds.width, envBounds.height)
-
-            val fxPx = focalX.coerceIn(0.0, 1.0) * sourceWidth.toDouble()
-            val fyPx = focalY.coerceIn(0.0, 1.0) * sourceHeight.toDouble()
-            val uFocal = ((fxPx - envBounds.left) / envBounds.width.coerceAtLeast(1).toDouble()).coerceIn(0.0, 1.0)
-            val vFocal = ((fyPx - envBounds.top) / envBounds.height.coerceAtLeast(1).toDouble()).coerceIn(0.0, 1.0)
-
-            val perDisplay = LinkedHashMap<Int, CropRect>(subset.size)
-            var allPassFloor = true
-            var allContainFocal = true
-            var minCoverageAcrossSet = Double.POSITIVE_INFINITY
-
-            for (d in subset) {
-                val rD = d.aspectRatio
-                val (sliceW, sliceH) = centreSlice(outW, outH, rD)
-                val sliceLeft = (outW - sliceW) / 2
-                val sliceTop = (outH - sliceH) / 2
-
-                val cov = min(
-                    sliceW.toDouble() / d.widthPx.toDouble(),
-                    sliceH.toDouble() / d.heightPx.toDouble()
-                )
-                val sliceLongEdge = max(sliceW, sliceH)
-                if (!CropRenderer.meetsNativeQualityTier(cov, sliceLongEdge, d)) {
-                    allPassFloor = false
-                    break
-                }
-
-                if (!sliceContainsFocal(uFocal, vFocal, outW, outH, sliceW, sliceH)) {
-                    allContainFocal = false
-                }
-
-                minCoverageAcrossSet = min(minCoverageAcrossSet, cov)
-                perDisplay[d.displayId] = CropRect(
-                    left = sliceLeft,
-                    top = sliceTop,
-                    width = sliceW,
-                    height = sliceH,
-                    focalX = focalX.coerceIn(0.0, 1.0),
-                    focalY = focalY.coerceIn(0.0, 1.0),
-                    usesBlurredFrameFill = false,
-                    pixelCoverageRatio = cov
-                )
+            val sliceLongEdge = max(sliceW, sliceH)
+            if (!CropRenderer.meetsNativeQualityTier(cov, sliceLongEdge, d)) {
+                allPassFloor = false
+                break
             }
 
-            if (!allPassFloor) continue
-
-            val candidatePlan = EnvelopePlan(
-                envelopeCrop = envBounds.copy(pixelCoverageRatio = minCoverageAcrossSet),
-                outputWidthPx = outW,
-                outputHeightPx = outH,
-                satisfiedDisplays = subset,
-                excludedDisplays = excluded,
-                perDisplayCrops = perDisplay,
-                disclosureNote = buildDisclosureNote(subset, excluded, usesBlurredFill = false)
-            )
-
-            // Prefer the first candidate (rSrc.coerceIn(rMin, rMax)) when it passes both floor and focal containment
-            if (allContainFocal) {
-                if (bestWithFocal == null) {
-                    bestWithFocal = candidatePlan
-                    break
-                }
-            } else if (bestFallback == null ||
-                candidatePlan.envelopeCrop.pixelCoverageRatio > bestFallback.envelopeCrop.pixelCoverageRatio
-            ) {
-                bestFallback = candidatePlan
+            if (!sliceContainsFocal(uFocal, vFocal, outW, outH, sliceW, sliceH)) {
+                allContainFocal = false
             }
+
+            minCoverageAcrossSet = min(minCoverageAcrossSet, cov)
+            perDisplay[d.displayId] = CropRect(
+                left = sliceLeft,
+                top = sliceTop,
+                width = sliceW,
+                height = sliceH,
+                focalX = focalX.coerceIn(0.0, 1.0),
+                focalY = focalY.coerceIn(0.0, 1.0),
+                usesBlurredFrameFill = false,
+                pixelCoverageRatio = cov
+            )
         }
 
-        return bestWithFocal ?: bestFallback
+        if (!allPassFloor) return null
+
+
+        val candidatePlan = EnvelopePlan(
+            envelopeCrop = envBounds.copy(pixelCoverageRatio = minCoverageAcrossSet),
+            outputWidthPx = outW,
+            outputHeightPx = outH,
+            satisfiedDisplays = subset,
+            excludedDisplays = excluded,
+            perDisplayCrops = perDisplay,
+            disclosureNote = buildDisclosureNote(subset, excluded, usesBlurredFill = false)
+        )
+        return EnvelopeCandidate(candidatePlan, allContainFocal)
     }
 
     private fun buildDisclosureNote(

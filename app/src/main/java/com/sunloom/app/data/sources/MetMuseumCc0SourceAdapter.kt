@@ -96,19 +96,19 @@ class MetMuseumCc0SourceAdapter(
         // consecutive syncs examine different objects instead of the same few positions.
         val startIndex = ((cursorStep % syncsPerWindow) * maxLookups) % objectIds.size
 
-        for (step in 0 until minOf(objectIds.size, maxLookups)) {
+        val lookups = (0 until minOf(objectIds.size, maxLookups))
+            .map { step -> step to objectIds.int((startIndex + step) % objectIds.size, -1) }
+            .filter { (_, objId) -> objId > 0 }
+        for ((step, objId) in lookups) {
             if (results.size >= limit) break
-            val objId = objectIds.int((startIndex + step) % objectIds.size, -1)
-            if (objId <= 0) continue
-
             if (step > 0 && spacingMs > 0L) {
                 delay(spacingMs)
             }
             val objectUrl = "https://collectionapi.metmuseum.org/public/collection/v1/objects/$objId"
             val objRaw = httpClient.fetchTextOrNull(objectUrl) {
                 return results
-            } ?: continue
-            parseObjectResponse(objRaw, termCategory)?.let { results.add(it) }
+            }
+            objRaw?.let { parseObjectResponse(it, termCategory)?.let(results::add) }
         }
         return results
     }

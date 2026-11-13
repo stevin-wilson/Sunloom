@@ -2,19 +2,13 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>CyclomaticComplexMethod:ClevelandMuseumCc0SourceAdapter.kt$ClevelandMuseumCc0SourceAdapter$fun parseResponse( jsonText: String, targetCategory: SafeCategory = SafeCategory.SCENIC_FINE_ART, targetWidthPx: Int = 2560 ): List&lt;CandidateAsset&gt;</ID>
     <ID>CyclomaticComplexMethod:LibraryStore.kt$WallpaperRowMapper$fun fromColumnMap(row: Map&lt;String, Any?&gt;): WallpaperRecord</ID>
-    <ID>CyclomaticComplexMethod:NasaLibrarySourceAdapter.kt$NasaLibrarySourceAdapter$fun parseResponse( jsonText: String, defaultCategory: SafeCategory = SafeCategory.SPACE_ASTRONOMY ): List&lt;CandidateAsset&gt;</ID>
-    <ID>CyclomaticComplexMethod:WikimediaFeaturedSourceAdapter.kt$WikimediaFeaturedSourceAdapter$fun parseResponse( jsonText: String, targetCategory: SafeCategory, targetWidthPx: Int = 2560 ): List&lt;CandidateAsset&gt;</ID>
-    <ID>LoopWithTooManyJumpStatements:ArtInstituteCc0SourceAdapter.kt$ArtInstituteCc0SourceAdapter$for</ID>
-    <ID>LoopWithTooManyJumpStatements:ClevelandMuseumCc0SourceAdapter.kt$ClevelandMuseumCc0SourceAdapter$for</ID>
     <ID>LoopWithTooManyJumpStatements:DesktopInput.kt$while</ID>
     <ID>LoopWithTooManyJumpStatements:EnvelopePlanner.kt$EnvelopePlanner$for</ID>
     <ID>LoopWithTooManyJumpStatements:ImageEvaluator.kt$ImageEvaluator$for</ID>
     <ID>LoopWithTooManyJumpStatements:LocalLibraryRepository.kt$LocalLibraryRepository$for</ID>
     <ID>LoopWithTooManyJumpStatements:MainViewModel.kt$MainViewModel$for</ID>
     <ID>LoopWithTooManyJumpStatements:MetMuseumCc0SourceAdapter.kt$MetMuseumCc0SourceAdapter$for</ID>
-    <ID>LoopWithTooManyJumpStatements:NasaLibrarySourceAdapter.kt$NasaLibrarySourceAdapter$for</ID>
     <ID>LoopWithTooManyJumpStatements:SmkOpenSourceAdapter.kt$SmkOpenSourceAdapter$for</ID>
     <ID>LoopWithTooManyJumpStatements:WikimediaFeaturedSourceAdapter.kt$WikimediaFeaturedSourceAdapter$for</ID>
     <ID>MaxLineLength:AndroidSunloomGateway.kt$AndroidSunloomGateway$override suspend</ID>
@@ -63,7 +57,6 @@
     <ID>NestedBlockDepth:CropRenderer.kt$CropRenderer$private fun computeImportanceGrid(rgbGrid: IntArray, gridWidth: Int, gridHeight: Int): DoubleArray</ID>
     <ID>NestedBlockDepth:GoogleBookPlatformAdapter.kt$GoogleBookPlatformAdapter$private fun boxBlurAndDarkenInPlace(bmp: Bitmap, radius: Int, darkenFactor: Float)</ID>
     <ID>NestedBlockDepth:GridAverager.kt$GridAverager$fun average( width: Int, height: Int, gridW: Int, gridH: Int, readRow: (y: Int, into: IntArray) -&gt; Unit ): IntArray</ID>
-    <ID>NestedBlockDepth:NasaLibrarySourceAdapter.kt$NasaLibrarySourceAdapter$fun parseResponse( jsonText: String, defaultCategory: SafeCategory = SafeCategory.SPACE_ASTRONOMY ): List&lt;CandidateAsset&gt;</ID>
     <ID>NestedBlockDepth:WallpaperExporter.kt$WallpaperExporter$fun writeImage(record: WallpaperRecord, target: Uri): Boolean</ID>
     <ID>NestedBlockDepth:WallpaperSourceAdapter.kt$DefaultHttpsClient$private fun &lt;T&gt; executeFollowingValidatedRedirects( initialUrl: String, scopeSourceId: String? = null, acceptHeader: String, ifNoneMatch: String? = null, ifModifiedSince: String? = null, track: (HttpURLConnection) -&gt; Unit = {}, reader: (HttpURLConnection, Int) -&gt; T ): T</ID>
   </CurrentIssues>

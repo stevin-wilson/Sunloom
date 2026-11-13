@@ -220,21 +220,15 @@ class SmkOpenSourceAdapter(
     }
 
     private fun extractPreferredTitle(item: SimpleJson.JsonObj): String {
-        val titlesArr = item.arr("titles")
-        if (titlesArr != null) {
-            var firstAny = ""
-            for (i in 0 until titlesArr.size) {
-                val tObj = titlesArr.obj(i) ?: continue
-                val text = tObj.str("title").cleanedOrNull() ?: continue
-                if (firstAny.isEmpty()) firstAny = text
-                val lang = tObj.str("language", "").trim().lowercase(Locale.ROOT)
-                if (lang == "en" || lang == "eng") {
-                    return text
-                }
+        val titles = item.arr("titles")?.let { arr ->
+            (0 until arr.size).mapNotNull { i ->
+                val entry = arr.obj(i) ?: return@mapNotNull null
+                val text = entry.str("title").cleanedOrNull() ?: return@mapNotNull null
+                entry.str("language", "").trim().lowercase(Locale.ROOT) to text
             }
-            if (firstAny.isNotEmpty()) return firstAny
-        }
-        return item.str("title").cleanedOrNull().orEmpty()
+        }.orEmpty()
+        val english = titles.firstOrNull { (lang, _) -> lang == "en" || lang == "eng" }
+        return (english ?: titles.firstOrNull())?.second ?: item.str("title").cleanedOrNull().orEmpty()
     }
 
     private fun extractCreator(item: SimpleJson.JsonObj): String {
