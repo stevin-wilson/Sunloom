@@ -131,130 +131,128 @@ object WallpaperRowMapper {
         )
     }
 
+    // Typed readers for a stored row: a missing column or one of the wrong type reads as its default.
+    private fun Map<String, Any?>.text(key: String): String = this[key] as? String ?: ""
+    private fun Map<String, Any?>.int(key: String, default: Int = 0): Int = (this[key] as? Number)?.toInt() ?: default
+    private fun Map<String, Any?>.long(key: String): Long = (this[key] as? Number)?.toLong() ?: 0L
+    private fun Map<String, Any?>.double(key: String, default: Double = 0.0): Double =
+        (this[key] as? Number)?.toDouble() ?: default
+    private fun Map<String, Any?>.flag(key: String): Boolean = int(key) == 1
+
+    /** The enum constant named by the column, or [fallback] for an unknown or missing name (fail-closed). */
+    private inline fun <reified E : Enum<E>> Map<String, Any?>.enumOr(key: String, fallback: E): E {
+        val name = this[key] as? String
+        return enumValues<E>().firstOrNull { it.name == name } ?: fallback
+    }
+
     fun fromColumnMap(row: Map<String, Any?>): WallpaperRecord {
-        val id = row["id"] as? String ?: ""
-        val rendW = (row["rend_w"] as? Number)?.toInt() ?: 0
-        val rendH = (row["rend_h"] as? Number)?.toInt() ?: 0
+        val id = row.text("id")
+        // Fail-closed: unknown status decodes to REJECTED_SAFETY_OR_QUALITY, unknown license to UNKNOWN_OR_RESTRICTED,
+        // unknown safety classification to UNCERTAIN.
+        val status = row.enumOr("status", WallpaperStatus.REJECTED_SAFETY_OR_QUALITY)
+        val licenseType = row.enumOr("license_type", LicenseType.UNKNOWN_OR_RESTRICTED)
+        val safetyClass = row.enumOr("safety_class", SafetyClassification.UNCERTAIN)
 
-        val statusRaw = row["status"] as? String
-        // Fail-closed: unknown status decodes to REJECTED_SAFETY_OR_QUALITY
-        val status = WallpaperStatus.entries.firstOrNull { it.name == statusRaw }
-            ?: WallpaperStatus.REJECTED_SAFETY_OR_QUALITY
-
-        val licenseRaw = row["license_type"] as? String
-        // Fail-closed: unknown license decodes to UNKNOWN_OR_RESTRICTED
-        val licenseType = LicenseType.entries.firstOrNull { it.name == licenseRaw }
-            ?: LicenseType.UNKNOWN_OR_RESTRICTED
-
-        val safetyClassRaw = row["safety_class"] as? String
-        // Fail-closed: unknown safety classification decodes to UNCERTAIN
-        val safetyClass = SafetyClassification.entries.firstOrNull { it.name == safetyClassRaw }
-            ?: SafetyClassification.UNCERTAIN
-
-        val categoryRaw = row["category"] as? String
-        val category = SafeCategory.entries.firstOrNull { it.name == categoryRaw }
-            ?: SafeCategory.LANDSCAPES_NATURE
-
-        val brightnessRaw = row["brightness_class"] as? String
-        val brightnessClass = BrightnessClass.entries.firstOrNull { it.name == brightnessRaw }
-            ?: BrightnessClass.NEUTRAL
-
-        val cropX = (row["crop_x"] as? Number)?.toInt() ?: 0
-        val cropY = (row["crop_y"] as? Number)?.toInt() ?: 0
-        val cropW = (row["crop_w"] as? Number)?.toInt()?.takeIf { it > 0 } ?: rendW
-        val cropH = (row["crop_h"] as? Number)?.toInt()?.takeIf { it > 0 } ?: rendH
-        val focalX = (row["focal_x"] as? Number)?.toDouble() ?: 0.5
-        val focalY = (row["focal_y"] as? Number)?.toDouble() ?: 0.5
-        val usesBlurredFill = ((row["uses_blurred_fill"] as? Number)?.toInt() ?: 0) == 1
-        val nativeCoverage = (row["native_coverage"] as? Number)?.toDouble() ?: 1.0
-
-        val rawTagsStr = row["raw_categories_tags"] as? String ?: ""
+        val rawTagsStr = row.text("raw_categories_tags")
         val rawTags = if (rawTagsStr.isBlank()) {
             emptyList()
         } else {
             rawTagsStr.split(TAG_SEPARATOR).filter { it.isNotBlank() }
         }
 
-        val isEligibleRaw = ((row["is_eligible"] as? Number)?.toInt() ?: 0) == 1
-        val isFailClosedUnsafe = licenseType == LicenseType.UNKNOWN_OR_RESTRICTED ||
-            safetyClass == SafetyClassification.UNCERTAIN ||
-            safetyClass == SafetyClassification.MISSING ||
-            safetyClass == SafetyClassification.CONFLICTING ||
-            safetyClass == SafetyClassification.NSFW_OR_UNSAFE ||
-            status == WallpaperStatus.REJECTED_SAFETY_OR_QUALITY
-
-        val adapterVer = row["adapter_version"]?.toString()?.takeIf { it.isNotBlank() }
-            ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION
-        val gateVer = row["safety_gate_version"]?.toString()?.takeIf { it.isNotBlank() }
-            ?: "v0.1.0"
+        val isFailClosedUnsafe = isFailClosedUnsafe(licenseType, safetyClass, status)
 
         return WallpaperRecord(
             id = id,
-            title = row["title"] as? String ?: "",
-            description = row["description"] as? String ?: "",
+            title = row.text("title"),
+            description = row.text("description"),
             rawCategoriesAndTags = rawTags,
-            category = category,
-            localFilePath = row["local_path"] as? String ?: "",
-            croppedFilePath = row["cropped_path"] as? String ?: "",
-            fileSizeBytes = (row["file_size"] as? Number)?.toLong() ?: 0L,
-            isFavorite = ((row["is_favorite"] as? Number)?.toInt() ?: 0) == 1,
-            isRejected = (((row["is_rejected"] as? Number)?.toInt() ?: 0) == 1) || isFailClosedUnsafe,
-            isBaselineRestore = ((row["is_baseline"] as? Number)?.toInt() ?: 0) == 1,
-            appliedCount = (row["applied_count"] as? Number)?.toInt() ?: 0,
-            lastAppliedEpochMs = (row["last_applied"] as? Number)?.toLong() ?: 0L,
+            category = row.enumOr("category", SafeCategory.LANDSCAPES_NATURE),
+            localFilePath = row.text("local_path"),
+            croppedFilePath = row.text("cropped_path"),
+            fileSizeBytes = row.long("file_size"),
+            isFavorite = row.flag("is_favorite"),
+            isRejected = row.flag("is_rejected") || isFailClosedUnsafe,
+            isBaselineRestore = row.flag("is_baseline"),
+            appliedCount = row.int("applied_count"),
+            lastAppliedEpochMs = row.long("last_applied"),
             status = status,
-            decisionExplanation = row["decision_explanation"] as? String ?: "",
-            provenance = ProvenanceRecord(
-                sourceId = row["source_id"] as? String ?: "",
-                sourceName = row["source_name"] as? String ?: "",
-                assetId = id,
-                originalPageUrl = row["original_url"] as? String ?: "",
-                creatorName = row["creator_name"] as? String ?: "",
-                creatorPageUrl = row["creator_url"] as? String ?: "",
-                licenseType = licenseType,
-                licenseUrl = (row["license_url"] as? String)?.ifBlank { licenseType.defaultUrl } ?: licenseType.defaultUrl,
-                licenseVersion = row["license_version"] as? String ?: "",
-                attributionText = row["attribution"] as? String ?: "",
-                retrievedAtEpochMs = (row["retrieved_at"] as? Number)?.toLong() ?: 0L,
-                originalWidth = (row["orig_w"] as? Number)?.toInt() ?: 0,
-                originalHeight = (row["orig_h"] as? Number)?.toInt() ?: 0,
-                renditionWidth = rendW,
-                renditionHeight = rendH,
-                safetyClassification = safetyClass,
-                safetyClassificationSource = row["safety_source"] as? String ?: "",
-                sha256Checksum = row["sha256"] as? String ?: "",
-                perceptualHash = row["perceptual_hash"] as? String ?: "",
-                adapterVersion = adapterVer,
-                safetyGateVersion = gateVer,
-                gateLayerOutcomes = row["gate_layer_outcomes"] as? String ?: "L1:PASS;L2:PASS;L3:PASS;L4:PASS"
-            ),
-            evaluation = ImageEvaluationResult(
-                isEligible = isEligibleRaw && !isFailClosedUnsafe,
-                rejectionReasonCode = row["rejection_reason_code"] as? String,
-                globalLuminance = (row["global_lum"] as? Number)?.toDouble() ?: 0.0,
-                desktopZoneLuminance = (row["desktop_lum"] as? Number)?.toDouble() ?: 0.0,
-                lockClockZoneLuminance = (row["clock_lum"] as? Number)?.toDouble() ?: 0.0,
-                glareFractionInSafeZones = (row["glare_frac"] as? Number)?.toDouble() ?: 0.0,
-                contrastStdDev = (row["contrast_std"] as? Number)?.toDouble() ?: 0.0,
-                brightnessClass = brightnessClass,
-                cropRect = CropRect(
-                    left = cropX,
-                    top = cropY,
-                    width = cropW,
-                    height = cropH,
-                    focalX = focalX,
-                    focalY = focalY,
-                    usesBlurredFrameFill = usesBlurredFill,
-                    pixelCoverageRatio = nativeCoverage
-                ),
-                explanation = row["eval_explanation"] as? String ?: "",
-                lightnessP50 = (row["lightness_p50"] as? Number)?.toDouble() ?: -1.0,
-                desktopLabelContrast = (row["label_contrast"] as? Number)?.toDouble() ?: -1.0,
-                warmth = (row["warmth"] as? Number)?.toDouble() ?: 0.0,
-                hueBucket = (row["hue_bucket"] as? Number)?.toInt() ?: -1
-            )
+            decisionExplanation = row.text("decision_explanation"),
+            provenance = decodeProvenance(row, id, licenseType, safetyClass),
+            evaluation = decodeEvaluation(row, isFailClosedUnsafe)
         )
     }
+
+    /** A record is unusable when its license or safety verdict is anything but a clear pass. */
+    private fun isFailClosedUnsafe(licenseType: LicenseType, safetyClass: SafetyClassification, status: WallpaperStatus): Boolean {
+        val unsafeClass = safetyClass in setOf(
+            SafetyClassification.UNCERTAIN,
+            SafetyClassification.MISSING,
+            SafetyClassification.CONFLICTING,
+            SafetyClassification.NSFW_OR_UNSAFE
+        )
+        return licenseType == LicenseType.UNKNOWN_OR_RESTRICTED || unsafeClass || status == WallpaperStatus.REJECTED_SAFETY_OR_QUALITY
+    }
+
+    private fun decodeProvenance(
+        row: Map<String, Any?>,
+        id: String,
+        licenseType: LicenseType,
+        safetyClass: SafetyClassification
+    ): ProvenanceRecord = ProvenanceRecord(
+        sourceId = row.text("source_id"),
+        sourceName = row.text("source_name"),
+        assetId = id,
+        originalPageUrl = row.text("original_url"),
+        creatorName = row.text("creator_name"),
+        creatorPageUrl = row.text("creator_url"),
+        licenseType = licenseType,
+        licenseUrl = (row["license_url"] as? String)?.ifBlank { licenseType.defaultUrl } ?: licenseType.defaultUrl,
+        licenseVersion = row.text("license_version"),
+        attributionText = row.text("attribution"),
+        retrievedAtEpochMs = row.long("retrieved_at"),
+        originalWidth = row.int("orig_w"),
+        originalHeight = row.int("orig_h"),
+        renditionWidth = row.int("rend_w"),
+        renditionHeight = row.int("rend_h"),
+        safetyClassification = safetyClass,
+        safetyClassificationSource = row.text("safety_source"),
+        sha256Checksum = row.text("sha256"),
+        perceptualHash = row.text("perceptual_hash"),
+        adapterVersion = row["adapter_version"]?.toString()?.takeIf { it.isNotBlank() }
+            ?: ProvenanceRecord.DEFAULT_ADAPTER_VERSION,
+        safetyGateVersion = row["safety_gate_version"]?.toString()?.takeIf { it.isNotBlank() } ?: "v0.1.0",
+        gateLayerOutcomes = row["gate_layer_outcomes"] as? String ?: "L1:PASS;L2:PASS;L3:PASS;L4:PASS"
+    )
+
+    private fun decodeEvaluation(row: Map<String, Any?>, isFailClosedUnsafe: Boolean): ImageEvaluationResult =
+        ImageEvaluationResult(
+            isEligible = row.flag("is_eligible") && !isFailClosedUnsafe,
+            rejectionReasonCode = row["rejection_reason_code"] as? String,
+            globalLuminance = row.double("global_lum"),
+            desktopZoneLuminance = row.double("desktop_lum"),
+            lockClockZoneLuminance = row.double("clock_lum"),
+            glareFractionInSafeZones = row.double("glare_frac"),
+            contrastStdDev = row.double("contrast_std"),
+            brightnessClass = row.enumOr("brightness_class", BrightnessClass.NEUTRAL),
+            cropRect = decodeCrop(row),
+            explanation = row.text("eval_explanation"),
+            lightnessP50 = row.double("lightness_p50", -1.0),
+            desktopLabelContrast = row.double("label_contrast", -1.0),
+            warmth = row.double("warmth"),
+            hueBucket = row.int("hue_bucket", -1)
+        )
+
+    private fun decodeCrop(row: Map<String, Any?>): CropRect = CropRect(
+        left = row.int("crop_x"),
+        top = row.int("crop_y"),
+        width = (row["crop_w"] as? Number)?.toInt()?.takeIf { it > 0 } ?: row.int("rend_w"),
+        height = (row["crop_h"] as? Number)?.toInt()?.takeIf { it > 0 } ?: row.int("rend_h"),
+        focalX = row.double("focal_x", 0.5),
+        focalY = row.double("focal_y", 0.5),
+        usesBlurredFrameFill = row.flag("uses_blurred_fill"),
+        pixelCoverageRatio = row.double("native_coverage", 1.0)
+    )
 
     fun toContentValues(record: WallpaperRecord): ContentValues {
         val map = toColumnMap(record)
