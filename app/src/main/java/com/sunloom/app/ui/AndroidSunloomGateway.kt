@@ -137,7 +137,8 @@ class AndroidSunloomGateway(
         val reapplied = reconcileActiveWallpaperForDisplay(repo, display, connectedDisplays, prefs, activeBefore)
         promoteNonSeedOverSeedIfNeeded(repo, prefs, display, connectedDisplays)
         currentGeometryKey?.let(reconcileGate::markReconciled)
-        val banner = if (reapplied || reserveChanged || (prevGeometryKey != null && prevGeometryKey != currentGeometryKey)) {
+        val geometryChanged = prevGeometryKey != null && prevGeometryKey != currentGeometryKey
+        val banner = if (reapplied || reserveChanged || geometryChanged) {
             if (connectedDisplays.size > 1 && prefs.displayPolicy == DisplayPolicy.SAME_ON_ALL_DISPLAYS) {
                 context.resources.getQuantityString(R.plurals.msg_adapted_multi_display, connectedDisplays.size, connectedDisplays.size)
             } else {

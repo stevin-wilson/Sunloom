@@ -185,28 +185,30 @@ class SmkOpenSourceAdapter(
         if (norm.isEmpty() || norm == "null") {
             return LicenseType.PUBLIC_DOMAIN to "1.0"
         }
-        if (norm.contains("by-nc") ||
-            norm.contains("noncommercial") ||
-            norm.contains("by-nd") ||
-            norm.contains("noderiv") ||
-            norm.contains("copyright") ||
-            norm.contains("ophavsret") ||
-            norm.contains("all rights reserved") ||
-            norm.contains("use-of-images") ||
-            norm.contains("incopyright")
-        ) {
+        if (norm.containsAnyOf(
+                "by-nc",
+                "noncommercial",
+                "by-nd",
+                "noderiv",
+                "copyright",
+                "ophavsret",
+                "all rights reserved",
+                "use-of-images",
+                "incopyright"
+            )) {
             return LicenseType.UNKNOWN_OR_RESTRICTED to ""
         }
-        if (norm.contains("cc0") || norm.contains("zero/1.0") || norm.contains("cc-zero")) {
+        if (norm.containsAnyOf("cc0", "zero/1.0", "cc-zero")) {
             return LicenseType.CC0 to "1.0"
         }
-        if (norm.contains("publicdomain/mark") ||
-            norm.contains("public domain") ||
-            norm.contains("public_domain") ||
-            norm.contains("pdm") ||
-            norm.contains("smk-open") ||
-            norm.contains("smk open")
-        ) {
+        if (norm.containsAnyOf(
+                "publicdomain/mark",
+                "public domain",
+                "public_domain",
+                "pdm",
+                "smk-open",
+                "smk open"
+            )) {
             return LicenseType.PUBLIC_DOMAIN to "1.0"
         }
         return LicenseType.UNKNOWN_OR_RESTRICTED to ""

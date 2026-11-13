@@ -34,7 +34,7 @@ class ImageEvaluator(
         display: DisplayProfile,
         allowBlurredFrameFill: Boolean = false
     ): ImageEvaluationResult {
-        if (imageWidth <= 0 || imageHeight <= 0 || gridWidth <= 0 || gridHeight <= 0 || rgbGrid.size < gridWidth * gridHeight) {
+        if (!isUsableSample(imageWidth, imageHeight, rgbGrid, gridWidth, gridHeight)) {
             return rejected(
                 "INVALID_DIMENSIONS",
                 "Image dimensions ($imageWidth × $imageHeight) or pixel sample grid are invalid."
@@ -105,6 +105,11 @@ class ImageEvaluator(
             warmth = warmth,
             hueBucket = hueBucket
         )
+    }
+
+    private fun isUsableSample(imageWidth: Int, imageHeight: Int, rgbGrid: IntArray, gridWidth: Int, gridHeight: Int): Boolean {
+        val sizesValid = imageWidth > 0 && imageHeight > 0 && gridWidth > 0 && gridHeight > 0
+        return sizesValid && rgbGrid.size >= gridWidth * gridHeight
     }
 
     private fun floorDescription(display: DisplayProfile) = when (display.qualityTier) {

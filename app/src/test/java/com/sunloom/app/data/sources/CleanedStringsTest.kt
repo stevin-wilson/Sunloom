@@ -31,4 +31,16 @@ class CleanedStringsTest {
         )
         assertEquals(listOf("sky", "sea"), arr.cleanStrings())
     }
+
+    @Test
+    fun `containsAnyOf is true when any term occurs and false when none does`() {
+        assertEquals(true, "creative commons by-nc 4.0".containsAnyOf("by-nd", "by-nc"))
+        assertEquals(false, "creative commons by 4.0".containsAnyOf("by-nd", "by-nc"))
+        assertEquals(false, "anything".containsAnyOf())
+    }
+
+    @Test
+    fun `containsAnyOf is case sensitive like contains`() {
+        assertEquals(false, "Getty Images".containsAnyOf("getty"))
+    }
 }

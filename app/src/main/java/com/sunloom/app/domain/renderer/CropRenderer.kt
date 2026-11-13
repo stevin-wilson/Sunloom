@@ -29,9 +29,7 @@ class CropRenderer {
         allowBlurredFrameFill: Boolean = false,
         preferFullFrame: Boolean = false
     ): CropRect? {
-        if (sourceWidth <= 0 || sourceHeight <= 0 || display.widthPx <= 0 || display.heightPx <= 0) {
-            return null
-        }
+        if (!hasUsableSize(sourceWidth, sourceHeight, display)) return null
 
         val targetAspect = display.aspectRatio
         val sourceAspect = sourceWidth.toDouble() / sourceHeight.toDouble()
@@ -176,9 +174,7 @@ class CropRenderer {
         display: DisplayProfile,
         allowBlurredFrameFill: Boolean = false
     ): CropRect? {
-        if (sourceWidth <= 0 || sourceHeight <= 0 || display.widthPx <= 0 || display.heightPx <= 0) {
-            return null
-        }
+        if (!hasUsableSize(sourceWidth, sourceHeight, display)) return null
         val baseBounds = computeAspectCropBounds(
             sourceWidth = sourceWidth,
             sourceHeight = sourceHeight,
@@ -395,6 +391,9 @@ class CropRenderer {
 
         /** Share of the picture a crop must keep; below it the whole frame is shown (blurred fill) or the image skipped. */
         const val MIN_VISIBLE_AREA = 0.5
+
+        private fun hasUsableSize(sourceWidth: Int, sourceHeight: Int, display: DisplayProfile): Boolean =
+            sourceWidth > 0 && sourceHeight > 0 && display.widthPx > 0 && display.heightPx > 0
 
         /** Fraction of the source picture's area that a display-shaped crop keeps. */
         fun visibleAreaFraction(sourceWidth: Int, sourceHeight: Int, display: DisplayProfile): Double {

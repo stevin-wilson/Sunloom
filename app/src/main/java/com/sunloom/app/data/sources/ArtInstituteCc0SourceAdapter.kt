@@ -82,13 +82,7 @@ class ArtInstituteCc0SourceAdapter(
             val classification = item.str("classification_title", "").trim().lowercase(Locale.ROOT)
 
             // Block sculpture, figurine, anatomy, or portrait classifications at source adapter level
-            if (classification.contains("sculpture") ||
-                classification.contains("portrait") ||
-                classification.contains("nude") ||
-                classification.contains("armor") ||
-                classification.contains("weapon") ||
-                classification.contains("costume")
-            ) {
+            if (classification.containsAnyOf("sculpture", "portrait", "nude", "armor", "weapon", "costume")) {
                 continue
             }
 

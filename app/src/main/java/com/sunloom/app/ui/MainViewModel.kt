@@ -752,14 +752,17 @@ class MainViewModel(
     /**
      * Responds to live OS Light/Dark theme changes when `FOLLOW_OS_THEME` is active.
      */
+    /** Following the OS theme, automatic and not paused, and the theme changed the brightness this wallpaper should have. */
+    private fun followsOsThemeAndThemeChanged(current: SunloomUiState, refreshed: SunloomUiState): Boolean {
+        val prefs = current.preferences
+        val following = prefs.autoChangeEnabled && !prefs.isPaused && prefs.scheduleMode == ScheduleMode.FOLLOW_OS_THEME
+        return following && refreshed.targetBrightnessNow != current.targetBrightnessNow
+    }
+
     fun onSystemUiModeChanged() {
         launchGatewayMutation { currentState ->
             val refreshed = gateway.loadInitialSnapshot()
-            if (currentState.preferences.autoChangeEnabled &&
-                !currentState.preferences.isPaused &&
-                currentState.preferences.scheduleMode == ScheduleMode.FOLLOW_OS_THEME &&
-                refreshed.targetBrightnessNow != currentState.targetBrightnessNow
-            ) {
+            if (followsOsThemeAndThemeChanged(currentState, refreshed)) {
                 gateway.applyNextWallpaper()
             } else {
                 refreshed

@@ -223,22 +223,23 @@ class WikimediaFeaturedSourceAdapter(
         val combined = "$code | $shortName | $usageTerms".lowercase(Locale.ROOT)
 
         // Reject any NonCommercial or NoDerivatives license immediately
-        if (combined.contains("by-nc") ||
-            combined.contains("by nc") ||
-            combined.contains("noncommercial") ||
-            combined.contains("non-commercial") ||
-            combined.contains("non commercial") ||
-            combined.contains("by-nd") ||
-            combined.contains("by nd") ||
-            combined.contains("noderiv") ||
-            combined.contains("no-deriv") ||
-            combined.contains("no deriv")
-        ) {
+        if (combined.containsAnyOf(
+                "by-nc",
+                "by nc",
+                "noncommercial",
+                "non-commercial",
+                "non commercial",
+                "by-nd",
+                "by nd",
+                "noderiv",
+                "no-deriv",
+                "no deriv"
+            )) {
             return LicenseType.UNKNOWN_OR_RESTRICTED to ""
         }
 
         // Check CC0 1.0
-        if (combined.contains("cc0") || combined.contains("cc-zero") || combined.contains("cc zero")) {
+        if (combined.containsAnyOf("cc0", "cc-zero", "cc zero")) {
             return LicenseType.CC0 to "1.0"
         }
 

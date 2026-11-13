@@ -2,31 +2,10 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>ComplexCondition:AndroidSunloomGateway.kt$AndroidSunloomGateway$reapplied || reserveChanged || (prevGeometryKey != null &amp;&amp; prevGeometryKey != currentGeometryKey)</ID>
-    <ID>ComplexCondition:ArtInstituteCc0SourceAdapter.kt$ArtInstituteCc0SourceAdapter$classification.contains("sculpture") || classification.contains("portrait") || classification.contains("nude") || classification.contains("armor") || classification.contains("weapon") || classification.contains("costume")</ID>
-    <ID>ComplexCondition:ClevelandMuseumCc0SourceAdapter.kt$ClevelandMuseumCc0SourceAdapter$copyrightField.isNotEmpty() &amp;&amp; !copyrightField.equals("null", ignoreCase = true) &amp;&amp; !copyrightField.contains("public domain", ignoreCase = true) &amp;&amp; !copyrightField.contains("cc0", ignoreCase = true)</ID>
-    <ID>ComplexCondition:CropRenderer.kt$CropRenderer$sourceWidth &lt;= 0 || sourceHeight &lt;= 0 || display.widthPx &lt;= 0 || display.heightPx &lt;= 0</ID>
-    <ID>ComplexCondition:DesktopScrollbar.kt$viewport &lt;= 0f || content &lt;= viewport || !content.isFinite() || !offset.isFinite()</ID>
-    <ID>ComplexCondition:DisplayProbe.kt$DisplayProbe$bounds != null &amp;&amp; bounds.width() &gt; 0 &amp;&amp; bounds.height() &gt; 0 &amp;&amp; dpi != null</ID>
-    <ID>ComplexCondition:DisplayProbe.kt$DisplayProbe.Companion$fallbackMetricsWidth &gt; 0 &amp;&amp; fallbackMetricsHeight &gt; 0 &amp;&amp; fallbackMetricsWidth != fallbackMetricsHeight &amp;&amp; modeWidth != modeHeight</ID>
-    <ID>ComplexCondition:ImageEvaluator.kt$ImageEvaluator$imageWidth &lt;= 0 || imageHeight &lt;= 0 || gridWidth &lt;= 0 || gridHeight &lt;= 0 || rgbGrid.size &lt; gridWidth * gridHeight</ID>
-    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$currentState.preferences.autoChangeEnabled &amp;&amp; !currentState.preferences.isPaused &amp;&amp; currentState.preferences.scheduleMode == ScheduleMode.FOLLOW_OS_THEME &amp;&amp; refreshed.targetBrightnessNow != currentState.targetBrightnessNow</ID>
-    <ID>ComplexCondition:NasaLibrarySourceAdapter.kt$NasaLibrarySourceAdapter$combined.contains("©") || combined.contains("copyright") || combined.contains("all rights reserved") || combined.contains("getty") || combined.contains("reuters") || combined.contains("associated press") || combined.contains("ap photo") || combined.contains("alamy") || combined.contains("shutterstock")</ID>
-    <ID>ComplexCondition:SafetyGate.kt$SafetyGate.Companion$bytes.size &gt;= 24 &amp;&amp; bytes[12] == 'I'.code.toByte() &amp;&amp; bytes[13] == 'H'.code.toByte() &amp;&amp; bytes[14] == 'D'.code.toByte() &amp;&amp; bytes[15] == 'R'.code.toByte()</ID>
-    <ID>ComplexCondition:SafetyGate.kt$SafetyGate.Companion$bytes.size &gt;= 30 &amp;&amp; bytes[12] == 'V'.code.toByte() &amp;&amp; bytes[13] == 'P'.code.toByte() &amp;&amp; bytes[14] == '8'.code.toByte() &amp;&amp; bytes[15] == 'X'.code.toByte()</ID>
-    <ID>ComplexCondition:SafetyGate.kt$SafetyGate.Companion$bytes[0] == 'R'.code.toByte() &amp;&amp; bytes[1] == 'I'.code.toByte() &amp;&amp; bytes[2] == 'F'.code.toByte() &amp;&amp; bytes[3] == 'F'.code.toByte() &amp;&amp; bytes[8] == 'W'.code.toByte() &amp;&amp; bytes[9] == 'E'.code.toByte() &amp;&amp; bytes[10] == 'B'.code.toByte() &amp;&amp; bytes[11] == 'P'.code.toByte()</ID>
-    <ID>ComplexCondition:SafetyGate.kt$SafetyGate.Companion$bytes[0] == 0x89.toByte() &amp;&amp; bytes[1] == 0x50.toByte() &amp;&amp; bytes[2] == 0x4E.toByte() &amp;&amp; bytes[3] == 0x47.toByte() &amp;&amp; bytes[4] == 0x0D.toByte() &amp;&amp; bytes[5] == 0x0A.toByte() &amp;&amp; bytes[6] == 0x1A.toByte() &amp;&amp; bytes[7] == 0x0A.toByte()</ID>
-    <ID>ComplexCondition:SafetyGate.kt$SafetyGate.Companion$marker == 0xD8 || marker == 0xD9 || marker in 0xD0..0xD7 || marker == 0x01</ID>
-    <ID>ComplexCondition:SmkOpenSourceAdapter.kt$SmkOpenSourceAdapter$norm.contains("by-nc") || norm.contains("noncommercial") || norm.contains("by-nd") || norm.contains("noderiv") || norm.contains("copyright") || norm.contains("ophavsret") || norm.contains("all rights reserved") || norm.contains("use-of-images") || norm.contains("incopyright")</ID>
-    <ID>ComplexCondition:SmkOpenSourceAdapter.kt$SmkOpenSourceAdapter$norm.contains("publicdomain/mark") || norm.contains("public domain") || norm.contains("public_domain") || norm.contains("pdm") || norm.contains("smk-open") || norm.contains("smk open")</ID>
-    <ID>ComplexCondition:WikimediaFeaturedSourceAdapter.kt$WikimediaFeaturedSourceAdapter$combined.contains("by-nc") || combined.contains("by nc") || combined.contains("noncommercial") || combined.contains("non-commercial") || combined.contains("non commercial") || combined.contains("by-nd") || combined.contains("by nd") || combined.contains("noderiv") || combined.contains("no-deriv") || combined.contains("no deriv")</ID>
     <ID>CyclomaticComplexMethod:ClevelandMuseumCc0SourceAdapter.kt$ClevelandMuseumCc0SourceAdapter$fun parseResponse( jsonText: String, targetCategory: SafeCategory = SafeCategory.SCENIC_FINE_ART, targetWidthPx: Int = 2560 ): List&lt;CandidateAsset&gt;</ID>
     <ID>CyclomaticComplexMethod:LibraryStore.kt$WallpaperRowMapper$fun fromColumnMap(row: Map&lt;String, Any?&gt;): WallpaperRecord</ID>
     <ID>CyclomaticComplexMethod:NasaLibrarySourceAdapter.kt$NasaLibrarySourceAdapter$fun parseResponse( jsonText: String, defaultCategory: SafeCategory = SafeCategory.SPACE_ASTRONOMY ): List&lt;CandidateAsset&gt;</ID>
-    <ID>CyclomaticComplexMethod:SafetyGate.kt$SafetyGate.Companion$fun inspectImageHeaderBounds(bytes: ByteArray): ImageHeaderBounds?</ID>
     <ID>CyclomaticComplexMethod:WikimediaFeaturedSourceAdapter.kt$WikimediaFeaturedSourceAdapter$fun parseResponse( jsonText: String, targetCategory: SafeCategory, targetWidthPx: Int = 2560 ): List&lt;CandidateAsset&gt;</ID>
-    <ID>ExplicitItLambdaParameter:ReserveAndHistoryPane.kt${ _, it -&gt; it.id }</ID>
-    <ID>LongParameterList:ReserveAndHistoryPane.kt$( item: WallpaperRecord, index: Int, grid: Boolean, thumbnailAspect: Float, uiState: SunloomUiState, restricted: Boolean, selected: Boolean, focusRequester: FocusRequester, columns: Int, onNavigate: (NavMove) -&gt; Unit, onPress: (ctrl: Boolean, shift: Boolean, isTouch: Boolean) -&gt; Unit, onToggleSelected: () -&gt; Unit, onApplySpecific: (String) -&gt; Unit, onDeleteFromReserve: (String) -&gt; Unit, onToggleKeepSpecific: (String) -&gt; Unit, onShowAbout: () -&gt; Unit )</ID>
     <ID>LoopWithTooManyJumpStatements:ArtInstituteCc0SourceAdapter.kt$ArtInstituteCc0SourceAdapter$for</ID>
     <ID>LoopWithTooManyJumpStatements:ClevelandMuseumCc0SourceAdapter.kt$ClevelandMuseumCc0SourceAdapter$for</ID>
     <ID>LoopWithTooManyJumpStatements:DesktopInput.kt$while</ID>
@@ -36,12 +15,8 @@
     <ID>LoopWithTooManyJumpStatements:MainViewModel.kt$MainViewModel$for</ID>
     <ID>LoopWithTooManyJumpStatements:MetMuseumCc0SourceAdapter.kt$MetMuseumCc0SourceAdapter$for</ID>
     <ID>LoopWithTooManyJumpStatements:NasaLibrarySourceAdapter.kt$NasaLibrarySourceAdapter$for</ID>
-    <ID>LoopWithTooManyJumpStatements:SafetyGate.kt$SafetyGate.Companion$while</ID>
     <ID>LoopWithTooManyJumpStatements:SmkOpenSourceAdapter.kt$SmkOpenSourceAdapter$for</ID>
     <ID>LoopWithTooManyJumpStatements:WikimediaFeaturedSourceAdapter.kt$WikimediaFeaturedSourceAdapter$for</ID>
-    <ID>MatchingDeclarationName:AdaptiveLayout.kt$WorkspaceWidthClass</ID>
-    <ID>MatchingDeclarationName:DesktopScrollbar.kt$ScrollbarThumb</ID>
-    <ID>MatchingDeclarationName:TodayCanvasPane.kt$PreviewBitmapCache</ID>
     <ID>MaxLineLength:AndroidSunloomGateway.kt$AndroidSunloomGateway$override suspend</ID>
     <ID>MaxLineLength:AndroidSunloomGateway.kt$AndroidSunloomGateway$statusBannerMessage = context.getString(R.string.msg_disliked_and_switched_to, current.title, nextState.currentWallpaper?.title ?: context.getString(R.string.msg_next_wallpaper_fallback))</ID>
     <ID>MaxLineLength:AndroidSunloomGateway.kt$AndroidSunloomGateway$val current = repo.getWallpaperById(recordId) ?: return@withGatewayIo buildSnapshot(repo, context.getString(R.string.msg_wallpaper_not_found))</ID>
@@ -89,19 +64,7 @@
     <ID>NestedBlockDepth:GoogleBookPlatformAdapter.kt$GoogleBookPlatformAdapter$private fun boxBlurAndDarkenInPlace(bmp: Bitmap, radius: Int, darkenFactor: Float)</ID>
     <ID>NestedBlockDepth:GridAverager.kt$GridAverager$fun average( width: Int, height: Int, gridW: Int, gridH: Int, readRow: (y: Int, into: IntArray) -&gt; Unit ): IntArray</ID>
     <ID>NestedBlockDepth:NasaLibrarySourceAdapter.kt$NasaLibrarySourceAdapter$fun parseResponse( jsonText: String, defaultCategory: SafeCategory = SafeCategory.SPACE_ASTRONOMY ): List&lt;CandidateAsset&gt;</ID>
-    <ID>NestedBlockDepth:SafetyGate.kt$SafetyGate.Companion$fun inspectImageHeaderBounds(bytes: ByteArray): ImageHeaderBounds?</ID>
     <ID>NestedBlockDepth:WallpaperExporter.kt$WallpaperExporter$fun writeImage(record: WallpaperRecord, target: Uri): Boolean</ID>
     <ID>NestedBlockDepth:WallpaperSourceAdapter.kt$DefaultHttpsClient$private fun &lt;T&gt; executeFollowingValidatedRedirects( initialUrl: String, scopeSourceId: String? = null, acceptHeader: String, ifNoneMatch: String? = null, ifModifiedSince: String? = null, track: (HttpURLConnection) -&gt; Unit = {}, reader: (HttpURLConnection, Int) -&gt; T ): T</ID>
-    <ID>SpreadOperator:ReserveAndHistoryPane.kt$(it.anchorId, *it.selected.toTypedArray())</ID>
-    <ID>TopLevelPropertyNaming:DesktopScrollbar.kt$private const val ScrollbarActiveAlpha = 0.9f</ID>
-    <ID>TopLevelPropertyNaming:DesktopScrollbar.kt$private const val ScrollbarIdleAlpha = 0.4f</ID>
-    <ID>UnusedParameter:DisplaysAndSchedulePane.kt$onToggleBatterySaverDeferral: (Boolean) -&gt; Unit</ID>
-    <ID>UnusedParameter:ReserveAndHistoryPane.kt$columns: Int</ID>
-    <ID>UnusedParameter:ReserveAndHistoryPane.kt$index: Int</ID>
-    <ID>UseCheckOrError:WallpaperSourceAdapter.kt$DefaultHttpsClient$throw IllegalStateException("Exceeded maximum redirect hops ($MAX_REDIRECT_HOPS) for $initialUrl")</ID>
-    <ID>UseCheckOrError:WallpaperSourceAdapter.kt$DefaultHttpsClient$throw IllegalStateException("HTTP $code from $currentUrl")</ID>
-    <ID>UseCheckOrError:WallpaperSourceAdapter.kt$DefaultHttpsClient$throw IllegalStateException("HTTP $code redirect missing Location header from $currentUrl")</ID>
-    <ID>UseCheckOrError:WallpaperSourceAdapter.kt$DefaultHttpsClient$throw IllegalStateException("Redirect loop terminated unexpectedly for $initialUrl")</ID>
-    <ID>UseCheckOrError:WallpaperSourceAdapter.kt$DefaultHttpsClient$throw IllegalStateException("Unexpected HTML Content-Type '$contentType' when downloading image asset")</ID>
   </CurrentIssues>
 </SmellBaseline>

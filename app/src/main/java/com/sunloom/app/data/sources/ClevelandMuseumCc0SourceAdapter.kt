@@ -97,13 +97,7 @@ class ClevelandMuseumCc0SourceAdapter(
             if (!licenseStatus.equals("CC0", ignoreCase = true)) continue
 
             val copyrightField = item.str("copyright", "").trim()
-            if (copyrightField.isNotEmpty() &&
-                !copyrightField.equals("null", ignoreCase = true) &&
-                !copyrightField.contains("public domain", ignoreCase = true) &&
-                !copyrightField.contains("cc0", ignoreCase = true)
-            ) {
-                continue
-            }
+            if (isCopyrightRestricted(copyrightField)) continue
 
             val title = item.str("title").cleanedOrNull() ?: continue
 
@@ -209,6 +203,12 @@ class ClevelandMuseumCc0SourceAdapter(
             )
         }
         return out
+    }
+
+    /** A stated copyright that is not a public-domain or CC0 dedication. An empty field or the text "null" is no statement. */
+    private fun isCopyrightRestricted(copyrightField: String): Boolean {
+        if (copyrightField.isEmpty() || copyrightField.equals("null", ignoreCase = true)) return false
+        return !copyrightField.contains("public domain", ignoreCase = true) && !copyrightField.contains("cc0", ignoreCase = true)
     }
 
     private fun extractCreator(item: SimpleJson.JsonObj): String {

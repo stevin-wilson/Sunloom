@@ -234,16 +234,17 @@ class NasaLibrarySourceAdapter(
     ): Boolean {
         val combined = "$description | $photographer | $secondaryCreator".lowercase(Locale.ROOT)
             .replace("u.s.", "us") // keep "U.S. Geological Survey" in one piece for the credit clause below
-        if (combined.contains("©") ||
-            combined.contains("copyright") ||
-            combined.contains("all rights reserved") ||
-            combined.contains("getty") ||
-            combined.contains("reuters") ||
-            combined.contains("associated press") ||
-            combined.contains("ap photo") ||
-            combined.contains("alamy") ||
-            combined.contains("shutterstock")
-        ) {
+        if (combined.containsAnyOf(
+                "©",
+                "copyright",
+                "all rights reserved",
+                "getty",
+                "reuters",
+                "associated press",
+                "ap photo",
+                "alamy",
+                "shutterstock"
+            )) {
             return true
         }
 
