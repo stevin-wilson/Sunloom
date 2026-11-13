@@ -98,6 +98,7 @@ import androidx.compose.ui.draganddrop.mimeTypes
 import androidx.compose.ui.draganddrop.toAndroidDragEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -119,6 +120,33 @@ import com.sunloom.app.domain.model.ScheduleMode
 import com.sunloom.app.domain.model.UserPreferences
 import com.sunloom.app.domain.solar.CityCoordinates
 import com.sunloom.app.domain.solar.SolarCalculator
+
+/**
+ * The actions the panes reach through [LocalWallpaperActions]. Remembered: that local is static, so a new instance
+ * per recomposition would recompose the whole workspace every time.
+ */
+@Composable
+private fun rememberWallpaperActions(actions: SunloomActions, snackbarHostState: SnackbarHostState): WallpaperActions {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val attributionCopiedMessage = stringResource(R.string.attribution_copied)
+    val showMessage: (String) -> Unit = remember(scope, snackbarHostState) {
+        { message -> scope.launch { snackbarHostState.showSnackbar(message) }; Unit }
+    }
+    val copyAttribution: (com.sunloom.app.domain.model.WallpaperRecord) -> Unit =
+        remember(context, showMessage, attributionCopiedMessage) {
+            { record ->
+                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                clipboard?.setPrimaryClip(
+                    android.content.ClipData.newPlainText(record.title, AttributionFormatter.format(record))
+                )
+                showMessage(attributionCopiedMessage)
+            }
+        }
+    return remember(actions.onSaveAs, copyAttribution, actions.onDeleteManyFromReserve, showMessage, actions.onSetChosenWallpaper) {
+        WallpaperActions(actions.onSaveAs, copyAttribution, actions.onDeleteManyFromReserve, showMessage, actions.onSetChosenWallpaper)
+    }
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -168,26 +196,7 @@ fun SunloomApp(
     val singleKeyShortcuts = remember(context) {
         SingleKeyShortcuts(UiPrefs.singleKeyShortcuts(context)) { UiPrefs.setSingleKeyShortcuts(context, it) }
     }
-    val scope = rememberCoroutineScope()
-    val attributionCopiedMessage = stringResource(R.string.attribution_copied)
-    val showMessage: (String) -> Unit = remember(scope, snackbarHostState) {
-        { message -> scope.launch { snackbarHostState.showSnackbar(message) }; Unit }
-    }
-    // Remembered: LocalWallpaperActions is a static local, so a new instance per recomposition would
-    // recompose the whole workspace every time.
-    val copyAttribution: (com.sunloom.app.domain.model.WallpaperRecord) -> Unit =
-        remember(context, showMessage, attributionCopiedMessage) {
-            { record ->
-                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                clipboard?.setPrimaryClip(
-                    android.content.ClipData.newPlainText(record.title, AttributionFormatter.format(record))
-                )
-                showMessage(attributionCopiedMessage)
-            }
-        }
-    val wallpaperActions = remember(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage, onSetChosenWallpaper) {
-        WallpaperActions(onSaveAs, copyAttribution, onDeleteManyFromReserve, showMessage, onSetChosenWallpaper)
-    }
+    val wallpaperActions = rememberWallpaperActions(actions, snackbarHostState)
     val dropTarget = remember(onDropImages) {
         object : DragAndDropTarget {
             override fun onDrop(event: DragAndDropEvent): Boolean = onDropImages(event.toAndroidDragEvent())
@@ -209,76 +218,10 @@ fun SunloomApp(
                 .focusRequester(rootFocusRequester)
                 .focusable()
                 .onKeyEvent { event ->
-                    // Ctrl+1..5 jumps between workspace tabs (works while typing, like desktop apps).
-                    if (event.type == KeyEventType.KeyUp && event.isCtrlPressed &&
-                        !event.isAltPressed && !event.isMetaPressed && workspaceReady
-                    ) {
-                        val tab = tabForCtrlShortcut(event.key)
-                        if (tab != null) {
-                            onSelectTab(tab)
-                            return@onKeyEvent true
-                        }
-                        val current = uiState.currentWallpaper
-                        when (
-                            ctrlActionFor(
-                                key = event.key,
-                                shift = event.isShiftPressed,
-                                textInputFocused = shortcutGate.isTextInputFocused,
-                                hasPendingUndo = uiState.pendingDiscard != null,
-                                hasCurrentWallpaper = current != null
-                            )
-                        ) {
-                            CtrlAction.UNDO -> { onUndoDiscard(); return@onKeyEvent true }
-                            CtrlAction.COPY_ATTRIBUTION -> { current?.let(copyAttribution); return@onKeyEvent true }
-                            CtrlAction.SAVE_AS -> { current?.let(onSaveAs); return@onKeyEvent true }
-                            CtrlAction.OPEN_SCHEDULE -> {
-                                onSelectTab(DesktopNavTab.DISPLAYS_AND_SCHEDULE)
-                                return@onKeyEvent true
-                            }
-                            null -> Unit
-                        }
-                    }
-                    if (event.type != KeyEventType.KeyUp || !isPlainKeyEvent(event)) {
-                        return@onKeyEvent false
-                    }
-                    when {
-                        event.key == Key.F11 -> {
-                            onToggleFullscreen()
-                            true
-                        }
-                        event.key == Key.Escape && isFullscreen -> {
-                            onToggleFullscreen()
-                            true
-                        }
-                        // Esc backs out of whatever has focus (a text field, chip or button) to the
-                        // workspace, so single-key accelerators work again (Keyboard_Exit).
-                        event.key == Key.Escape && workspaceReady -> {
-                            restoreRootFocus()
-                            true
-                        }
-                        // Single-key accelerators never fire while typing or before setup is complete.
-                        shortcutGate.isTextInputFocused || !workspaceReady || !singleKeyShortcuts.enabled -> false
-                        else -> when (event.key) {
-                            Key.N -> {
-                                onNextWallpaper()
-                                true
-                            }
-                            Key.P -> {
-                                onPreviousWallpaper()
-                                true
-                            }
-                            Key.K -> {
-                                onToggleKeep()
-                                true
-                            }
-                            Key.Backspace, Key.Delete -> {
-                                // Acts immediately; the snackbar below offers Undo (no blocking dialog).
-                                if (uiState.currentWallpaper != null) onRejectForever()
-                                true
-                            }
-                            else -> false
-                        }
-                    }
+                    handleWorkspaceKey(
+                        event, uiState, actions, wallpaperActions, isFullscreen,
+                        workspaceReady, shortcutGate, singleKeyShortcuts, restoreRootFocus
+                    )
                 },
             color = MaterialTheme.colorScheme.background
         ) {
@@ -303,67 +246,8 @@ fun SunloomApp(
             )
 
             when {
-                uiState.isStorageUnavailable -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(Spacing.xxl),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Card(
-                            modifier = Modifier.width(560.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surface
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(Spacing.xl),
-                                verticalArrangement = Arrangement.spacedBy(Spacing.m)
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.local_library_database_unavailable),
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                                Text(
-                                    text = uiState.statusBannerMessage,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = stringResource(R.string.to_protect_your_permanent_rejection_bloc),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                OutlinedButton(onClick = onRestoreSystemDefault, modifier = Modifier.desktopControl(CircleShape)) {
-                                    Text(stringResource(R.string.restore_system_default_wallpaper))
-                                }
-                            }
-                        }
-                    }
-                }
-                uiState.isInitialLoading -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(Spacing.xxl),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            modifier = Modifier.width(360.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(Spacing.m)
-                        ) {
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                            Text(
-                                text = uiState.statusBannerMessage,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
+                uiState.isStorageUnavailable -> StorageUnavailableScreen(uiState, actions.onRestoreSystemDefault)
+                uiState.isInitialLoading -> InitialLoadingScreen(uiState.statusBannerMessage)
                 !uiState.preferences.isSetupCompleted || uiState.isSetupReopened -> {
                     FirstRunSetupScreen(
                         uiState = uiState,
@@ -386,6 +270,164 @@ fun SunloomApp(
           }
         }
     }
+    }
+}
+
+/** Workspace-wide keyboard shortcuts. Returns whether the event was consumed. */
+private fun handleWorkspaceKey(
+    event: KeyEvent,
+    uiState: SunloomUiState,
+    actions: SunloomActions,
+    wallpaperActions: WallpaperActions,
+    isFullscreen: Boolean,
+    workspaceReady: Boolean,
+    shortcutGate: ShortcutGate,
+    singleKeyShortcuts: SingleKeyShortcuts,
+    restoreRootFocus: () -> Unit
+): Boolean {
+    // Ctrl+1..5 jumps between workspace tabs (works while typing, like desktop apps).
+    if (workspaceReady && isCtrlChord(event) && handleCtrlKey(event, uiState, actions, wallpaperActions, shortcutGate)) {
+        return true
+    }
+    if (event.type != KeyEventType.KeyUp || !isPlainKeyEvent(event)) return false
+    return when {
+        event.key == Key.F11 -> {
+            actions.onToggleFullscreen()
+            true
+        }
+        event.key == Key.Escape && isFullscreen -> {
+            actions.onToggleFullscreen()
+            true
+        }
+        // Esc backs out of whatever has focus (a text field, chip or button) to the
+        // workspace, so single-key accelerators work again (Keyboard_Exit).
+        event.key == Key.Escape && workspaceReady -> {
+            restoreRootFocus()
+            true
+        }
+        // Single-key accelerators never fire while typing or before setup is complete.
+        shortcutGate.isTextInputFocused || !workspaceReady || !singleKeyShortcuts.enabled -> false
+        else -> handleSingleKey(event.key, uiState, actions)
+    }
+}
+
+private fun isCtrlChord(event: KeyEvent): Boolean =
+    event.type == KeyEventType.KeyUp && event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed
+
+private fun handleCtrlKey(
+    event: KeyEvent,
+    uiState: SunloomUiState,
+    actions: SunloomActions,
+    wallpaperActions: WallpaperActions,
+    shortcutGate: ShortcutGate
+): Boolean {
+    val tab = tabForCtrlShortcut(event.key)
+    if (tab != null) {
+        actions.onSelectTab(tab)
+        return true
+    }
+    val current = uiState.currentWallpaper
+    when (
+        ctrlActionFor(
+            key = event.key,
+            shift = event.isShiftPressed,
+            textInputFocused = shortcutGate.isTextInputFocused,
+            hasPendingUndo = uiState.pendingDiscard != null,
+            hasCurrentWallpaper = current != null
+        )
+    ) {
+        CtrlAction.UNDO -> actions.onUndoDiscard()
+        CtrlAction.COPY_ATTRIBUTION -> current?.let(wallpaperActions.copyAttribution)
+        CtrlAction.SAVE_AS -> current?.let(actions.onSaveAs)
+        CtrlAction.OPEN_SCHEDULE -> actions.onSelectTab(DesktopNavTab.DISPLAYS_AND_SCHEDULE)
+        null -> return false
+    }
+    return true
+}
+
+private fun handleSingleKey(key: Key, uiState: SunloomUiState, actions: SunloomActions): Boolean = when (key) {
+    Key.N -> {
+        actions.onNextWallpaper()
+        true
+    }
+    Key.P -> {
+        actions.onPreviousWallpaper()
+        true
+    }
+    Key.K -> {
+        actions.onToggleKeep()
+        true
+    }
+    Key.Backspace, Key.Delete -> {
+        // Acts immediately; the snackbar below offers Undo (no blocking dialog).
+        if (uiState.currentWallpaper != null) actions.onRejectForever()
+        true
+    }
+    else -> false
+}
+
+@Composable
+private fun StorageUnavailableScreen(uiState: SunloomUiState, onRestoreSystemDefault: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(Spacing.xxl),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier.width(560.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(Spacing.xl),
+                verticalArrangement = Arrangement.spacedBy(Spacing.m)
+            ) {
+                Text(
+                    text = stringResource(R.string.local_library_database_unavailable),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.error
+                )
+                Text(
+                    text = uiState.statusBannerMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = stringResource(R.string.to_protect_your_permanent_rejection_bloc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedButton(onClick = onRestoreSystemDefault, modifier = Modifier.desktopControl(CircleShape)) {
+                    Text(stringResource(R.string.restore_system_default_wallpaper))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InitialLoadingScreen(message: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(Spacing.xxl),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier.width(360.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Spacing.m)
+        ) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
