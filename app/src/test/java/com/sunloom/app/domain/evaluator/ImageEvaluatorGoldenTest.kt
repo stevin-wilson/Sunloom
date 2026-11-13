@@ -1,5 +1,6 @@
 package com.sunloom.app.domain.evaluator
 
+import com.sunloom.app.GoldenText
 import com.sunloom.app.domain.model.DisplayProfile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.fail
@@ -85,6 +86,6 @@ class ImageEvaluatorGoldenTest {
             golden.writeText(actual)
             fail("Recorded ${golden.path}; run the test again.")
         }
-        assertEquals(golden.readText().lines(), actual.lines())
+        assertEquals(GoldenText.normalize(golden.readText()), GoldenText.normalize(actual))
     }
 }
