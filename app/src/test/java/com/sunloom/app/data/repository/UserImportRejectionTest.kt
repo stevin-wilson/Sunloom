@@ -120,4 +120,32 @@ class UserImportRejectionTest {
         assertNull(repository.importUserUri(uri2, display))
         assertTrue(repository.getAllRejections().any { it.reasonCode.startsWith("BLOCKLISTED") })
     }
+
+    @Test
+    fun `a baseline restore is saved under its fixed id, remembered in the preferences, and skips the blocklist`() {
+        val uri1 = Uri.parse("content://test/blocked.png")
+        serve(uri1, png(picture()))
+        val first = repository.importUserUri(uri1, display)!!
+        repository.rejectWallpaperForever(first.id)
+
+        val uri2 = Uri.parse("content://test/baseline.png")
+        serve(uri2, png(picture()))
+        val record = repository.importUserUri(uri2, display, asBaselineRestore = true)!!
+
+        assertEquals("baseline-restore-original", record.id)
+        assertEquals("Original Baseline Wallpaper", record.title)
+        assertTrue(record.isBaselineRestore)
+        assertEquals(record.localFilePath, repository.loadPreferences().baselineRestorePath)
+    }
+
+    @Test
+    fun `an import leaves no staging file behind`() {
+        val uri = Uri.parse("content://test/clean.png")
+        serve(uri, png(picture()))
+        repository.importUserUri(uri, display)
+        assertNull(repository.importUserUri(Uri.parse("content://test/gone.png"), display))
+
+        val staged = repository.quarantineDir.listFiles().orEmpty().filter { it.name.startsWith("uri_stage_") }
+        assertTrue("Leftover staging files: $staged", staged.isEmpty())
+    }
 }
