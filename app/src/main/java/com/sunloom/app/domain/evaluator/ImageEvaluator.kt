@@ -35,17 +35,9 @@ class ImageEvaluator(
         allowBlurredFrameFill: Boolean = false
     ): ImageEvaluationResult {
         if (imageWidth <= 0 || imageHeight <= 0 || gridWidth <= 0 || gridHeight <= 0 || rgbGrid.size < gridWidth * gridHeight) {
-            return ImageEvaluationResult(
-                isEligible = false,
-                rejectionReasonCode = "INVALID_DIMENSIONS",
-                globalLuminance = 0.0,
-                desktopZoneLuminance = 0.0,
-                lockClockZoneLuminance = 0.0,
-                glareFractionInSafeZones = 0.0,
-                contrastStdDev = 0.0,
-                brightnessClass = BrightnessClass.NEUTRAL,
-                cropRect = null,
-                explanation = "Image dimensions ($imageWidth × $imageHeight) or pixel sample grid are invalid."
+            return rejected(
+                "INVALID_DIMENSIONS",
+                "Image dimensions ($imageWidth × $imageHeight) or pixel sample grid are invalid."
             )
         }
 
@@ -74,21 +66,60 @@ class ImageEvaluator(
             display = display,
             allowBlurredFrameFill = allowBlurredFrameFill,
             preferFullFrame = cropsTooMuch
-        ) ?: run {
-            val floorDesc = when (display.qualityTier) {
-                DisplayQualityTier.HIGH_65 -> "65% high-DPI floor (>= 1600px long edge)"
-                DisplayQualityTier.MID_80 -> "80% mid-PPI floor (120–209 PPI)"
-                DisplayQualityTier.STANDARD_100 -> "98% native pixel floor"
-            }
-            return rejected(
-                "INSUFFICIENT_POST_CROP_RESOLUTION",
-                "After cropping to ${display.resolutionLabel} aspect ratio, the source image ($imageWidth × $imageHeight) does not meet the $floorDesc without enlargement."
-            )
+        ) ?: return rejected(
+            "INSUFFICIENT_POST_CROP_RESOLUTION",
+            "After cropping to ${display.resolutionLabel} aspect ratio, the source image ($imageWidth × $imageHeight) " +
+                "does not meet the ${floorDescription(display)} without enlargement."
+        )
+        val cropRect = centredOnWindow(plannedCrop, imageWidth, imageHeight)
+
+        val stats = measureCrop(rgbGrid, gridWidth, gridHeight, margins, cropRect, imageWidth, imageHeight)
+        val brightnessClass = classify(stats)
+        val warmth = ((stats.meanR - stats.meanB) / 255.0).coerceIn(-1.0, 1.0)
+        val hueBucket = hueBucketOf(stats.meanR, stats.meanG, stats.meanB)
+
+        val explanation = buildString {
+            append("Classified as ${brightnessClass.displayName}: ")
+            append("overall luminance=${"%.2f".format(stats.globalLum)}, ")
+            append("clock zone=${"%.2f".format(stats.clockLum)}, ")
+            append("desktop bar/icon zone=${"%.2f".format(stats.desktopLum)}, ")
+            append("glare=${"%.1f".format(stats.glareFraction * 100)}%, ")
+            append("label contrast=${"%.1f".format(stats.desktopContrast)}:1. ")
+            if (!margins.isEmpty) append("Measured inside a uniform border (mat or frame). ")
+            append(fillNote(cropRect, display))
         }
-        // The renderers place the crop from the focal point alone (centre of the window on the full image), so
-        // the stored focal point is the centre of the window chosen here: that carries over the thirds
-        // placement and the clock/shelf avoidance. A blurred fill shows the whole frame.
-        val cropRect = if (plannedCrop.usesBlurredFrameFill) {
+
+        return ImageEvaluationResult(
+            isEligible = true,
+            rejectionReasonCode = null,
+            globalLuminance = stats.globalLum,
+            desktopZoneLuminance = stats.desktopLum,
+            lockClockZoneLuminance = stats.clockLum,
+            glareFractionInSafeZones = stats.glareFraction,
+            contrastStdDev = stats.stdDev,
+            brightnessClass = brightnessClass,
+            cropRect = cropRect,
+            explanation = explanation,
+            lightnessP50 = stats.medianLightness,
+            desktopLabelContrast = stats.desktopContrast,
+            warmth = warmth,
+            hueBucket = hueBucket
+        )
+    }
+
+    private fun floorDescription(display: DisplayProfile) = when (display.qualityTier) {
+        DisplayQualityTier.HIGH_65 -> "65% high-DPI floor (>= 1600px long edge)"
+        DisplayQualityTier.MID_80 -> "80% mid-PPI floor (120–209 PPI)"
+        DisplayQualityTier.STANDARD_100 -> "98% native pixel floor"
+    }
+
+    /**
+     * The renderers place the crop from the focal point alone (centre of the window on the full image), so
+     * the stored focal point is the centre of the window chosen here: that carries over the thirds
+     * placement and the clock/shelf avoidance. A blurred fill shows the whole frame.
+     */
+    private fun centredOnWindow(plannedCrop: CropRect, imageWidth: Int, imageHeight: Int): CropRect =
+        if (plannedCrop.usesBlurredFrameFill) {
             plannedCrop
         } else {
             plannedCrop.copy(
@@ -97,27 +128,37 @@ class ImageEvaluator(
             )
         }
 
+    /** What was measured inside the cropped region, ignoring any mat or frame. */
+    private class CropStats(
+        val globalLum: Double,
+        val desktopLum: Double,
+        val clockLum: Double,
+        val glareFraction: Double,
+        val stdDev: Double,
+        val medianLightness: Double,
+        val desktopContrast: Double,
+        val clockContrast: Double,
+        val meanR: Double,
+        val meanG: Double,
+        val meanB: Double
+    )
+
+    private fun measureCrop(
+        rgbGrid: IntArray,
+        gridWidth: Int,
+        gridHeight: Int,
+        margins: Margins,
+        cropRect: CropRect,
+        imageWidth: Int,
+        imageHeight: Int
+    ): CropStats {
         // Perceptual statistics of the cropped region
         val xStartNorm = (cropRect.left.toDouble() / imageWidth.toDouble()).coerceIn(0.0, 0.99)
         val yStartNorm = (cropRect.top.toDouble() / imageHeight.toDouble()).coerceIn(0.0, 0.99)
         val xEndNorm = ((cropRect.left + cropRect.width).toDouble() / imageWidth.toDouble()).coerceIn(xStartNorm + 0.01, 1.0)
         val yEndNorm = ((cropRect.top + cropRect.height).toDouble() / imageHeight.toDouble()).coerceIn(yStartNorm + 0.01, 1.0)
 
-        var globalCount = 0
-        var globalMean = 0.0
-        var globalM2 = 0.0
-        val cellCapacity = gridWidth * gridHeight
-        val lightnessValues = DoubleBuffer(cellCapacity)
-        val desktopLuminances = DoubleBuffer(cellCapacity)
-        val clockLuminances = DoubleBuffer(cellCapacity)
-        var desktopSum = 0.0
-        var clockSum = 0.0
-        var safeZoneTotalPixels = 0
-        var safeZoneGlarePixels = 0
-        var sumR = 0.0
-        var sumG = 0.0
-        var sumB = 0.0
-
+        val acc = CropAccumulator(gridWidth * gridHeight)
         for (gy in 0 until gridHeight) {
             if (gy < margins.top || gy >= gridHeight - margins.bottom) continue
             val vGlobal = (gy + 0.5) / gridHeight.toDouble()
@@ -129,81 +170,110 @@ class ImageEvaluator(
                 val uGlobal = (gx + 0.5) / gridWidth.toDouble()
                 if (uGlobal < xStartNorm || uGlobal > xEndNorm) continue
                 val uCrop = ((uGlobal - xStartNorm) / (xEndNorm - xStartNorm)).coerceIn(0.0, 1.0)
+                acc.add(rgbGrid[gy * gridWidth + gx], uCrop, vCrop)
+            }
+        }
+        return acc.finish()
+    }
 
-                val rgb = rgbGrid[gy * gridWidth + gx]
-                val lum = relativeLuminance(rgb)
-                globalCount++
-                val delta = lum - globalMean
-                globalMean += delta / globalCount.toDouble()
-                globalM2 += delta * (lum - globalMean)
-                lightnessValues.add(lightnessOf(lum))
-                sumR += (rgb shr 16) and 0xFF
-                sumG += (rgb shr 8) and 0xFF
-                sumB += rgb and 0xFF
+    /** Running totals over the cells inside the crop: Welford mean and variance, the zone buffers and glare counts. */
+    private class CropAccumulator(cellCapacity: Int) {
+        private var count = 0
+        private var mean = 0.0
+        private var m2 = 0.0
+        private val lightnessValues = DoubleBuffer(cellCapacity)
+        private val desktopLuminances = DoubleBuffer(cellCapacity)
+        private val clockLuminances = DoubleBuffer(cellCapacity)
+        private var desktopSum = 0.0
+        private var clockSum = 0.0
+        private var safeZoneTotalPixels = 0
+        private var safeZoneGlarePixels = 0
+        private var sumR = 0.0
+        private var sumG = 0.0
+        private var sumB = 0.0
 
-                // Desktop Legibility Zones: top bar [0..0.10], bottom shelf [0.88..1.0], left icon column [0..0.15]
-                val inDesktopZone = vCrop <= 0.10 || vCrop >= 0.88 || uCrop <= 0.15
-                // Lock-Screen Clock Zone: upper center x in [0.25..0.75], y in [0.10..0.38]
-                val inClockZone = uCrop in 0.25..0.75 && vCrop in 0.10..0.38
+        /** Adds one cell at crop-relative position ([uCrop], [vCrop]), each in 0..1. */
+        fun add(rgb: Int, uCrop: Double, vCrop: Double) {
+            val lum = relativeLuminance(rgb)
+            count++
+            val delta = lum - mean
+            mean += delta / count.toDouble()
+            m2 += delta * (lum - mean)
+            lightnessValues.add(lightnessOf(lum))
+            sumR += (rgb shr 16) and 0xFF
+            sumG += (rgb shr 8) and 0xFF
+            sumB += rgb and 0xFF
 
-                if (inDesktopZone) {
-                    desktopSum += lum
-                    desktopLuminances.add(lum)
-                }
-                if (inClockZone) {
-                    clockSum += lum
-                    clockLuminances.add(lum)
-                }
-                if (inDesktopZone || inClockZone) {
-                    safeZoneTotalPixels++
-                    if (lum > 0.85) {
-                        safeZoneGlarePixels++
-                    }
+            // Desktop Legibility Zones: top bar [0..0.10], bottom shelf [0.88..1.0], left icon column [0..0.15]
+            val inDesktopZone = vCrop <= 0.10 || vCrop >= 0.88 || uCrop <= 0.15
+            // Lock-Screen Clock Zone: upper center x in [0.25..0.75], y in [0.10..0.38]
+            val inClockZone = uCrop in 0.25..0.75 && vCrop in 0.10..0.38
+
+            if (inDesktopZone) {
+                desktopSum += lum
+                desktopLuminances.add(lum)
+            }
+            if (inClockZone) {
+                clockSum += lum
+                clockLuminances.add(lum)
+            }
+            if (inDesktopZone || inClockZone) {
+                safeZoneTotalPixels++
+                if (lum > 0.85) {
+                    safeZoneGlarePixels++
                 }
             }
         }
 
-        val globalLum = if (globalCount > 0) globalMean else 0.5
-        val desktopLum = if (desktopLuminances.size > 0) desktopSum / desktopLuminances.size else globalLum
-        val clockLum = if (clockLuminances.size > 0) clockSum / clockLuminances.size else globalLum
-        val glareFraction = if (safeZoneTotalPixels > 0) {
-            safeZoneGlarePixels.toDouble() / safeZoneTotalPixels.toDouble()
-        } else {
-            0.0
+        fun finish(): CropStats {
+            val globalLum = if (count > 0) mean else 0.5
+            val desktopLum = if (desktopLuminances.size > 0) desktopSum / desktopLuminances.size else globalLum
+            val clockLum = if (clockLuminances.size > 0) clockSum / clockLuminances.size else globalLum
+            val glareFraction = if (safeZoneTotalPixels > 0) {
+                safeZoneGlarePixels.toDouble() / safeZoneTotalPixels.toDouble()
+            } else {
+                0.0
+            }
+            val variance = if (count > 0) (m2 / count.toDouble()).coerceAtLeast(0.0) else 0.0
+
+            // Perceptual lightness (CIE L*) of the median pixel, not the linear mean: a small bright moon or a
+            // few lit windows must not turn a night scene into "neutral" (Article V §3).
+            val medianLightness = percentile(lightnessValues, 0.5, fallback = lightnessOf(globalLum))
+            // Legibility: white desktop labels need WCAG contrast over the busiest 10% of their zones
+            // (4.5:1 for the icon column, shelf and top bar; 3:1 for the large clock).
+            val desktopContrast = labelContrast(percentile(desktopLuminances, 0.9, fallback = desktopLum))
+            val clockContrast = labelContrast(percentile(clockLuminances, 0.9, fallback = clockLum))
+
+            return CropStats(
+                globalLum = globalLum,
+                desktopLum = desktopLum,
+                clockLum = clockLum,
+                glareFraction = glareFraction,
+                stdDev = sqrt(variance),
+                medianLightness = medianLightness,
+                desktopContrast = desktopContrast,
+                clockContrast = clockContrast,
+                meanR = if (count > 0) sumR / count else 0.0,
+                meanG = if (count > 0) sumG / count else 0.0,
+                meanB = if (count > 0) sumB / count else 0.0
+            )
         }
+    }
 
-        val variance = if (globalCount > 0) {
-            (globalM2 / globalCount.toDouble()).coerceAtLeast(0.0)
-        } else {
-            0.0
-        }
-        val stdDev = sqrt(variance)
-
-        // Perceptual lightness (CIE L*) of the median pixel, not the linear mean: a small bright moon or a
-        // few lit windows must not turn a night scene into "neutral" (Article V §3).
-        val medianLightness = percentile(lightnessValues, 0.5, fallback = lightnessOf(globalLum))
-        // Legibility: white desktop labels need WCAG contrast over the busiest 10% of their zones
-        // (4.5:1 for the icon column, shelf and top bar; 3:1 for the large clock).
-        val desktopContrast = labelContrast(percentile(desktopLuminances, 0.9, fallback = desktopLum))
-        val clockContrast = labelContrast(percentile(clockLuminances, 0.9, fallback = clockLum))
-
-        val brightnessClass = when {
-            medianLightness <= DARK_MEDIAN_LIGHTNESS &&
-                desktopContrast >= DESKTOP_LABEL_CONTRAST &&
-                clockContrast >= CLOCK_LABEL_CONTRAST &&
-                glareFraction <= 0.06 -> BrightnessClass.DARK
-            medianLightness >= LIGHT_MEDIAN_LIGHTNESS && stdDev <= 0.38 -> BrightnessClass.LIGHT
+    private fun classify(stats: CropStats): BrightnessClass {
+        return when {
+            stats.medianLightness <= DARK_MEDIAN_LIGHTNESS &&
+                stats.desktopContrast >= DESKTOP_LABEL_CONTRAST &&
+                stats.clockContrast >= CLOCK_LABEL_CONTRAST &&
+                stats.glareFraction <= 0.06 -> BrightnessClass.DARK
+            stats.medianLightness >= LIGHT_MEDIAN_LIGHTNESS && stats.stdDev <= 0.38 -> BrightnessClass.LIGHT
             else -> BrightnessClass.NEUTRAL
         }
+    }
 
-        val meanR = if (globalCount > 0) sumR / globalCount else 0.0
-        val meanG = if (globalCount > 0) sumG / globalCount else 0.0
-        val meanB = if (globalCount > 0) sumB / globalCount else 0.0
-        val warmth = ((meanR - meanB) / 255.0).coerceIn(-1.0, 1.0)
-        val hueBucket = hueBucketOf(meanR, meanG, meanB)
-
+    private fun fillNote(cropRect: CropRect, display: DisplayProfile): String {
         val coveragePct = (cropRect.pixelCoverageRatio * 100.0).roundToInt()
-        val fillNote = when {
+        return when {
             cropRect.usesBlurredFrameFill ->
                 "Prepared with user-approved blurred frame extension (${coveragePct}% native core)."
             cropRect.pixelCoverageRatio >= 1.0 - 1e-4 ->
@@ -215,34 +285,6 @@ class ImageEvaluator(
             else ->
                 "${coveragePct}% native pixel coverage (${cropRect.width} × ${cropRect.height} crop for ${display.resolutionLabel}; passes >= 65% high-DPI floor)."
         }
-
-        val explanation = buildString {
-            append("Classified as ${brightnessClass.displayName}: ")
-            append("overall luminance=${"%.2f".format(globalLum)}, ")
-            append("clock zone=${"%.2f".format(clockLum)}, ")
-            append("desktop bar/icon zone=${"%.2f".format(desktopLum)}, ")
-            append("glare=${"%.1f".format(glareFraction * 100)}%, ")
-            append("label contrast=${"%.1f".format(desktopContrast)}:1. ")
-            if (!margins.isEmpty) append("Measured inside a uniform border (mat or frame). ")
-            append(fillNote)
-        }
-
-        return ImageEvaluationResult(
-            isEligible = true,
-            rejectionReasonCode = null,
-            globalLuminance = globalLum,
-            desktopZoneLuminance = desktopLum,
-            lockClockZoneLuminance = clockLum,
-            glareFractionInSafeZones = glareFraction,
-            contrastStdDev = stdDev,
-            brightnessClass = brightnessClass,
-            cropRect = cropRect,
-            explanation = explanation,
-            lightnessP50 = medianLightness,
-            desktopLabelContrast = desktopContrast,
-            warmth = warmth,
-            hueBucket = hueBucket
-        )
     }
 
     private fun rejected(code: String, explanation: String) = ImageEvaluationResult(
