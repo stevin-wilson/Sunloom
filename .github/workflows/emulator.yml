@@ -28,7 +28,7 @@ jobs:
       matrix:
         api-level: [30, 36]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The hosted runner needs KVM opened up for the emulator to run at a usable speed.
       - name: Enable KVM
