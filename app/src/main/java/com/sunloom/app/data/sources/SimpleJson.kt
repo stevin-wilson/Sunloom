@@ -87,9 +87,7 @@ object SimpleJson {
     }
 
     private fun wrapOrgJsonObject(obj: JSONObject, depth: Int): JsonObj {
-        if (depth > MAX_NESTING_DEPTH) {
-            throw IllegalArgumentException("JSON nesting exceeds maximum depth ($MAX_NESTING_DEPTH)")
-        }
+        require(depth <= MAX_NESTING_DEPTH) { "JSON nesting exceeds maximum depth ($MAX_NESTING_DEPTH)" }
         val map = LinkedHashMap<String, Any?>()
         val iter = obj.keys()
         while (iter.hasNext()) {
@@ -100,9 +98,7 @@ object SimpleJson {
     }
 
     private fun wrapOrgJsonArray(arr: JSONArray, depth: Int): JsonArr {
-        if (depth > MAX_NESTING_DEPTH) {
-            throw IllegalArgumentException("JSON nesting exceeds maximum depth ($MAX_NESTING_DEPTH)")
-        }
+        require(depth <= MAX_NESTING_DEPTH) { "JSON nesting exceeds maximum depth ($MAX_NESTING_DEPTH)" }
         val list = ArrayList<Any?>(arr.length())
         for (i in 0 until arr.length()) {
             list.add(wrapOrgJsonValue(arr.opt(i), depth + 1))
@@ -125,18 +121,14 @@ object SimpleJson {
         fun parseRoot(): Any? {
             val value = parseValue(depth = 0)
             skipWhitespace()
-            if (pos != src.length) {
-                throw IllegalArgumentException("Unexpected trailing characters at position $pos")
-            }
+            require(pos == src.length) { "Unexpected trailing characters at position $pos" }
             return value
         }
 
         private fun parseValue(depth: Int): Any? {
-            if (depth > MAX_NESTING_DEPTH) {
-                throw IllegalArgumentException("JSON nesting exceeds maximum depth ($MAX_NESTING_DEPTH)")
-            }
+            require(depth <= MAX_NESTING_DEPTH) { "JSON nesting exceeds maximum depth ($MAX_NESTING_DEPTH)" }
             skipWhitespace()
-            if (pos >= src.length) throw IllegalArgumentException("Unexpected end of JSON input")
+            require(pos < src.length) { "Unexpected end of JSON input" }
             return when (val ch = src[pos]) {
                 '{' -> parseObject(depth + 1)
                 '[' -> parseArray(depth + 1)
@@ -158,23 +150,19 @@ object SimpleJson {
             }
             while (true) {
                 skipWhitespace()
-                if (pos >= src.length || src[pos] != '"') {
-                    throw IllegalArgumentException("Expected quoted object key at $pos")
-                }
+                require(pos < src.length && src[pos] == '"') { "Expected quoted object key at $pos" }
                 val key = parseString()
                 skipWhitespace()
                 expectChar(':')
                 val value = parseValue(depth)
                 map[key] = value
                 skipWhitespace()
-                if (pos >= src.length) throw IllegalArgumentException("Unclosed JSON object")
+                require(pos < src.length) { "Unclosed JSON object" }
                 when (src[pos]) {
                     ',' -> {
                         pos++
                         skipWhitespace()
-                        if (pos < src.length && src[pos] == '}') {
-                            throw IllegalArgumentException("Trailing comma in JSON object at $pos")
-                        }
+                        require(pos >= src.length || src[pos] != '}') { "Trailing comma in JSON object at $pos" }
                     }
                     '}' -> {
                         pos++
@@ -197,14 +185,12 @@ object SimpleJson {
             while (true) {
                 list.add(parseValue(depth))
                 skipWhitespace()
-                if (pos >= src.length) throw IllegalArgumentException("Unclosed JSON array")
+                require(pos < src.length) { "Unclosed JSON array" }
                 when (src[pos]) {
                     ',' -> {
                         pos++
                         skipWhitespace()
-                        if (pos < src.length && src[pos] == ']') {
-                            throw IllegalArgumentException("Trailing comma in JSON array at $pos")
-                        }
+                        require(pos >= src.length || src[pos] != ']') { "Trailing comma in JSON array at $pos" }
                     }
                     ']' -> {
                         pos++
@@ -226,11 +212,9 @@ object SimpleJson {
                     closed = true
                     break
                 }
-                if (c.code < 0x20) {
-                    throw IllegalArgumentException("Unescaped control character in JSON string")
-                }
+                require(c.code >= 0x20) { "Unescaped control character in JSON string" }
                 if (c == '\\') {
-                    if (pos >= src.length) throw IllegalArgumentException("Unterminated escape sequence")
+                    require(pos < src.length) { "Unterminated escape sequence" }
                     when (val esc = src[pos++]) {
                         '"' -> sb.append('"')
                         '\\' -> sb.append('\\')
@@ -241,9 +225,7 @@ object SimpleJson {
                         'r' -> sb.append('\r')
                         't' -> sb.append('\t')
                         'u' -> {
-                            if (pos + 4 > src.length) {
-                                throw IllegalArgumentException("Invalid unicode escape at $pos")
-                            }
+                            require(pos + 4 <= src.length) { "Invalid unicode escape at $pos" }
                             val hex = src.substring(pos, pos + 4)
                             val code = hex.toIntOrNull(16)
                                 ?: throw IllegalArgumentException("Invalid hex in unicode escape '$hex'")
@@ -256,7 +238,7 @@ object SimpleJson {
                     sb.append(c)
                 }
             }
-            if (!closed) throw IllegalArgumentException("Unterminated JSON string")
+            require(closed) { "Unterminated JSON string" }
             return sb.toString()
         }
 
@@ -275,9 +257,7 @@ object SimpleJson {
         }
 
         private fun parseNull(): Any? {
-            if (!src.startsWith("null", pos)) {
-                throw IllegalArgumentException("Invalid null literal at $pos")
-            }
+            require(src.startsWith("null", pos)) { "Invalid null literal at $pos" }
             pos += 4
             return null
         }
@@ -285,9 +265,7 @@ object SimpleJson {
         private fun parseNumber(): Number {
             val start = pos
             if (pos < src.length && src[pos] == '-') pos++
-            if (pos >= src.length || src[pos] !in '0'..'9') {
-                throw IllegalArgumentException("Invalid number literal at $start")
-            }
+            require(pos < src.length && src[pos] in '0'..'9') { "Invalid number literal at $start" }
             while (pos < src.length && src[pos] in "0123456789+-.eE") {
                 pos++
             }
@@ -300,9 +278,7 @@ object SimpleJson {
         }
 
         private fun expectChar(expected: Char) {
-            if (pos >= src.length || src[pos] != expected) {
-                throw IllegalArgumentException("Expected '$expected' at position $pos")
-            }
+            require(pos < src.length && src[pos] == expected) { "Expected '$expected' at position $pos" }
             pos++
         }
 

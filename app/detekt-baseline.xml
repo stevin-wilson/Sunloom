@@ -21,7 +21,6 @@
     <ID>ComplexCondition:SmkOpenSourceAdapter.kt$SmkOpenSourceAdapter$norm.contains("publicdomain/mark") || norm.contains("public domain") || norm.contains("public_domain") || norm.contains("pdm") || norm.contains("smk-open") || norm.contains("smk open")</ID>
     <ID>ComplexCondition:SunloomScreens.kt$event.type == KeyEventType.KeyUp &amp;&amp; event.isCtrlPressed &amp;&amp; !event.isAltPressed &amp;&amp; !event.isMetaPressed &amp;&amp; workspaceReady</ID>
     <ID>ComplexCondition:WikimediaFeaturedSourceAdapter.kt$WikimediaFeaturedSourceAdapter$combined.contains("by-nc") || combined.contains("by nc") || combined.contains("noncommercial") || combined.contains("non-commercial") || combined.contains("non commercial") || combined.contains("by-nd") || combined.contains("by nd") || combined.contains("noderiv") || combined.contains("no-deriv") || combined.contains("no deriv")</ID>
-    <ID>CyclomaticComplexMethod:ArtInstituteCc0SourceAdapter.kt$ArtInstituteCc0SourceAdapter$fun parseResponse( jsonText: String, category: SafeCategory = SafeCategory.SCENIC_FINE_ART ): List&lt;CandidateAsset&gt;</ID>
     <ID>CyclomaticComplexMethod:ClevelandMuseumCc0SourceAdapter.kt$ClevelandMuseumCc0SourceAdapter$fun parseResponse( jsonText: String, targetCategory: SafeCategory = SafeCategory.SCENIC_FINE_ART, targetWidthPx: Int = 2560 ): List&lt;CandidateAsset&gt;</ID>
     <ID>CyclomaticComplexMethod:GoogleBookPlatformAdapter.kt$GoogleBookPlatformAdapter$private fun applyWallpaperLocked( record: WallpaperRecord, policy: LockWorkspacePolicy, targetDisplay: DisplayProfile?, dryRunPreviewOnly: Boolean, connectedDisplays: List&lt;DisplayProfile&gt;?, displayPolicy: DisplayPolicy, chosen: Boolean ): WallpaperStatus</ID>
     <ID>CyclomaticComplexMethod:ImageEvaluator.kt$ImageEvaluator$fun evaluateRgbGrid( imageWidth: Int, imageHeight: Int, rgbGrid: IntArray, gridWidth: Int, gridHeight: Int, display: DisplayProfile, allowBlurredFrameFill: Boolean = false ): ImageEvaluationResult</ID>
@@ -58,12 +57,10 @@
     <ID>LoopWithTooManyJumpStatements:NasaLibrarySourceAdapter.kt$NasaLibrarySourceAdapter$for</ID>
     <ID>LoopWithTooManyJumpStatements:SafetyGate.kt$SafetyGate.Companion$while</ID>
     <ID>LoopWithTooManyJumpStatements:SmkOpenSourceAdapter.kt$SmkOpenSourceAdapter$for</ID>
-    <ID>LoopWithTooManyJumpStatements:SunloomWallpaperScheduler.kt$SunloomWallpaperScheduler.Companion$for</ID>
     <ID>LoopWithTooManyJumpStatements:WikimediaFeaturedSourceAdapter.kt$WikimediaFeaturedSourceAdapter$for</ID>
     <ID>MatchingDeclarationName:AdaptiveLayout.kt$WorkspaceWidthClass</ID>
     <ID>MatchingDeclarationName:DesktopScrollbar.kt$ScrollbarThumb</ID>
     <ID>MatchingDeclarationName:TodayCanvasPane.kt$PreviewBitmapCache</ID>
-    <ID>MaxLineLength:AndroidSunloomGateway.kt$AndroidSunloomGateway$bannerMessage = context.getString(R.string.msg_applied_for, record.title, record.evaluation.brightnessClass.displayName, targetName)</ID>
     <ID>MaxLineLength:AndroidSunloomGateway.kt$AndroidSunloomGateway$override suspend</ID>
     <ID>MaxLineLength:AndroidSunloomGateway.kt$AndroidSunloomGateway$statusBannerMessage = context.getString(R.string.msg_disliked_and_switched_to, current.title, nextState.currentWallpaper?.title ?: context.getString(R.string.msg_next_wallpaper_fallback))</ID>
     <ID>MaxLineLength:AndroidSunloomGateway.kt$AndroidSunloomGateway$val current = repo.getWallpaperById(recordId) ?: return@withGatewayIo buildSnapshot(repo, context.getString(R.string.msg_wallpaper_not_found))</ID>
@@ -71,17 +68,11 @@
     <ID>MaxLineLength:AndroidSunloomGateway.kt$AndroidSunloomGateway$val verb = if (nextFav) context.getString(R.string.msg_added_to_favorites, current.title) else context.getString(R.string.msg_removed_from_favorites, current.title)</ID>
     <ID>MaxLineLength:BundledSeedSourceAdapter.kt$BundledSeedSourceAdapter.Companion$description = "Soft blush and fresh-green daylight washes suggesting a blossoming orchard, with calm open sky for legibility."</ID>
     <ID>MaxLineLength:DiagnosticsPane.kt$Text(stringResource(R.string.internal_storage_display_diagnostics), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())</ID>
-    <ID>MaxLineLength:DiagnosticsPane.kt$label = { Text(if (mb &gt;= 1024L) "${mb / 1024L} GB cap" else "$mb MB cap") }</ID>
-    <ID>MaxLineLength:DiagnosticsPane.kt$text = "Display: ${disp.name} (${disp.resolutionLabel}, ${"%.2f".format(disp.aspectRatio)}:1, ${disp.densityDpi} dpi)"</ID>
-    <ID>MaxLineLength:DiagnosticsPane.kt$text = "Reserve: ${uiState.lightReserveCount} Light + ${uiState.darkReserveCount} Dark (${uiState.disabledReserveCount} disabled) • Cache Used: ${"%.1f".format(usedMb)} MB / ${"%.0f".format(maxMb)} MB cap"</ID>
-    <ID>MaxLineLength:DiagnosticsPane.kt$val base = "${row.sourceName}: ${row.total} $noun (${row.light} Light, ${row.dark} Dark, ${row.balanced} Balanced), ${row.unseen} unseen"</ID>
     <ID>MaxLineLength:DisplaysAndSchedulePane.kt$Text(stringResource(R.string.blurred_frame_fill_for_smaller_images), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)</ID>
     <ID>MaxLineLength:DisplaysAndSchedulePane.kt$Text(stringResource(R.string.display_preferences), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())</ID>
     <ID>MaxLineLength:DisplaysAndSchedulePane.kt$Text(stringResource(R.string.schedule), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())</ID>
     <ID>MaxLineLength:DisplaysAndSchedulePane.kt$label = { Text(stringResource(R.string.custom_coordinates)) }</ID>
     <ID>MaxLineLength:DisplaysAndSchedulePane.kt$onCheckedChange = onToggleBlurredFill</ID>
-    <ID>MaxLineLength:DisplaysAndSchedulePane.kt$text = "$roleTag: ${disp.name} (${disp.resolutionLabel}, ${"%.2f".format(disp.aspectRatio)}:1 • $ppiLabel • ${disp.qualityTier.shortLabel})"</ID>
-    <ID>MaxLineLength:DisplaysAndSchedulePane.kt$text = "Transition hours (Daytime ${uiState.preferences.fixedLightHour}:00 • Evening ${uiState.preferences.fixedDarkHour}:00)"</ID>
     <ID>MaxLineLength:ImageEvaluator.kt$ImageEvaluator$"${coveragePct}% native pixel coverage (${cropRect.width} × ${cropRect.height} crop for ${display.resolutionLabel}; passes &gt;= 65% high-DPI floor)."</ID>
     <ID>MaxLineLength:ImageEvaluator.kt$ImageEvaluator$"${coveragePct}% native pixel coverage (${cropRect.width} × ${cropRect.height} crop for ${display.resolutionLabel}; passes &gt;= 80% mid-PPI floor)."</ID>
     <ID>MaxLineLength:ImageEvaluator.kt$ImageEvaluator$"${coveragePct}% native pixel coverage (${cropRect.width} × ${cropRect.height} crop for ${display.resolutionLabel}; passes &gt;= 98% native floor)."</ID>
@@ -99,9 +90,7 @@
     <ID>MaxLineLength:SourcesAndCategoriesPane.kt$Text(stringResource(R.string.pause_downloads_on_battery_saver), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)</ID>
     <ID>MaxLineLength:SourcesAndCategoriesPane.kt$Text(stringResource(R.string.unmetered_wi_fi_or_ethernet_only), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)</ID>
     <ID>MaxLineLength:SourcesAndCategoriesPane.kt$Text(stringResource(R.string.wallpaper_sources), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())</ID>
-    <ID>MaxLineLength:SourcesAndCategoriesPane.kt$modifier = Modifier.desktopControl(RoundedCornerShape(50)).switchLabel(stringResource(R.string.pause_downloads_on_battery_saver)).testTag("defer_battery_saver_switch")</ID>
     <ID>MaxLineLength:SourcesAndCategoriesPane.kt$onCheckedChange = onToggleWifiOnly</ID>
-    <ID>MaxLineLength:SourcesAndCategoriesPane.kt$onCheckedChange = { onToggleSource(id) }</ID>
     <ID>MaxLineLength:SunloomIcons.kt$SunloomIcons$moveTo(14f, 19f)</ID>
     <ID>MaxLineLength:SunloomIcons.kt$SunloomIcons$moveTo(14f, 5f)</ID>
     <ID>MaxLineLength:SunloomIcons.kt$SunloomIcons$moveTo(16f, 8f)</ID>
@@ -110,9 +99,7 @@
     <ID>MaxLineLength:SunloomIcons.kt$SunloomIcons$moveTo(5f, 16f)</ID>
     <ID>MaxLineLength:SunloomIcons.kt$SunloomIcons$moveTo(7f, 14f)</ID>
     <ID>MaxLineLength:SunloomIcons.kt$SunloomIcons$moveTo(8f, 8f)</ID>
-    <ID>MaxLineLength:SunloomScreens.kt$OutlinedButton</ID>
     <ID>MaxLineLength:SunloomScreens.kt$if (uiState.preferences.isPaused) stringResource(R.string.resume_automatic_scheduling) else stringResource(R.string.pause_automatic_scheduling)</ID>
-    <ID>MaxLineLength:TodayCanvasPane.kt$"Cropped without stretching (${current.provenance.originalWidth} × ${current.provenance.originalHeight} → ${current.provenance.renditionWidth} × ${current.provenance.renditionHeight})"</ID>
     <ID>MaxLineLength:TodayCanvasPane.kt$)</ID>
     <ID>MaxLineLength:TodayCanvasPane.kt$ContextMenuItem(stringResource(R.string.previous_wallpaper), "ctx_previous") { dismiss(); onPreviousWallpaper() }</ID>
     <ID>MaxLineLength:TodayCanvasPane.kt$ContextMenuItem(stringResource(R.string.restore_original_wallpaper), "ctx_restore") { dismiss(); onRestoreOriginal() }</ID>
@@ -124,7 +111,6 @@
     <ID>MaxLineLength:TodayCanvasPane.kt$if (current?.isFavorite == true) stringResource(R.string.remove_from_favorites) else stringResource(R.string.keep_in_favorites)</ID>
     <ID>MaxLineLength:TodayCanvasPane.kt$imageVector = if (current?.isFavorite == true) SunloomIcons.Favorite else SunloomIcons.FavoriteBorder</ID>
     <ID>MaxLineLength:TodayCanvasPane.kt$imageVector = if (uiState.isApplyingWallpaper) SunloomIcons.Refresh else SunloomIcons.SkipNext</ID>
-    <ID>MaxLineLength:TodayCanvasPane.kt$text = "Legibility Zones (Clock Y=${"%.2f".format(record.evaluation.lockClockZoneLuminance)} • Shelf Y=${"%.2f".format(record.evaluation.desktopZoneLuminance)})"</ID>
     <ID>MaxLineLength:TodayCanvasPane.kt$tint = if (current?.isFavorite == true) SunloomColors.Favorite else MaterialTheme.colorScheme.onSurface</ID>
     <ID>MaxLineLength:UiStrings.kt$UiStrings.Companion.&lt;no name provided&gt;$override fun batchChecked(count: Int)</ID>
     <ID>MaxLineLength:WikimediaFeaturedSourceAdapter.kt$WikimediaFeaturedSourceAdapter$SafeCategory.ABSTRACT_PATTERNS to "filetype:bitmap incategory:\"Featured_pictures_on_Wikimedia_Commons\" mineral OR crystal OR ice OR pattern"</ID>
@@ -137,23 +123,18 @@
     <ID>MaxLineLength:WikimediaFeaturedSourceAdapter.kt$WikimediaFeaturedSourceAdapter$attributionText = "${resolvedCreator.ifBlank { "Unknown" }} (${licenseShort.ifBlank { licenseType.label }} via Wikimedia Commons)"</ID>
     <ID>NestedBlockDepth:AndroidSunloomGateway.kt$AndroidSunloomGateway$private fun promoteNonSeedOverSeedIfNeeded( repo: LocalLibraryRepository, prefs: UserPreferences, targetDisplay: DisplayProfile? = platformAdapter.getPrimaryOrSharpestDisplayOrNull(), connectedDisplays: List&lt;DisplayProfile&gt; = platformAdapter.getConnectedDisplays() )</ID>
     <ID>NestedBlockDepth:AndroidSunloomGateway.kt$AndroidSunloomGateway$private fun reconcileActiveWallpaperForDisplay( repo: LocalLibraryRepository, display: DisplayProfile, connectedDisplays: List&lt;DisplayProfile&gt;, prefs: UserPreferences, activeBeforeInvalidation: String? = repo.getCurrentWallpaperId() ): Boolean</ID>
-    <ID>NestedBlockDepth:ArtInstituteCc0SourceAdapter.kt$ArtInstituteCc0SourceAdapter$fun parseResponse( jsonText: String, category: SafeCategory = SafeCategory.SCENIC_FINE_ART ): List&lt;CandidateAsset&gt;</ID>
-    <ID>NestedBlockDepth:ClevelandMuseumCc0SourceAdapter.kt$ClevelandMuseumCc0SourceAdapter$fun parseResponse( jsonText: String, targetCategory: SafeCategory = SafeCategory.SCENIC_FINE_ART, targetWidthPx: Int = 2560 ): List&lt;CandidateAsset&gt;</ID>
     <ID>NestedBlockDepth:CropRenderer.kt$CropRenderer$private fun computeImportanceGrid(rgbGrid: IntArray, gridWidth: Int, gridHeight: Int): DoubleArray</ID>
     <ID>NestedBlockDepth:GoogleBookPlatformAdapter.kt$GoogleBookPlatformAdapter$private fun boxBlurAndDarkenInPlace(bmp: Bitmap, radius: Int, darkenFactor: Float)</ID>
     <ID>NestedBlockDepth:GridAverager.kt$GridAverager$fun average( width: Int, height: Int, gridW: Int, gridH: Int, readRow: (y: Int, into: IntArray) -&gt; Unit ): IntArray</ID>
     <ID>NestedBlockDepth:ImageEvaluator.kt$ImageEvaluator$fun evaluateRgbGrid( imageWidth: Int, imageHeight: Int, rgbGrid: IntArray, gridWidth: Int, gridHeight: Int, display: DisplayProfile, allowBlurredFrameFill: Boolean = false ): ImageEvaluationResult</ID>
     <ID>NestedBlockDepth:NasaLibrarySourceAdapter.kt$NasaLibrarySourceAdapter$fun parseResponse( jsonText: String, defaultCategory: SafeCategory = SafeCategory.SPACE_ASTRONOMY ): List&lt;CandidateAsset&gt;</ID>
     <ID>NestedBlockDepth:SafetyGate.kt$SafetyGate.Companion$fun inspectImageHeaderBounds(bytes: ByteArray): ImageHeaderBounds?</ID>
-    <ID>NestedBlockDepth:SimpleJson.kt$SimpleJson.StrictParser$private fun parseString(): String</ID>
     <ID>NestedBlockDepth:WallpaperExporter.kt$WallpaperExporter$fun writeImage(record: WallpaperRecord, target: Uri): Boolean</ID>
     <ID>NestedBlockDepth:WallpaperSourceAdapter.kt$DefaultHttpsClient$private fun &lt;T&gt; executeFollowingValidatedRedirects( initialUrl: String, scopeSourceId: String? = null, acceptHeader: String, ifNoneMatch: String? = null, ifModifiedSince: String? = null, track: (HttpURLConnection) -&gt; Unit = {}, reader: (HttpURLConnection, Int) -&gt; T ): T</ID>
     <ID>SpreadOperator:ReserveAndHistoryPane.kt$(it.anchorId, *it.selected.toTypedArray())</ID>
     <ID>TooGenericExceptionCaught:GoogleBookPlatformAdapter.kt$DefaultSystemWallpaperGateway$e: Throwable</ID>
     <ID>TopLevelPropertyNaming:DesktopScrollbar.kt$private const val ScrollbarActiveAlpha = 0.9f</ID>
     <ID>TopLevelPropertyNaming:DesktopScrollbar.kt$private const val ScrollbarIdleAlpha = 0.4f</ID>
-    <ID>TopLevelPropertyNaming:TodayCanvasPane.kt$internal const val HostRestrictedTooltip = "Unavailable: system wallpaper changes are restricted on this device"</ID>
-    <ID>TopLevelPropertyNaming:TodayCanvasPane.kt$internal const val HostRestrictionMessage = "System wallpaper changes are restricted by this device's host environment. " + "You can still browse and preview wallpapers in your reserve."</ID>
     <ID>UnusedParameter:DisplaysAndSchedulePane.kt$onToggleBatterySaverDeferral: (Boolean) -&gt; Unit</ID>
     <ID>UnusedParameter:ReserveAndHistoryPane.kt$columns: Int</ID>
     <ID>UnusedParameter:ReserveAndHistoryPane.kt$index: Int</ID>
@@ -162,25 +143,5 @@
     <ID>UseCheckOrError:WallpaperSourceAdapter.kt$DefaultHttpsClient$throw IllegalStateException("HTTP $code redirect missing Location header from $currentUrl")</ID>
     <ID>UseCheckOrError:WallpaperSourceAdapter.kt$DefaultHttpsClient$throw IllegalStateException("Redirect loop terminated unexpectedly for $initialUrl")</ID>
     <ID>UseCheckOrError:WallpaperSourceAdapter.kt$DefaultHttpsClient$throw IllegalStateException("Unexpected HTML Content-Type '$contentType' when downloading image asset")</ID>
-    <ID>UseRequire:SimpleJson.kt$SimpleJson$throw IllegalArgumentException("JSON nesting exceeds maximum depth ($MAX_NESTING_DEPTH)")</ID>
-    <ID>UseRequire:SimpleJson.kt$SimpleJson.StrictParser$throw IllegalArgumentException("Expected '$expected' at position $pos")</ID>
-    <ID>UseRequire:SimpleJson.kt$SimpleJson.StrictParser$throw IllegalArgumentException("Expected quoted object key at $pos")</ID>
-    <ID>UseRequire:SimpleJson.kt$SimpleJson.StrictParser$throw IllegalArgumentException("Invalid null literal at $pos")</ID>
-    <ID>UseRequire:SimpleJson.kt$SimpleJson.StrictParser$throw IllegalArgumentException("Invalid number literal at $start")</ID>
-    <ID>UseRequire:SimpleJson.kt$SimpleJson.StrictParser$throw IllegalArgumentException("Invalid unicode escape at $pos")</ID>
-    <ID>UseRequire:SimpleJson.kt$SimpleJson.StrictParser$throw IllegalArgumentException("JSON nesting exceeds maximum depth ($MAX_NESTING_DEPTH)")</ID>
-    <ID>UseRequire:SimpleJson.kt$SimpleJson.StrictParser$throw IllegalArgumentException("Trailing comma in JSON array at $pos")</ID>
-    <ID>UseRequire:SimpleJson.kt$SimpleJson.StrictParser$throw IllegalArgumentException("Trailing comma in JSON object at $pos")</ID>
-    <ID>UseRequire:SimpleJson.kt$SimpleJson.StrictParser$throw IllegalArgumentException("Unclosed JSON array")</ID>
-    <ID>UseRequire:SimpleJson.kt$SimpleJson.StrictParser$throw IllegalArgumentException("Unclosed JSON object")</ID>
-    <ID>UseRequire:SimpleJson.kt$SimpleJson.StrictParser$throw IllegalArgumentException("Unescaped control character in JSON string")</ID>
-    <ID>UseRequire:SimpleJson.kt$SimpleJson.StrictParser$throw IllegalArgumentException("Unexpected end of JSON input")</ID>
-    <ID>UseRequire:SimpleJson.kt$SimpleJson.StrictParser$throw IllegalArgumentException("Unexpected trailing characters at position $pos")</ID>
-    <ID>UseRequire:SimpleJson.kt$SimpleJson.StrictParser$throw IllegalArgumentException("Unterminated JSON string")</ID>
-    <ID>UseRequire:SimpleJson.kt$SimpleJson.StrictParser$throw IllegalArgumentException("Unterminated escape sequence")</ID>
-    <ID>UseRequire:UserImportPipeline.kt$UserImportPipeline$throw IllegalArgumentException("File exceeds maximum payload size.")</ID>
-    <ID>UseRequire:WallpaperSourceAdapter.kt$DefaultHttpsClient$throw IllegalArgumentException("Asset Content-Length ($contentLength bytes) exceeds maximum ($maxBytes bytes)")</ID>
-    <ID>UseRequire:WallpaperSourceAdapter.kt$DefaultHttpsClient$throw IllegalArgumentException("JSON payload Content-Length ($contentLength) exceeds limit ($MAX_TEXT_BYTES)")</ID>
-    <ID>UseRequire:WallpaperSourceAdapter.kt$DefaultHttpsClient.Companion$throw IllegalArgumentException("JSON payload exceeds limit ($maxChars)")</ID>
   </CurrentIssues>
 </SmellBaseline>

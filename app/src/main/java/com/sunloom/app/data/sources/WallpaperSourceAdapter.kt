@@ -205,9 +205,7 @@ class DefaultHttpsClient(
                 return@executeFollowingValidatedRedirects cached.body
             }
             val contentLength = conn.contentLengthLong
-            if (contentLength > MAX_TEXT_BYTES) {
-                throw IllegalArgumentException("JSON payload Content-Length ($contentLength) exceeds limit ($MAX_TEXT_BYTES)")
-            }
+            require(contentLength <= MAX_TEXT_BYTES) { "JSON payload Content-Length ($contentLength) exceeds limit ($MAX_TEXT_BYTES)" }
             val text = conn.inputStream.bufferedReader(Charsets.UTF_8).use {
                 readTextBounded(it, MAX_TEXT_BYTES, deadlineNanos = deadline)
             }
@@ -264,9 +262,7 @@ class DefaultHttpsClient(
             track = { active.set(it) }
         ) { conn, _ ->
             val contentLength = conn.contentLengthLong
-            if (contentLength > maxBytes) {
-                throw IllegalArgumentException("Asset Content-Length ($contentLength bytes) exceeds maximum ($maxBytes bytes)")
-            }
+            require(contentLength <= maxBytes) { "Asset Content-Length ($contentLength bytes) exceeds maximum ($maxBytes bytes)" }
             val contentType = conn.contentType?.lowercase(Locale.ROOT).orEmpty()
             if (contentType.startsWith("text/html") || contentType.startsWith("application/xhtml")) {
                 throw IllegalStateException("Unexpected HTML Content-Type '$contentType' when downloading image asset")
@@ -371,9 +367,7 @@ class DefaultHttpsClient(
                 if (n < 0) break
                 if (nanoClock() > deadlineNanos) throw java.io.IOException("Download exceeded its deadline")
                 out.append(buf, 0, n)
-                if (out.length > maxChars) {
-                    throw IllegalArgumentException("JSON payload exceeds limit ($maxChars)")
-                }
+                require(out.length <= maxChars) { "JSON payload exceeds limit ($maxChars)" }
             }
             return out.toString()
         }

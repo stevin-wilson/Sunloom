@@ -105,8 +105,7 @@ class ClevelandMuseumCc0SourceAdapter(
                 continue
             }
 
-            val title = item.str("title", "").trim()
-            if (title.isEmpty() || title == "null") continue
+            val title = item.str("title").cleanedOrNull() ?: continue
 
             val type = item.str("type", "").trim()
             val department = item.str("department", "").trim()
@@ -161,21 +160,12 @@ class ClevelandMuseumCc0SourceAdapter(
             // Note: Do not copy combined department strings like "American Painting and Sculpture"
             // into tags when `type` is "Painting", so Tier 2 "sculpture" doesn't false-reject paintings.
             val tags = ArrayList<String>()
-            if (type.isNotBlank() && type != "null") tags.add(type)
-            val collection = item.str("collection", "").trim()
-            if (collection.isNotBlank() && collection != "null") tags.add(collection)
-            val technique = item.str("technique", "").trim()
-            if (technique.isNotBlank() && technique != "null") tags.add(technique)
-            val cultureArr = item.arr("culture")
-            if (cultureArr != null) {
-                for (c in 0 until cultureArr.size) {
-                    val cult = cultureArr.str(c, "").trim()
-                    if (cult.isNotBlank() && cult != "null") tags.add(cult)
-                }
-            }
+            type.cleanedOrNull()?.let(tags::add)
+            item.str("collection").cleanedOrNull()?.let(tags::add)
+            item.str("technique").cleanedOrNull()?.let(tags::add)
+            item.arr("culture")?.let { tags.addAll(it.cleanStrings()) }
 
-            val tombstone = item.str("tombstone", "").trim()
-            val description = tombstone.takeIf { it.isNotBlank() && it != "null" }
+            val description = item.str("tombstone").cleanedOrNull()
                 ?: "$title — $creator (Cleveland Museum of Art Open Access CC0)"
 
             val resolvedCategory = when {
@@ -225,10 +215,7 @@ class ClevelandMuseumCc0SourceAdapter(
         val creators = item.arr("creators")
         if (creators != null) {
             for (i in 0 until creators.size) {
-                val desc = creators.obj(i)?.str("description", "")?.trim().orEmpty()
-                if (desc.isNotBlank() && desc != "null") {
-                    return desc
-                }
+                creators.obj(i)?.str("description")?.cleanedOrNull()?.let { return it }
             }
         }
         return "Unknown Artist (Cleveland Museum of Art)"
