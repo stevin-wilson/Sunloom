@@ -79,6 +79,27 @@ interface SystemWallpaperGateway {
     fun isBatterySaverActive(): Boolean
 }
 
+/**
+ * Runs a wallpaper change so that a failure is a `false`, never a crash of the app or its worker: a host that refuses
+ * the change ([onHostRefused] is told), any ordinary exception, and running out of memory on a large multi-display
+ * envelope. Any other [Error] is a bug and is left to propagate.
+ */
+internal inline fun guardedWallpaperChange(onHostRefused: () -> Unit, change: () -> Boolean): Boolean {
+    return try {
+        change()
+    } catch (e: SecurityException) {
+        onHostRefused()
+        Log.w("SunloomWallpaper", "Host refused wallpaper change", e)
+        false
+    } catch (e: OutOfMemoryError) {
+        Log.w("SunloomWallpaper", "Wallpaper change ran out of memory", e)
+        false
+    } catch (e: Exception) {
+        Log.w("SunloomWallpaper", "Wallpaper change failed", e)
+        false
+    }
+}
+
 class DefaultSystemWallpaperGateway(private val context: Context) : SystemWallpaperGateway {
     companion object {
         /**
@@ -88,7 +109,6 @@ class DefaultSystemWallpaperGateway(private val context: Context) : SystemWallpa
         internal fun dataSaverRestricts(status: Int): Boolean = status == ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED
 
         internal const val PREF_OBSERVED_LOCK_SUPPORT = "observed_independent_lock_support"
-        private const val TAG = "SunloomWallpaper"
     }
 
     private val appContext = context.applicationContext
@@ -136,16 +156,8 @@ class DefaultSystemWallpaperGateway(private val context: Context) : SystemWallpa
 
     override fun applyBitmapToDestination(bitmap: Bitmap, flags: Int): Boolean {
         hostRefusedLastApply = false
-        return try {
+        return guardedWallpaperChange(onHostRefused = { hostRefusedLastApply = true }) {
             applyBitmapUnchecked(bitmap, flags)
-        } catch (e: SecurityException) {
-            hostRefusedLastApply = true
-            Log.w(TAG, "Host refused wallpaper change", e)
-            false
-        } catch (e: Throwable) {
-            // Includes OutOfMemoryError from large multi-display envelopes: a failed apply must never crash the app or worker.
-            Log.w(TAG, "Wallpaper change failed", e)
-            false
         }
     }
 
@@ -361,44 +373,15 @@ class GoogleBookPlatformAdapter(
         if (!gateway.isWallpaperSupported() || !gateway.isSetWallpaperAllowed()) {
             return WallpaperStatus.UNSUPPORTED_BY_SYSTEM
         }
-        val validConnected = connectedDisplays?.filter { it.widthPx > 0 && it.heightPx > 0 }
-        val effectiveDisplays = when {
-            !validConnected.isNullOrEmpty() -> validConnected
-            targetDisplay != null && targetDisplay.widthPx > 0 && targetDisplay.heightPx > 0 -> listOf(targetDisplay)
-            else -> return WallpaperStatus.FAILED_TEMPORARILY
-        }
+        val effectiveDisplays = usableDisplays(connectedDisplays, targetDisplay)
+            ?: return WallpaperStatus.FAILED_TEMPORARILY
         val effectiveDisplay = effectiveDisplays.maxByOrNull { it.widthPx.toLong() * it.heightPx.toLong() }
             ?: return WallpaperStatus.FAILED_TEMPORARILY
 
         if (isRefused(record, chosen)) return WallpaperStatus.FAILED_TEMPORARILY
 
-        // A chosen picture is never refused for being small: it is planned sharp when it can be, blurred when it cannot.
-        val allowBlurred = chosen || record.provenance.sourceId == SourceIds.USER_LOCAL ||
-            record.evaluation.cropRect?.usesBlurredFrameFill == true
-
-        // A chosen picture the planner cannot place (too small even for its blurred-fill floor) is not refused: it is
-        // laid out whole on a blurred frame fill, the way a user's own photo is.
-        var chosenNeedsBlurredFill = false
-        val envelopePlan: EnvelopePlan? = if (canPlanEnvelope(record)) {
-            envelopePlanner.planEnvelope(
-                sourceWidth = record.provenance.originalWidth,
-                sourceHeight = record.provenance.originalHeight,
-                focalX = record.evaluation.cropRect?.focalX ?: 0.5,
-                focalY = record.evaluation.cropRect?.focalY ?: 0.5,
-                connectedDisplays = effectiveDisplays,
-                policy = displayPolicy,
-                allowBlurredFrameFill = allowBlurred
-            ) ?: if (record.provenance.sourceId == SourceIds.USER_LOCAL) {
-                null
-            } else if (chosen) {
-                chosenNeedsBlurredFill = true
-                null
-            } else {
-                return WallpaperStatus.FAILED_TEMPORARILY
-            }
-        } else {
-            null
-        }
+        val plan = planApply(record, effectiveDisplays, displayPolicy, chosen) ?: return WallpaperStatus.FAILED_TEMPORARILY
+        val envelopePlan = plan.envelope
 
         val file = File(record.localFilePath)
         if (!file.exists() || file.length() == 0L) {
@@ -409,45 +392,18 @@ class GoogleBookPlatformAdapter(
         val maxDecodeH = effectiveDisplays.maxOf { it.heightPx }
         val sourceBitmap = decodeBitmapBounded(
             file, maxDecodeW, maxDecodeH,
-            if (chosenNeedsBlurredFill) null else decodeTargetFor(record, envelopePlan, effectiveDisplay, effectiveDisplays)
+            if (plan.chosenNeedsBlurredFill) null else decodeTargetFor(record, envelopePlan, effectiveDisplay, effectiveDisplays)
         ) ?: return WallpaperStatus.FAILED_TEMPORARILY
 
         var preparedBitmap: Bitmap? = null
         val applied = try {
-            preparedBitmap = when {
-                // A user's picture stored as blurred fill stays blurred whatever a re-plan would now choose: it was
-                // kept whole on purpose. The planner still tells us which displays the fill must be laid out for.
-                chosenNeedsBlurredFill -> renderBlurredFrameFillBitmap(sourceBitmap, effectiveDisplay, effectiveDisplays)
-                keepsStoredBlurredFill(record) -> renderBlurredFrameFillBitmap(
-                    sourceBitmap,
-                    effectiveDisplay,
-                    envelopePlan?.satisfiedDisplays?.ifEmpty { null } ?: effectiveDisplays
-                )
-                envelopePlan != null ->
-                    prepareEnvelopeBitmap(source = sourceBitmap, plan = envelopePlan, fallbackDisplay = effectiveDisplay)
-                // A bundled seed is rendered for the whole display set (as wide as the widest and as tall as the
-                // tallest), so it is applied as stored: cropping it to the largest display's aspect would cut the
-                // height other displays need and soften them.
-                isSharedSeed(record, effectiveDisplays) -> sourceBitmap
-                else -> prepareNonStretchedBitmap(
-                    source = sourceBitmap,
-                    display = effectiveDisplay,
-                    cropRect = record.evaluation.cropRect,
-                    displays = effectiveDisplays
-                )
-            }
+            preparedBitmap = renderForApply(record, sourceBitmap, plan, effectiveDisplay, effectiveDisplays)
 
             // The prepared bitmap is all that setBitmap needs, and handing it over allocates a lot (it is encoded):
             // release the decoded source first so the two are never held together at that peak.
             if (preparedBitmap !== sourceBitmap) sourceBitmap.recycle()
 
-            val flags = when (policy) {
-                LockWorkspacePolicy.SAME_ON_BOTH -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
-                LockWorkspacePolicy.WORKSPACE_ONLY -> WallpaperManager.FLAG_SYSTEM
-                LockWorkspacePolicy.LOCK_ONLY -> WallpaperManager.FLAG_LOCK
-            }
-
-            if (dryRunPreviewOnly) true else gateway.applyBitmapToDestination(preparedBitmap, flags)
+            if (dryRunPreviewOnly) true else gateway.applyBitmapToDestination(preparedBitmap, flagsFor(policy))
         } finally {
             // Always release native pixel memory, even if cropping or setBitmap throws.
             if (preparedBitmap != null && preparedBitmap !== sourceBitmap) preparedBitmap.recycle()
@@ -461,6 +417,88 @@ class GoogleBookPlatformAdapter(
             gateway.lastApplyRefusedByHost() -> WallpaperStatus.UNSUPPORTED_BY_SYSTEM
             else -> WallpaperStatus.FAILED_TEMPORARILY
         }
+    }
+
+    /** The displays with a real size, or the target display when none is connected; null when there is nothing to draw for. */
+    private fun usableDisplays(connectedDisplays: List<DisplayProfile>?, targetDisplay: DisplayProfile?): List<DisplayProfile>? {
+        val validConnected = connectedDisplays?.filter { it.widthPx > 0 && it.heightPx > 0 }
+        return when {
+            !validConnected.isNullOrEmpty() -> validConnected
+            targetDisplay != null && targetDisplay.widthPx > 0 && targetDisplay.heightPx > 0 -> listOf(targetDisplay)
+            else -> null
+        }
+    }
+
+    /** How the picture will be laid out: the planned envelope, or none (and whether it must go whole on a blurred frame). */
+    private class ApplyPlan(val envelope: EnvelopePlan?, val chosenNeedsBlurredFill: Boolean)
+
+    /** The plan for [record], or null when the planner cannot place it and it may be refused. */
+    private fun planApply(
+        record: WallpaperRecord,
+        effectiveDisplays: List<DisplayProfile>,
+        displayPolicy: DisplayPolicy,
+        chosen: Boolean
+    ): ApplyPlan? {
+        // A chosen picture is never refused for being small: it is planned sharp when it can be, blurred when it cannot.
+        val allowBlurred = chosen || record.provenance.sourceId == SourceIds.USER_LOCAL ||
+            record.evaluation.cropRect?.usesBlurredFrameFill == true
+        if (!canPlanEnvelope(record)) return ApplyPlan(envelope = null, chosenNeedsBlurredFill = false)
+
+        val planned = envelopePlanner.planEnvelope(
+            sourceWidth = record.provenance.originalWidth,
+            sourceHeight = record.provenance.originalHeight,
+            focalX = record.evaluation.cropRect?.focalX ?: 0.5,
+            focalY = record.evaluation.cropRect?.focalY ?: 0.5,
+            connectedDisplays = effectiveDisplays,
+            policy = displayPolicy,
+            allowBlurredFrameFill = allowBlurred
+        )
+        return when {
+            planned != null -> ApplyPlan(planned, chosenNeedsBlurredFill = false)
+            record.provenance.sourceId == SourceIds.USER_LOCAL -> ApplyPlan(null, chosenNeedsBlurredFill = false)
+            // A chosen picture the planner cannot place (too small even for its blurred-fill floor) is not refused: it
+            // is laid out whole on a blurred frame fill, the way a user's own photo is.
+            chosen -> ApplyPlan(null, chosenNeedsBlurredFill = true)
+            else -> null
+        }
+    }
+
+    private fun renderForApply(
+        record: WallpaperRecord,
+        sourceBitmap: Bitmap,
+        plan: ApplyPlan,
+        effectiveDisplay: DisplayProfile,
+        effectiveDisplays: List<DisplayProfile>
+    ): Bitmap {
+        val envelopePlan = plan.envelope
+        return when {
+            // A user's picture stored as blurred fill stays blurred whatever a re-plan would now choose: it was
+            // kept whole on purpose. The planner still tells us which displays the fill must be laid out for.
+            plan.chosenNeedsBlurredFill -> renderBlurredFrameFillBitmap(sourceBitmap, effectiveDisplay, effectiveDisplays)
+            keepsStoredBlurredFill(record) -> renderBlurredFrameFillBitmap(
+                sourceBitmap,
+                effectiveDisplay,
+                envelopePlan?.satisfiedDisplays?.ifEmpty { null } ?: effectiveDisplays
+            )
+            envelopePlan != null ->
+                prepareEnvelopeBitmap(source = sourceBitmap, plan = envelopePlan, fallbackDisplay = effectiveDisplay)
+            // A bundled seed is rendered for the whole display set (as wide as the widest and as tall as the
+            // tallest), so it is applied as stored: cropping it to the largest display's aspect would cut the
+            // height other displays need and soften them.
+            isSharedSeed(record, effectiveDisplays) -> sourceBitmap
+            else -> prepareNonStretchedBitmap(
+                source = sourceBitmap,
+                display = effectiveDisplay,
+                cropRect = record.evaluation.cropRect,
+                displays = effectiveDisplays
+            )
+        }
+    }
+
+    private fun flagsFor(policy: LockWorkspacePolicy): Int = when (policy) {
+        LockWorkspacePolicy.SAME_ON_BOTH -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
+        LockWorkspacePolicy.WORKSPACE_ONLY -> WallpaperManager.FLAG_SYSTEM
+        LockWorkspacePolicy.LOCK_ONLY -> WallpaperManager.FLAG_LOCK
     }
 
     /**

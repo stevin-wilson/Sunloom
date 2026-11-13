@@ -130,33 +130,13 @@ internal fun ReserveAndHistoryPane(
         modifier = Modifier
             .fillMaxSize()
             .onKeyEvent { event ->
-                // Esc drops the selection; Ctrl+A selects everything (Keyboard_Exit, Input_Combinations).
-                // Esc is consumed on key-down: an unconsumed Esc key-down makes Compose clear focus, so
-                // the matching key-up would never reach this pane.
-                when {
-                    event.key == Key.Escape && selection.selected.isNotEmpty() -> {
-                        if (event.type == KeyEventType.KeyDown) selection = SelectionState()
-                        true
-                    }
-                    // With a selection, Delete/Backspace removes the selection (one Undo) instead of bubbling to the
-                    // workspace accelerator, which would permanently reject the unrelated current wallpaper.
-                    (event.key == Key.Delete || event.key == Key.Backspace) && selection.selected.isNotEmpty() &&
-                        !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed -> {
-                        // The workspace accelerator fires on key-up, so act (and consume) on key-up too; the
-                        // key-down is consumed so it is not treated as an unhandled key.
-                        if (event.type == KeyEventType.KeyUp) {
-                            val ids = selection.selected.toList()
-                            selection = SelectionState()
-                            actions.removeMany(ids)
-                        }
-                        true
-                    }
-                    event.type == KeyEventType.KeyUp && event.key == Key.A && event.isCtrlPressed && order.isNotEmpty() -> {
-                        selection = SelectionState(order.toSet(), order.first())
-                        true
-                    }
-                    else -> false
-                }
+                handleReserveKey(
+                    event = event,
+                    selection = selection,
+                    order = order,
+                    onSelectionChange = { selection = it },
+                    onRemoveMany = { actions.removeMany(it) }
+                )
             }
     ) {
         val columns = if (gridView) {
@@ -281,6 +261,45 @@ internal fun ReserveAndHistoryPane(
         uiState.libraryWallpapers.firstOrNull { it.id == id }?.let { record ->
             WallpaperAboutDialog(record = record, onDismiss = { aboutRecordId = null })
         }
+    }
+}
+
+/**
+ * Keys the Reserve pane handles itself: Esc drops the selection, Delete/Backspace removes it, Ctrl+A selects
+ * everything (Keyboard_Exit, Input_Combinations). Returns whether the event was consumed.
+ */
+private fun handleReserveKey(
+    event: KeyEvent,
+    selection: SelectionState,
+    order: List<String>,
+    onSelectionChange: (SelectionState) -> Unit,
+    onRemoveMany: (List<String>) -> Unit
+): Boolean {
+    // Esc is consumed on key-down: an unconsumed Esc key-down makes Compose clear focus, so
+    // the matching key-up would never reach this pane.
+    return when {
+        event.key == Key.Escape && selection.selected.isNotEmpty() -> {
+            if (event.type == KeyEventType.KeyDown) onSelectionChange(SelectionState())
+            true
+        }
+        // With a selection, Delete/Backspace removes the selection (one Undo) instead of bubbling to the
+        // workspace accelerator, which would permanently reject the unrelated current wallpaper.
+        (event.key == Key.Delete || event.key == Key.Backspace) && selection.selected.isNotEmpty() &&
+            !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed -> {
+            // The workspace accelerator fires on key-up, so act (and consume) on key-up too; the
+            // key-down is consumed so it is not treated as an unhandled key.
+            if (event.type == KeyEventType.KeyUp) {
+                val ids = selection.selected.toList()
+                onSelectionChange(SelectionState())
+                onRemoveMany(ids)
+            }
+            true
+        }
+        event.type == KeyEventType.KeyUp && event.key == Key.A && event.isCtrlPressed && order.isNotEmpty() -> {
+            onSelectionChange(SelectionState(order.toSet(), order.first()))
+            true
+        }
+        else -> false
     }
 }
 
@@ -466,63 +485,12 @@ private fun ReserveItemCard(
             .testTag("reserve_card_${item.id}"),
         focusShape = shape,
         onActivate = if (!isActive && !restricted) ({ onApplySpecific(item.id) }) else null,
-        onExtraKeyEvent = { event ->
-            if (event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) {
-                false
-            } else {
-                val move = navMoveFor(event.key)
-                when {
-                    move != null -> {
-                        if (event.type == KeyEventType.KeyUp) onNavigate(move)
-                        true
-                    }
-                    event.key == Key.Spacebar -> {
-                        if (event.type == KeyEventType.KeyUp) onToggleSelected()
-                        true
-                    }
-                    else -> false
-                }
-            }
-        },
+        onExtraKeyEvent = { event -> handleReserveCardKey(event, onNavigate, onToggleSelected) },
         menuContent = { dismiss ->
-            if (!isActive && !restricted) {
-                ContextMenuItem(stringResource(R.string.apply_wallpaper_now), "ctx_apply_${item.id}") {
-                    dismiss()
-                    onApplySpecific(item.id)
-                }
-            }
-            ContextMenuItem(
-                if (item.isFavorite) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
-                "ctx_favorite_${item.id}"
-            ) {
-                dismiss()
-                onToggleKeepSpecific(item.id)
-            }
-            ContextMenuItem(stringResource(R.string.use_as_daytime_wallpaper), "ctx_use_daytime_${item.id}") {
-                dismiss()
-                actions.setChosen(ChosenSlot.DAYTIME, item.id)
-            }
-            ContextMenuItem(stringResource(R.string.use_as_evening_wallpaper), "ctx_use_evening_${item.id}") {
-                dismiss()
-                actions.setChosen(ChosenSlot.EVENING, item.id)
-            }
-            ContextMenuItem(stringResource(R.string.about_this_image), "ctx_about_${item.id}") {
-                dismiss()
-                onShowAbout()
-            }
-            ContextMenuItem(stringResource(R.string.copy_attribution), "ctx_copy_attribution_${item.id}") {
-                dismiss()
-                actions.copyAttribution(item)
-            }
-            ContextMenuItem(stringResource(R.string.save_wallpaper_as), "ctx_save_as_${item.id}") {
-                dismiss()
-                actions.saveAs(item)
-            }
-            HorizontalDivider()
-            ContextMenuItem(stringResource(R.string.remove_from_reserve), "ctx_delete_${item.id}", destructive = true) {
-                dismiss()
-                onDeleteFromReserve(item.id)
-            }
+            ReserveItemMenuItems(
+                dismiss, item, isActive, restricted,
+                onApplySpecific, onDeleteFromReserve, onToggleKeepSpecific, onShowAbout
+            )
         }
     ) {
         val container = if (selected) {
@@ -543,41 +511,127 @@ private fun ReserveItemCard(
                     }
                 )
         ) {
-            if (grid) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(Spacing.m),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.s)
-                ) {
-                    WallpaperPreviewSurface(
-                        record = item,
-                        showLegibilityZones = false,
-                        modifier = Modifier.fillMaxWidth().aspectRatio(thumbnailAspect),
-                        maxDecodeWidth = 640,
-                        maxDecodeHeight = 640
-                    )
-                    ReserveItemText(item, isActive)
-                    ReserveItemActions(item, isActive, restricted, onApplySpecific, onDeleteFromReserve, onToggleKeepSpecific)
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(Spacing.m),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.m),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    WallpaperPreviewSurface(
-                        record = item,
-                        showLegibilityZones = false,
-                        modifier = Modifier.width(120.dp).aspectRatio(thumbnailAspect),
-                        maxDecodeWidth = 480,
-                        maxDecodeHeight = 480
-                    )
-                    Column(modifier = Modifier.weight(1f)) { ReserveItemText(item, isActive) }
-                    ReserveItemActions(item, isActive, restricted, onApplySpecific, onDeleteFromReserve, onToggleKeepSpecific)
-                }
-            }
+            ReserveCardContent(
+                item, isActive, grid, thumbnailAspect, restricted,
+                onApplySpecific, onDeleteFromReserve, onToggleKeepSpecific
+            )
         }
     }
     }
+}
+
+@Composable
+private fun ReserveItemMenuItems(
+    dismiss: () -> Unit,
+    item: WallpaperRecord,
+    isActive: Boolean,
+    restricted: Boolean,
+    onApplySpecific: (String) -> Unit,
+    onDeleteFromReserve: (String) -> Unit,
+    onToggleKeepSpecific: (String) -> Unit,
+    onShowAbout: () -> Unit
+) {
+    val actions = LocalWallpaperActions.current
+    if (!isActive && !restricted) {
+        ContextMenuItem(stringResource(R.string.apply_wallpaper_now), "ctx_apply_${item.id}") {
+            dismiss()
+            onApplySpecific(item.id)
+        }
+    }
+    ContextMenuItem(
+        if (item.isFavorite) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
+        "ctx_favorite_${item.id}"
+    ) {
+        dismiss()
+        onToggleKeepSpecific(item.id)
+    }
+    ContextMenuItem(stringResource(R.string.use_as_daytime_wallpaper), "ctx_use_daytime_${item.id}") {
+        dismiss()
+        actions.setChosen(ChosenSlot.DAYTIME, item.id)
+    }
+    ContextMenuItem(stringResource(R.string.use_as_evening_wallpaper), "ctx_use_evening_${item.id}") {
+        dismiss()
+        actions.setChosen(ChosenSlot.EVENING, item.id)
+    }
+    ContextMenuItem(stringResource(R.string.about_this_image), "ctx_about_${item.id}") {
+        dismiss()
+        onShowAbout()
+    }
+    ContextMenuItem(stringResource(R.string.copy_attribution), "ctx_copy_attribution_${item.id}") {
+        dismiss()
+        actions.copyAttribution(item)
+    }
+    ContextMenuItem(stringResource(R.string.save_wallpaper_as), "ctx_save_as_${item.id}") {
+        dismiss()
+        actions.saveAs(item)
+    }
+    HorizontalDivider()
+    ContextMenuItem(stringResource(R.string.remove_from_reserve), "ctx_delete_${item.id}", destructive = true) {
+        dismiss()
+        onDeleteFromReserve(item.id)
+    }
+}
+
+/** Arrow/Home/End move between cards and Space toggles selection; Ctrl/Alt/Meta combinations are left alone. */
+private fun handleReserveCardKey(event: KeyEvent, onNavigate: (NavMove) -> Unit, onToggleSelected: () -> Unit): Boolean {
+    if (event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) return false
+    val move = navMoveFor(event.key)
+    return when {
+        move != null -> {
+            if (event.type == KeyEventType.KeyUp) onNavigate(move)
+            true
+        }
+        event.key == Key.Spacebar -> {
+            if (event.type == KeyEventType.KeyUp) onToggleSelected()
+            true
+        }
+        else -> false
+    }
+}
+
+@Composable
+private fun ReserveCardContent(
+    item: WallpaperRecord,
+    isActive: Boolean,
+    grid: Boolean,
+    thumbnailAspect: Float,
+    restricted: Boolean,
+    onApplySpecific: (String) -> Unit,
+    onDeleteFromReserve: (String) -> Unit,
+    onToggleKeepSpecific: (String) -> Unit
+) {
+if (grid) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(Spacing.m),
+        verticalArrangement = Arrangement.spacedBy(Spacing.s)
+    ) {
+        WallpaperPreviewSurface(
+            record = item,
+            showLegibilityZones = false,
+            modifier = Modifier.fillMaxWidth().aspectRatio(thumbnailAspect),
+            maxDecodeWidth = 640,
+            maxDecodeHeight = 640
+        )
+        ReserveItemText(item, isActive)
+        ReserveItemActions(item, isActive, restricted, onApplySpecific, onDeleteFromReserve, onToggleKeepSpecific)
+    }
+} else {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(Spacing.m),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.m),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        WallpaperPreviewSurface(
+            record = item,
+            showLegibilityZones = false,
+            modifier = Modifier.width(120.dp).aspectRatio(thumbnailAspect),
+            maxDecodeWidth = 480,
+            maxDecodeHeight = 480
+        )
+        Column(modifier = Modifier.weight(1f)) { ReserveItemText(item, isActive) }
+        ReserveItemActions(item, isActive, restricted, onApplySpecific, onDeleteFromReserve, onToggleKeepSpecific)
+    }
+}
 }
 
 @Composable
