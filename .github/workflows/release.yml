@@ -81,7 +81,7 @@ jobs:
 
       # AGP 9 writes R8's mapping as partitions in mapping.prt (a zip), not a plain mapping.txt. Archive it untouched.
       - name: Keep the R8 mapping for reading crash traces
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mapping-${{ env.versionName }}
           path: app/build/outputs/mapping/githubRelease/mapping.prt
