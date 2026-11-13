@@ -134,29 +134,7 @@ fun SunloomApp(
     val onPreviousWallpaper = actions.onPreviousWallpaper
     val onToggleKeep = actions.onToggleKeep
     val onRejectForever = actions.onRejectForever
-    val onTogglePause = actions.onTogglePause
-    val onRestoreOriginal = actions.onRestoreOriginal
-    val onApplySpecific = actions.onApplySpecific
-    val onToggleLegibilityOverlay = actions.onToggleLegibilityOverlay
-    val onSyncOnline = actions.onSyncOnline
-    val onToggleCategory = actions.onToggleCategory
-    val onToggleSource = actions.onToggleSource
-    val onSelectCity = actions.onSelectCity
-    val onUpdateScheduleMode = actions.onUpdateScheduleMode
-    val onUpdateLockPolicy = actions.onUpdateLockPolicy
-    val onToggleBlurredFill = actions.onToggleBlurredFill
-    val onToggleWifiOnly = actions.onToggleWifiOnly
-    val onPickLocalPhoto = actions.onPickLocalPhoto
-    val onDeleteFromReserve = actions.onDeleteFromReserve
-    val onToggleKeepSpecific = actions.onToggleKeepSpecific
-    val onUpdateFixedHours = actions.onUpdateFixedHours
-    val onUpdateChangeEvery = actions.onUpdateChangeEvery
     val onSetChosenWallpaper = actions.onSetChosenWallpaper
-    val onUpdateCustomCoordinates = actions.onUpdateCustomCoordinates
-    val onUpdateMaxCacheBytes = actions.onUpdateMaxCacheBytes
-    val onToggleBatterySaverDeferral = actions.onToggleBatterySaverDeferral
-    val onUpdateDisplayPolicy = actions.onUpdateDisplayPolicy
-    val onForgetRememberedDisplay = actions.onForgetRememberedDisplay
     val onRestoreSystemDefault = actions.onRestoreSystemDefault
     val onToggleFullscreen = actions.onToggleFullscreen
     val onDropImages = actions.onDropImages
@@ -164,12 +142,6 @@ fun SunloomApp(
     val onDeleteManyFromReserve = actions.onDeleteManyFromReserve
     val onUndoDiscard = actions.onUndoDiscard
     val onCommitDiscard = actions.onCommitDiscard
-    val onToggleAutoSwitch = actions.onToggleAutoSwitch
-    val onReopenSetup = actions.onReopenSetup
-    val onResetSunloom = actions.onResetSunloom
-    val onCopyDiagnostics = actions.onCopyDiagnostics
-    val onReportProblem = actions.onReportProblem
-    val onCheckForUpdates = actions.onCheckForUpdates
     val snackbarHostState = remember { SnackbarHostState() }
     val colorScheme = if (darkTheme) SunloomDarkPalette else SunloomLightPalette
     val shortcutGate = remember { ShortcutGate() }
@@ -399,46 +371,7 @@ fun SunloomApp(
                     )
                 }
                 else -> {
-                    DesktopWorkspaceScreen(
-                    uiState = uiState,
-                    isFullscreen = isFullscreen,
-                    onToggleFullscreen = onToggleFullscreen,
-                    onSelectTab = onSelectTab,
-                    onNextWallpaper = onNextWallpaper,
-                    onPreviousWallpaper = onPreviousWallpaper,
-                    onToggleKeep = onToggleKeep,
-                    onRequestRejectConfirm = { if (uiState.currentWallpaper != null) onRejectForever() },
-                    onTogglePause = onTogglePause,
-                    onRestoreOriginal = onRestoreOriginal,
-                    onRestoreSystemDefault = onRestoreSystemDefault,
-                    onApplySpecific = onApplySpecific,
-                    onDeleteFromReserve = onDeleteFromReserve,
-                    onToggleKeepSpecific = onToggleKeepSpecific,
-                    onToggleLegibilityOverlay = onToggleLegibilityOverlay,
-                    onSyncOnline = onSyncOnline,
-                    onToggleCategory = onToggleCategory,
-                    onToggleSource = onToggleSource,
-                    onSelectCity = onSelectCity,
-                    onUpdateScheduleMode = onUpdateScheduleMode,
-                    onUpdateLockPolicy = onUpdateLockPolicy,
-                    onToggleBlurredFill = onToggleBlurredFill,
-                    onToggleWifiOnly = onToggleWifiOnly,
-                    onPickLocalPhoto = onPickLocalPhoto,
-                    onUpdateFixedHours = onUpdateFixedHours,
-                    onUpdateChangeEvery = onUpdateChangeEvery,
-                    onSetChosenWallpaper = onSetChosenWallpaper,
-                    onUpdateCustomCoordinates = onUpdateCustomCoordinates,
-                    onUpdateMaxCacheBytes = onUpdateMaxCacheBytes,
-                    onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
-                    onUpdateDisplayPolicy = onUpdateDisplayPolicy,
-                    onForgetRememberedDisplay = onForgetRememberedDisplay,
-                    onToggleAutoSwitch = onToggleAutoSwitch,
-                    onResetSunloom = onResetSunloom,
-                    onCopyDiagnostics = onCopyDiagnostics,
-                    onReportProblem = onReportProblem,
-                    onCheckForUpdates = onCheckForUpdates,
-                    onReopenSetup = onReopenSetup
-                    )
+                    DesktopWorkspaceScreen(uiState = uiState, actions = actions, isFullscreen = isFullscreen)
                 }
             }
             SnackbarHost(
@@ -616,43 +549,8 @@ fun CityDropdownSelector(
 @Composable
 fun DesktopWorkspaceScreen(
     uiState: SunloomUiState,
-    onSelectTab: (DesktopNavTab) -> Unit,
-    onNextWallpaper: () -> Unit,
-    onPreviousWallpaper: () -> Unit,
-    onToggleKeep: () -> Unit,
-    onRequestRejectConfirm: () -> Unit,
-    onTogglePause: () -> Unit,
-    onRestoreOriginal: () -> Unit,
-    onRestoreSystemDefault: () -> Unit = onRestoreOriginal,
-    onApplySpecific: (String) -> Unit,
-    onDeleteFromReserve: (String) -> Unit = {},
-    onToggleKeepSpecific: (String) -> Unit = {},
-    onToggleLegibilityOverlay: () -> Unit,
-    onSyncOnline: () -> Unit,
-    onToggleCategory: (SafeCategory) -> Unit,
-    onToggleSource: (String) -> Unit,
-    onSelectCity: (CityCoordinates) -> Unit,
-    onUpdateScheduleMode: (ScheduleMode) -> Unit,
-    onUpdateLockPolicy: (LockWorkspacePolicy) -> Unit,
-    onToggleBlurredFill: (Boolean) -> Unit,
-    onToggleWifiOnly: (Boolean) -> Unit,
-    onPickLocalPhoto: (asBaselineRestore: Boolean) -> Unit,
-    onUpdateFixedHours: (lightHour: Int, darkHour: Int) -> Unit = { _, _ -> },
-    onUpdateChangeEvery: (hours: Int) -> Unit = {},
-    onSetChosenWallpaper: (com.sunloom.app.domain.matcher.ChosenSlot, String?) -> Unit = { _, _ -> },
-    onUpdateCustomCoordinates: (lat: Double, lon: Double, label: String) -> Unit = { _, _, _ -> },
-    onUpdateMaxCacheBytes: (Long) -> Unit = {},
-    onToggleBatterySaverDeferral: (Boolean) -> Unit = {},
-    onUpdateDisplayPolicy: (DisplayPolicy) -> Unit = {},
-    onForgetRememberedDisplay: (String) -> Unit = {},
-    isFullscreen: Boolean = false,
-    onToggleFullscreen: () -> Unit = {},
-    onToggleAutoSwitch: (Boolean) -> Unit = {},
-    onResetSunloom: () -> Unit = {},
-    onCopyDiagnostics: () -> Unit = {},
-    onReportProblem: () -> Unit = {},
-    onCheckForUpdates: () -> Unit = {},
-    onReopenSetup: () -> Unit
+    actions: SunloomActions,
+    isFullscreen: Boolean = false
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val widthClass = WorkspaceWidthClass.from(maxWidth)
@@ -664,136 +562,153 @@ fun DesktopWorkspaceScreen(
             ) {
                 TopStatusBanner(
                     uiState = uiState,
-                    onTogglePause = onTogglePause,
-                    onRetryApply = { uiState.retryApplyRecordId?.let(onApplySpecific) },
-                    onRetrySync = onSyncOnline,
-                    onApplyNow = { uiState.applyOfferRecordId?.let(onApplySpecific) }
+                    onTogglePause = actions.onTogglePause,
+                    onRetryApply = { uiState.retryApplyRecordId?.let(actions.onApplySpecific) },
+                    onRetrySync = actions.onSyncOnline,
+                    onApplyNow = { uiState.applyOfferRecordId?.let(actions.onApplySpecific) }
                 )
 
-                when (uiState.activeTab) {
-                    DesktopNavTab.TODAY_CANVAS -> TodayCanvasPane(
-                        uiState = uiState,
-                        onNextWallpaper = onNextWallpaper,
-                        onPreviousWallpaper = onPreviousWallpaper,
-                        onToggleKeep = onToggleKeep,
-                        onRequestRejectConfirm = onRequestRejectConfirm,
-                        onRestoreOriginal = onRestoreOriginal,
-                        onSyncOnline = onSyncOnline,
-                        isFullscreen = isFullscreen,
-                        onToggleFullscreen = onToggleFullscreen
-                    )
-                    else -> ReadableWidth {
-                        when (uiState.activeTab) {
-                        DesktopNavTab.RESERVE_AND_HISTORY -> ReserveAndHistoryPane(
-                            uiState = uiState,
-                            onApplySpecific = onApplySpecific,
-                            onDeleteFromReserve = onDeleteFromReserve,
-                            onToggleKeepSpecific = onToggleKeepSpecific,
-                            onPickLocalPhoto = { onPickLocalPhoto(false) },
-                            onPickBaselineRestore = { onPickLocalPhoto(true) },
-                            onSyncOnline = onSyncOnline
-                        )
-                        DesktopNavTab.SOURCES_AND_CATEGORIES -> SourcesAndCategoriesPane(
-                            uiState = uiState,
-                            onToggleCategory = onToggleCategory,
-                            onToggleSource = onToggleSource,
-                            onToggleWifiOnly = onToggleWifiOnly,
-                            onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
-                            onSyncOnline = onSyncOnline
-                        )
-                        DesktopNavTab.DISPLAYS_AND_SCHEDULE -> DisplaysAndSchedulePane(
-                            uiState = uiState,
-                            onSelectCity = onSelectCity,
-                            onUpdateScheduleMode = onUpdateScheduleMode,
-                            onUpdateLockPolicy = onUpdateLockPolicy,
-                            onToggleBlurredFill = onToggleBlurredFill,
-                            onUpdateFixedHours = onUpdateFixedHours,
-                            onUpdateChangeEvery = onUpdateChangeEvery,
-                            onSetChosenWallpaper = onSetChosenWallpaper,
-                            onUpdateCustomCoordinates = onUpdateCustomCoordinates,
-                            onToggleBatterySaverDeferral = onToggleBatterySaverDeferral,
-                            onUpdateDisplayPolicy = onUpdateDisplayPolicy,
-                            onForgetRememberedDisplay = onForgetRememberedDisplay,
-                            onToggleAutoSwitch = onToggleAutoSwitch,
-                            onRestoreSystemDefault = onRestoreSystemDefault,
-                            onReopenSetup = onReopenSetup
-                        )
-                        DesktopNavTab.SAFETY_AND_DECISION_LOG -> DiagnosticsPane(
-                            uiState = uiState,
-                            onToggleLegibilityOverlay = onToggleLegibilityOverlay,
-                            onUpdateMaxCacheBytes = onUpdateMaxCacheBytes,
-                            onResetSunloom = onResetSunloom,
-                            onCopyDiagnostics = onCopyDiagnostics,
-                            onReportProblem = onReportProblem,
-                            onCheckForUpdates = onCheckForUpdates
-                        )
-                
-                            else -> Unit
-                        }
-                    }
-                }
+                ActiveWorkspacePane(uiState, actions, isFullscreen)
             }
         }
 
         if (widthClass == WorkspaceWidthClass.Compact) {
             Column(modifier = Modifier.fillMaxSize()) {
                 workspace(Modifier.weight(1f).fillMaxWidth())
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    windowInsets = WindowInsets(0, 0, 0, 0),
-                    modifier = Modifier.testTag("workspace_nav_bar")
-                ) {
-                    val labelsVisible = navLabelsAlwaysVisible(LocalDensity.current.fontScale)
-                    DesktopNavTab.entries.forEach { tab ->
-                        NavigationBarItem(
-                            selected = uiState.activeTab == tab,
-                            onClick = { onSelectTab(tab) },
-                            modifier = Modifier.desktopControl(MaterialTheme.shapes.large).testTag("nav_${tab.name}"),
-                            // The visible label names it; when labels give way to large text the icon must.
-                            icon = { Icon(navIcon(tab), contentDescription = if (labelsVisible) null else tab.title()) },
-                            label = { Text(tab.title(), fontSize = 12.sp, maxLines = 1) },
-                            alwaysShowLabel = labelsVisible
-                        )
-                    }
-                }
+                WorkspaceNavigationBar(uiState, actions)
             }
         } else {
             val showLabels = widthClass == WorkspaceWidthClass.Expanded
             Row(modifier = Modifier.fillMaxSize()) {
-                NavigationRail(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    windowInsets = WindowInsets(0, 0, 0, 0),
-                    modifier = Modifier.fillMaxHeight().testTag("workspace_nav_rail")
-                ) {
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = stringResource(R.string.sunloom),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                    DesktopNavTab.entries.forEach { tab ->
-                        // Without text beside the icon, hover or long-press names the section.
-                        val railItem: @Composable () -> Unit = {
-                            NavigationRailItem(
-                                selected = uiState.activeTab == tab,
-                                onClick = { onSelectTab(tab) },
-                                modifier = Modifier.desktopControl(MaterialTheme.shapes.large).testTag("nav_${tab.name}"),
-                                icon = { Icon(navIcon(tab), contentDescription = if (showLabels) null else tab.title()) },
-                                label = if (showLabels) {
-                                    { Text(tab.title(), fontSize = 12.sp) }
-                                } else {
-                                    null
-                                },
-                                alwaysShowLabel = showLabels
-                            )
-                        }
-                        if (showLabels) railItem() else ShortcutTooltip(tab.title()) { railItem() }
-                    }
-                }
+                WorkspaceNavigationRail(uiState, actions, showLabels)
                 workspace(Modifier.weight(1f).fillMaxHeight())
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ColumnScope.ActiveWorkspacePane(uiState: SunloomUiState, actions: SunloomActions, isFullscreen: Boolean) {
+    val onRequestRejectConfirm = { if (uiState.currentWallpaper != null) actions.onRejectForever() }
+    when (uiState.activeTab) {
+        DesktopNavTab.TODAY_CANVAS -> TodayCanvasPane(
+            uiState = uiState,
+            onNextWallpaper = actions.onNextWallpaper,
+            onPreviousWallpaper = actions.onPreviousWallpaper,
+            onToggleKeep = actions.onToggleKeep,
+            onRequestRejectConfirm = onRequestRejectConfirm,
+            onRestoreOriginal = actions.onRestoreOriginal,
+            onSyncOnline = actions.onSyncOnline,
+            isFullscreen = isFullscreen,
+            onToggleFullscreen = actions.onToggleFullscreen
+        )
+        else -> ReadableWidth {
+            when (uiState.activeTab) {
+            DesktopNavTab.RESERVE_AND_HISTORY -> ReserveAndHistoryPane(
+                uiState = uiState,
+                onApplySpecific = actions.onApplySpecific,
+                onDeleteFromReserve = actions.onDeleteFromReserve,
+                onToggleKeepSpecific = actions.onToggleKeepSpecific,
+                onPickLocalPhoto = { actions.onPickLocalPhoto(false) },
+                onPickBaselineRestore = { actions.onPickLocalPhoto(true) },
+                onSyncOnline = actions.onSyncOnline
+            )
+            DesktopNavTab.SOURCES_AND_CATEGORIES -> SourcesAndCategoriesPane(
+                uiState = uiState,
+                onToggleCategory = actions.onToggleCategory,
+                onToggleSource = actions.onToggleSource,
+                onToggleWifiOnly = actions.onToggleWifiOnly,
+                onToggleBatterySaverDeferral = actions.onToggleBatterySaverDeferral,
+                onSyncOnline = actions.onSyncOnline
+            )
+            DesktopNavTab.DISPLAYS_AND_SCHEDULE -> DisplaysAndSchedulePane(
+                uiState = uiState,
+                onSelectCity = actions.onSelectCity,
+                onUpdateScheduleMode = actions.onUpdateScheduleMode,
+                onUpdateLockPolicy = actions.onUpdateLockPolicy,
+                onToggleBlurredFill = actions.onToggleBlurredFill,
+                onUpdateFixedHours = actions.onUpdateFixedHours,
+                onUpdateChangeEvery = actions.onUpdateChangeEvery,
+                onSetChosenWallpaper = actions.onSetChosenWallpaper,
+                onUpdateCustomCoordinates = actions.onUpdateCustomCoordinates,
+                onToggleBatterySaverDeferral = actions.onToggleBatterySaverDeferral,
+                onUpdateDisplayPolicy = actions.onUpdateDisplayPolicy,
+                onForgetRememberedDisplay = actions.onForgetRememberedDisplay,
+                onToggleAutoSwitch = actions.onToggleAutoSwitch,
+                onRestoreSystemDefault = actions.onRestoreSystemDefault,
+                onReopenSetup = actions.onReopenSetup
+            )
+            DesktopNavTab.SAFETY_AND_DECISION_LOG -> DiagnosticsPane(
+                uiState = uiState,
+                onToggleLegibilityOverlay = actions.onToggleLegibilityOverlay,
+                onUpdateMaxCacheBytes = actions.onUpdateMaxCacheBytes,
+                onResetSunloom = actions.onResetSunloom,
+                onCopyDiagnostics = actions.onCopyDiagnostics,
+                onReportProblem = actions.onReportProblem,
+                onCheckForUpdates = actions.onCheckForUpdates
+            )
+                else -> Unit
+            }
+        }
+    }
+
+}
+
+@Composable
+private fun WorkspaceNavigationBar(uiState: SunloomUiState, actions: SunloomActions) {
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surface,
+        windowInsets = WindowInsets(0, 0, 0, 0),
+        modifier = Modifier.testTag("workspace_nav_bar")
+    ) {
+        val labelsVisible = navLabelsAlwaysVisible(LocalDensity.current.fontScale)
+        DesktopNavTab.entries.forEach { tab ->
+            NavigationBarItem(
+                selected = uiState.activeTab == tab,
+                onClick = { actions.onSelectTab(tab) },
+                modifier = Modifier.desktopControl(MaterialTheme.shapes.large).testTag("nav_${tab.name}"),
+                // The visible label names it; when labels give way to large text the icon must.
+                icon = { Icon(navIcon(tab), contentDescription = if (labelsVisible) null else tab.title()) },
+                label = { Text(tab.title(), fontSize = 12.sp, maxLines = 1) },
+                alwaysShowLabel = labelsVisible
+            )
+        }
+    }
+}
+
+@Composable
+private fun WorkspaceNavigationRail(uiState: SunloomUiState, actions: SunloomActions, showLabels: Boolean) {
+    NavigationRail(
+        containerColor = MaterialTheme.colorScheme.surface,
+        windowInsets = WindowInsets(0, 0, 0, 0),
+        modifier = Modifier.fillMaxHeight().testTag("workspace_nav_rail")
+    ) {
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = stringResource(R.string.sunloom),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+        DesktopNavTab.entries.forEach { tab ->
+            // Without text beside the icon, hover or long-press names the section.
+            val railItem: @Composable () -> Unit = {
+                NavigationRailItem(
+                    selected = uiState.activeTab == tab,
+                    onClick = { actions.onSelectTab(tab) },
+                    modifier = Modifier.desktopControl(MaterialTheme.shapes.large).testTag("nav_${tab.name}"),
+                    icon = { Icon(navIcon(tab), contentDescription = if (showLabels) null else tab.title()) },
+                    label = if (showLabels) {
+                        { Text(tab.title(), fontSize = 12.sp) }
+                    } else {
+                        null
+                    },
+                    alwaysShowLabel = showLabels
+                )
+            }
+            if (showLabels) railItem() else ShortcutTooltip(tab.title()) { railItem() }
         }
     }
 }
