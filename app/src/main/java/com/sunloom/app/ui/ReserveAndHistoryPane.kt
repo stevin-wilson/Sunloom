@@ -130,33 +130,13 @@ internal fun ReserveAndHistoryPane(
         modifier = Modifier
             .fillMaxSize()
             .onKeyEvent { event ->
-                // Esc drops the selection; Ctrl+A selects everything (Keyboard_Exit, Input_Combinations).
-                // Esc is consumed on key-down: an unconsumed Esc key-down makes Compose clear focus, so
-                // the matching key-up would never reach this pane.
-                when {
-                    event.key == Key.Escape && selection.selected.isNotEmpty() -> {
-                        if (event.type == KeyEventType.KeyDown) selection = SelectionState()
-                        true
-                    }
-                    // With a selection, Delete/Backspace removes the selection (one Undo) instead of bubbling to the
-                    // workspace accelerator, which would permanently reject the unrelated current wallpaper.
-                    (event.key == Key.Delete || event.key == Key.Backspace) && selection.selected.isNotEmpty() &&
-                        !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed -> {
-                        // The workspace accelerator fires on key-up, so act (and consume) on key-up too; the
-                        // key-down is consumed so it is not treated as an unhandled key.
-                        if (event.type == KeyEventType.KeyUp) {
-                            val ids = selection.selected.toList()
-                            selection = SelectionState()
-                            actions.removeMany(ids)
-                        }
-                        true
-                    }
-                    event.type == KeyEventType.KeyUp && event.key == Key.A && event.isCtrlPressed && order.isNotEmpty() -> {
-                        selection = SelectionState(order.toSet(), order.first())
-                        true
-                    }
-                    else -> false
-                }
+                handleReserveKey(
+                    event = event,
+                    selection = selection,
+                    order = order,
+                    onSelectionChange = { selection = it },
+                    onRemoveMany = { actions.removeMany(it) }
+                )
             }
     ) {
         val columns = if (gridView) {
@@ -281,6 +261,45 @@ internal fun ReserveAndHistoryPane(
         uiState.libraryWallpapers.firstOrNull { it.id == id }?.let { record ->
             WallpaperAboutDialog(record = record, onDismiss = { aboutRecordId = null })
         }
+    }
+}
+
+/**
+ * Keys the Reserve pane handles itself: Esc drops the selection, Delete/Backspace removes it, Ctrl+A selects
+ * everything (Keyboard_Exit, Input_Combinations). Returns whether the event was consumed.
+ */
+private fun handleReserveKey(
+    event: KeyEvent,
+    selection: SelectionState,
+    order: List<String>,
+    onSelectionChange: (SelectionState) -> Unit,
+    onRemoveMany: (List<String>) -> Unit
+): Boolean {
+    // Esc is consumed on key-down: an unconsumed Esc key-down makes Compose clear focus, so
+    // the matching key-up would never reach this pane.
+    return when {
+        event.key == Key.Escape && selection.selected.isNotEmpty() -> {
+            if (event.type == KeyEventType.KeyDown) onSelectionChange(SelectionState())
+            true
+        }
+        // With a selection, Delete/Backspace removes the selection (one Undo) instead of bubbling to the
+        // workspace accelerator, which would permanently reject the unrelated current wallpaper.
+        (event.key == Key.Delete || event.key == Key.Backspace) && selection.selected.isNotEmpty() &&
+            !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed -> {
+            // The workspace accelerator fires on key-up, so act (and consume) on key-up too; the
+            // key-down is consumed so it is not treated as an unhandled key.
+            if (event.type == KeyEventType.KeyUp) {
+                val ids = selection.selected.toList()
+                onSelectionChange(SelectionState())
+                onRemoveMany(ids)
+            }
+            true
+        }
+        event.type == KeyEventType.KeyUp && event.key == Key.A && event.isCtrlPressed && order.isNotEmpty() -> {
+            onSelectionChange(SelectionState(order.toSet(), order.first()))
+            true
+        }
+        else -> false
     }
 }
 
