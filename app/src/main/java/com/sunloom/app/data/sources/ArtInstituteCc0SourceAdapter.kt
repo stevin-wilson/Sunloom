@@ -70,19 +70,15 @@ class ArtInstituteCc0SourceAdapter(
         for (i in 0 until dataArr.size) {
             val item = dataArr.obj(i) ?: continue
             val id = item.int("id", -1)
-            val imageId = item.str("image_id", "").trim()
-            if (id <= 0 || imageId.isBlank() || imageId == "null") continue
+            val imageId = item.str("image_id").cleanedOrNull()
+            if (id <= 0 || imageId == null) continue
 
             // Fail-closed: is_public_domain must be explicitly true (default false)
             if (!item.bool("is_public_domain", false)) continue
 
             val title = item.str("title", "").trim().ifBlank { continue }
-            val rawArtist = item.str("artist_title", "").trim()
-            val artist = if (rawArtist.isBlank() || rawArtist == "null") {
-                "Unknown Artist (Art Institute of Chicago)"
-            } else {
-                rawArtist
-            }
+            val artist = item.str("artist_title").cleanedOrNull()
+                ?: "Unknown Artist (Art Institute of Chicago)"
             val classification = item.str("classification_title", "").trim().lowercase(Locale.ROOT)
 
             // Block sculpture, figurine, anatomy, or portrait classifications at source adapter level
@@ -98,23 +94,9 @@ class ArtInstituteCc0SourceAdapter(
 
             // Zero injected tags: only include actual fields from the ArtIC response
             val tags = ArrayList<String>()
-            if (classification.isNotBlank() && classification != "null") {
-                tags.add(classification)
-            }
-            val subjects = item.arr("subject_titles")
-            if (subjects != null) {
-                for (s in 0 until subjects.size) {
-                    val sub = subjects.str(s, "").trim()
-                    if (sub.isNotBlank() && sub != "null") tags.add(sub)
-                }
-            }
-            val terms = item.arr("term_titles")
-            if (terms != null) {
-                for (t in 0 until terms.size) {
-                    val term = terms.str(t, "").trim()
-                    if (term.isNotBlank() && term != "null") tags.add(term)
-                }
-            }
+            classification.cleanedOrNull()?.let(tags::add)
+            item.arr("subject_titles")?.let { tags.addAll(it.cleanStrings()) }
+            item.arr("term_titles")?.let { tags.addAll(it.cleanStrings()) }
 
             // Request ArtIC's largest public IIIF rendition (1686px; falls back to 843px if 1686px 403/404s)
             val iiifUrl = "https://www.artic.edu/iiif/2/$imageId/full/1686,/0/default.jpg"

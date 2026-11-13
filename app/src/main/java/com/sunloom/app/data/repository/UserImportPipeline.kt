@@ -249,9 +249,7 @@ internal class UserImportPipeline(
                         val read = stream.read(buffer)
                         if (read < 0) break
                         total += read
-                        if (total > SafetyGate.MAX_PAYLOAD_BYTES) {
-                            throw IllegalArgumentException("File exceeds maximum payload size.")
-                        }
+                        require(total <= SafetyGate.MAX_PAYLOAD_BYTES) { "File exceeds maximum payload size." }
                         out.write(buffer, 0, read)
                     }
                     out.toByteArray()

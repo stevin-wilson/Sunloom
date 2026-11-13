@@ -218,8 +218,7 @@ class SmkOpenSourceAdapter(
             var firstAny = ""
             for (i in 0 until titlesArr.size) {
                 val tObj = titlesArr.obj(i) ?: continue
-                val text = tObj.str("title", "").trim()
-                if (text.isEmpty() || text == "null") continue
+                val text = tObj.str("title").cleanedOrNull() ?: continue
                 if (firstAny.isEmpty()) firstAny = text
                 val lang = tObj.str("language", "").trim().lowercase(Locale.ROOT)
                 if (lang == "en" || lang == "eng") {
@@ -228,7 +227,7 @@ class SmkOpenSourceAdapter(
             }
             if (firstAny.isNotEmpty()) return firstAny
         }
-        return item.str("title", "").trim().takeIf { it != "null" }.orEmpty()
+        return item.str("title").cleanedOrNull().orEmpty()
     }
 
     private fun extractCreator(item: SimpleJson.JsonObj): String {
@@ -236,10 +235,7 @@ class SmkOpenSourceAdapter(
         if (prodArr != null) {
             for (i in 0 until prodArr.size) {
                 val pObj = prodArr.obj(i) ?: continue
-                val creator = pObj.str("creator", "").trim()
-                if (creator.isNotBlank() && creator != "null") {
-                    return creator
-                }
+                pObj.str("creator").cleanedOrNull()?.let { return it }
             }
         }
         return "Unknown Artist (SMK — National Gallery of Denmark)"
@@ -247,20 +243,15 @@ class SmkOpenSourceAdapter(
 
     private fun extractStringOrObjectList(arr: SimpleJson.JsonArr?, objectKey: String): List<String> {
         if (arr == null) return emptyList()
-        val out = ArrayList<String>()
-        for (i in 0 until arr.size) {
+        return (0 until arr.size).mapNotNull { i ->
             val obj = arr.obj(i)
             val raw = if (obj != null) {
                 obj.str(objectKey, "").ifBlank { obj.str("term", "") }
             } else {
                 arr.str(i, "")
             }
-            val clean = raw.trim()
-            if (clean.isNotBlank() && clean != "null") {
-                out.add(clean)
-            }
+            raw.cleanedOrNull()
         }
-        return out
     }
 
     private fun isObjectNamesAllowed(names: List<String>): Boolean {
