@@ -160,43 +160,16 @@ internal fun TodayCanvasPane(
                 if (restricted) {
                     HostRestrictionNotice()
                 }
-                val actions = LocalWallpaperActions.current
                 ContextMenuHost(
                     modifier = Modifier.fillMaxWidth(),
                     focusShape = MaterialTheme.shapes.large,
                     menuContent = { dismiss ->
                         if (current != null) {
-                            if (!restricted) {
-                                ContextMenuItem(stringResource(R.string.next_wallpaper), "ctx_next") { dismiss(); onNextWallpaper() }
-                            }
-                            if (uiState.previousWallpaperId != null && !restricted) {
-                                ContextMenuItem(stringResource(R.string.previous_wallpaper), "ctx_previous") { dismiss(); onPreviousWallpaper() }
-                            }
-                            ContextMenuItem(
-                                if (current.isFavorite) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
-                                "ctx_keep"
-                            ) { dismiss(); onToggleKeep() }
-                            ContextMenuItem(stringResource(R.string.use_as_daytime_wallpaper), "ctx_use_daytime") {
-                                dismiss(); actions.setChosen(ChosenSlot.DAYTIME, current.id)
-                            }
-                            ContextMenuItem(stringResource(R.string.use_as_evening_wallpaper), "ctx_use_evening") {
-                                dismiss(); actions.setChosen(ChosenSlot.EVENING, current.id)
-                            }
-                            ContextMenuItem(stringResource(R.string.about_this_image), "ctx_about") { dismiss(); showAbout = true }
-                            ContextMenuItem(stringResource(R.string.copy_attribution), "ctx_copy_attribution") {
-                                dismiss(); actions.copyAttribution(current)
-                            }
-                            ContextMenuItem(stringResource(R.string.save_wallpaper_as), "ctx_save_as") {
-                                dismiss(); actions.saveAs(current)
-                            }
-                            if (!restricted) {
-                                ContextMenuItem(stringResource(R.string.restore_original_wallpaper), "ctx_restore") { dismiss(); onRestoreOriginal() }
-                            }
-                            HorizontalDivider()
-                            ContextMenuItem(stringResource(R.string.dislike_and_exclude), "ctx_dislike", destructive = true) {
-                                dismiss()
-                                onRequestRejectConfirm()
-                            }
+                            TodayContextMenuItems(
+                                dismiss, uiState, current, restricted,
+                                onNextWallpaper, onPreviousWallpaper, onToggleKeep, onRestoreOriginal,
+                                onRequestRejectConfirm, onShowAbout = { showAbout = true }
+                            )
                         }
                     }
                 ) {
@@ -206,200 +179,29 @@ internal fun TodayCanvasPane(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(modifier = Modifier.weight(1f)) {
-                                        TruncatedTitleWithTooltip(
-                                            title = current?.title ?: stringResource(R.string.no_wallpaper_selected),
-                                            style = MaterialTheme.typography.titleLarge,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-                                    if (current != null) {
-                                        MoreMenuButton(
-                                            onAbout = { showAbout = true },
-                                            onCopyAttribution = { actions.copyAttribution(current) },
-                                            onSaveAs = { actions.saveAs(current) }
-                                        )
-                                    }
-                                }
-                                if (current == null) {
-                                    Text(
-                                        text = stringResource(R.string.nothing_is_showing_yet_fetch_a_batch_of),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Button(
-                                        onClick = onSyncOnline,
-                                        enabled = !uiState.isSyncingOnline,
-                                        modifier = Modifier.desktopControl().testTag("home_empty_fetch")
-                                    ) { Text(if (uiState.isSyncingOnline) stringResource(R.string.fetching) else stringResource(R.string.fetch_wallpapers)) }
-                                }
-                                if (current != null) {
-                                    Text(
-                                        text = "${current.category.title()} • ${current.provenance.sourceName}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
+                            TodayHeader(current, uiState.isSyncingOnline, onSyncOnline) { showAbout = true }
 
-                            if (current != null) {
-                                val previewAspect = primaryDisplayAspect(uiState, 0.75f, 2.6f)
-                                val zoomState = remember(current.id) { mutableStateOf(ZoomState()) }
-                                val previewDescription = stringResource(R.string.today_preview_description)
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .aspectRatio(previewAspect)
-                                        .clip(MaterialTheme.shapes.medium)
-                                        .zoomablePreview(zoomState)
-                                        .semantics { contentDescription = previewDescription }
-                                        .testTag("today_preview")
-                                ) {
-                                    WallpaperPreviewSurface(
-                                        record = current,
-                                        showLegibilityZones = uiState.showLegibilityZonesOverlay,
-                                        modifier = Modifier.fillMaxSize().applyZoom(zoomState.value)
-                                    )
-                                }
-                            }
+                            if (current != null) TodayPreview(current, uiState)
 
-                            FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalArrangement = Arrangement.spacedBy(Spacing.s),
-                                itemVerticalAlignment = Alignment.CenterVertically
-                            ) {
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
-                                    verticalArrangement = Arrangement.spacedBy(Spacing.s)
-                                ) {
-                                    ShortcutTooltip(if (restricted) stringResource(R.string.host_restricted_tooltip) else stringResource(R.string.next_wallpaper), if (restricted) null else "N") {
-                                        Button(
-                                            onClick = onNextWallpaper,
-                                            enabled = !restricted,
-                                            modifier = Modifier.desktopControl().testTag("next_wallpaper_button")
-                                        ) {
-                                            Icon(
-                                                imageVector = if (uiState.isApplyingWallpaper) SunloomIcons.Refresh else SunloomIcons.SkipNext,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Spacer(Modifier.width(6.dp))
-                                            Text(if (uiState.isApplyingWallpaper) stringResource(R.string.applying) else stringResource(R.string.next))
-                                        }
-                                    }
-
-                                    ShortcutTooltip(if (restricted) stringResource(R.string.host_restricted_tooltip) else stringResource(R.string.previous_wallpaper), if (restricted) null else "P") {
-                                        OutlinedButton(
-                                            onClick = onPreviousWallpaper,
-                                            enabled = uiState.previousWallpaperId != null && !restricted,
-                                            modifier = Modifier.desktopControl().testTag("previous_wallpaper_button")
-                                        ) {
-                                            Icon(SunloomIcons.SkipPrevious, contentDescription = null, modifier = Modifier.size(18.dp))
-                                            Spacer(Modifier.width(6.dp))
-                                            Text(stringResource(R.string.previous))
-                                        }
-                                    }
-
-                                    ShortcutTooltip(
-                                        if (current?.isFavorite == true) stringResource(R.string.remove_from_favorites) else stringResource(R.string.keep_in_favorites),
-                                        "K"
-                                    ) {
-                                        OutlinedIconButton(
-                                            onClick = onToggleKeep,
-                                            modifier = Modifier.desktopControl(CircleShape).testTag("keep_wallpaper_button")
-                                        ) {
-                                            Icon(
-                                                imageVector = if (current?.isFavorite == true) SunloomIcons.Favorite else SunloomIcons.FavoriteBorder,
-                                                contentDescription = if (current?.isFavorite == true) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
-                                                tint = if (current?.isFavorite == true) SunloomColors.Favorite else MaterialTheme.colorScheme.onSurface,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
-                                    verticalArrangement = Arrangement.spacedBy(Spacing.s)
-                                ) {
-                                    ShortcutTooltip(if (restricted) stringResource(R.string.host_restricted_tooltip) else stringResource(R.string.restore_original_wallpaper)) {
-                                        OutlinedButton(
-                                            onClick = onRestoreOriginal,
-                                            enabled = !restricted,
-                                            modifier = Modifier.desktopControl().testTag("restore_original_button")
-                                        ) {
-                                            Icon(SunloomIcons.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
-                                            Spacer(Modifier.width(6.dp))
-                                            Text(stringResource(R.string.restore))
-                                        }
-                                    }
-
-                                    ShortcutTooltip(if (isFullscreen) stringResource(R.string.exit_fullscreen) else stringResource(R.string.view_fullscreen), "F11") {
-                                    OutlinedIconButton(
-                                        onClick = onToggleFullscreen,
-                                        modifier = Modifier.desktopControl(CircleShape).testTag("fullscreen_button")
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isFullscreen) SunloomIcons.FullscreenExit else SunloomIcons.Fullscreen,
-                                            contentDescription = if (isFullscreen) stringResource(R.string.exit_fullscreen) else stringResource(R.string.view_fullscreen),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                }
-
-                                ShortcutTooltip(stringResource(R.string.dislike_and_exclude), "Del") {
-                                        OutlinedIconButton(
-                                            onClick = onRequestRejectConfirm,
-                                            modifier = Modifier.desktopControl(CircleShape).testTag("reject_wallpaper_button")
-                                        ) {
-                                            Icon(
-                                                imageVector = SunloomIcons.ThumbDown,
-                                                contentDescription = stringResource(R.string.dislike_wallpaper),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                            TodayControls(
+                                uiState = uiState,
+                                current = current,
+                                restricted = restricted,
+                                isFullscreen = isFullscreen,
+                                onNextWallpaper = onNextWallpaper,
+                                onPreviousWallpaper = onPreviousWallpaper,
+                                onToggleKeep = onToggleKeep,
+                                onRestoreOriginal = onRestoreOriginal,
+                                onToggleFullscreen = onToggleFullscreen,
+                                onRequestRejectConfirm = onRequestRejectConfirm
+                            )
                         }
                     }
                 }
             }
         }
         val provenanceCard: @Composable (Modifier) -> Unit = { cardModifier ->
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = MaterialTheme.shapes.large,
-                modifier = cardModifier
-            ) {
-                Column(
-                    modifier = Modifier.padding(Spacing.l),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.m)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
-                        Icon(SunloomIcons.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Text(
-                            text = stringResource(R.string.about_this_wallpaper),
-                            modifier = Modifier.sectionHeading(),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    if (current != null) {
-                        ProvenanceDetails(current)
-                    }
-                }
-            }
+            TodayProvenanceCard(current, cardModifier)
         }
         val scrollingModifier = Modifier
             .fillMaxSize()
@@ -434,6 +236,296 @@ internal fun TodayCanvasPane(
 
     if (showAbout && current != null) {
         WallpaperAboutDialog(record = current, onDismiss = { showAbout = false })
+    }
+}
+
+@Composable
+private fun TodayContextMenuItems(
+    dismiss: () -> Unit,
+    uiState: SunloomUiState,
+    current: WallpaperRecord,
+    restricted: Boolean,
+    onNextWallpaper: () -> Unit,
+    onPreviousWallpaper: () -> Unit,
+    onToggleKeep: () -> Unit,
+    onRestoreOriginal: () -> Unit,
+    onRequestRejectConfirm: () -> Unit,
+    onShowAbout: () -> Unit
+) {
+    val actions = LocalWallpaperActions.current
+    if (!restricted) {
+        ContextMenuItem(stringResource(R.string.next_wallpaper), "ctx_next") { dismiss(); onNextWallpaper() }
+    }
+    if (uiState.previousWallpaperId != null && !restricted) {
+        ContextMenuItem(stringResource(R.string.previous_wallpaper), "ctx_previous") { dismiss(); onPreviousWallpaper() }
+    }
+    ContextMenuItem(
+        if (current.isFavorite) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
+        "ctx_keep"
+    ) { dismiss(); onToggleKeep() }
+    ContextMenuItem(stringResource(R.string.use_as_daytime_wallpaper), "ctx_use_daytime") {
+        dismiss(); actions.setChosen(ChosenSlot.DAYTIME, current.id)
+    }
+    ContextMenuItem(stringResource(R.string.use_as_evening_wallpaper), "ctx_use_evening") {
+        dismiss(); actions.setChosen(ChosenSlot.EVENING, current.id)
+    }
+    ContextMenuItem(stringResource(R.string.about_this_image), "ctx_about") { dismiss(); onShowAbout() }
+    ContextMenuItem(stringResource(R.string.copy_attribution), "ctx_copy_attribution") {
+        dismiss(); actions.copyAttribution(current)
+    }
+    ContextMenuItem(stringResource(R.string.save_wallpaper_as), "ctx_save_as") {
+        dismiss(); actions.saveAs(current)
+    }
+    if (!restricted) {
+        ContextMenuItem(stringResource(R.string.restore_original_wallpaper), "ctx_restore") { dismiss(); onRestoreOriginal() }
+    }
+    HorizontalDivider()
+    ContextMenuItem(stringResource(R.string.dislike_and_exclude), "ctx_dislike", destructive = true) {
+        dismiss()
+        onRequestRejectConfirm()
+    }
+}
+
+/** The title with its menu, and the empty state that offers to fetch a first batch. */
+@Composable
+private fun TodayHeader(
+    current: WallpaperRecord?,
+    isSyncingOnline: Boolean,
+    onSyncOnline: () -> Unit,
+    onShowAbout: () -> Unit
+) {
+    val actions = LocalWallpaperActions.current
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.weight(1f)) {
+                TruncatedTitleWithTooltip(
+                    title = current?.title ?: stringResource(R.string.no_wallpaper_selected),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            if (current != null) {
+                MoreMenuButton(
+                    onAbout = { onShowAbout() },
+                    onCopyAttribution = { actions.copyAttribution(current) },
+                    onSaveAs = { actions.saveAs(current) }
+                )
+            }
+        }
+        if (current == null) {
+            Text(
+                text = stringResource(R.string.nothing_is_showing_yet_fetch_a_batch_of),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(
+                onClick = onSyncOnline,
+                enabled = !isSyncingOnline,
+                modifier = Modifier.desktopControl().testTag("home_empty_fetch")
+            ) { Text(if (isSyncingOnline) stringResource(R.string.fetching) else stringResource(R.string.fetch_wallpapers)) }
+        }
+        if (current != null) {
+            Text(
+                text = "${current.category.title()} • ${current.provenance.sourceName}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun TodayPreview(current: WallpaperRecord, uiState: SunloomUiState) {
+    val previewAspect = primaryDisplayAspect(uiState, 0.75f, 2.6f)
+    val zoomState = remember(current.id) { mutableStateOf(ZoomState()) }
+    val previewDescription = stringResource(R.string.today_preview_description)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(previewAspect)
+            .clip(MaterialTheme.shapes.medium)
+            .zoomablePreview(zoomState)
+            .semantics { contentDescription = previewDescription }
+            .testTag("today_preview")
+    ) {
+        WallpaperPreviewSurface(
+            record = current,
+            showLegibilityZones = uiState.showLegibilityZonesOverlay,
+            modifier = Modifier.fillMaxSize().applyZoom(zoomState.value)
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TodayControls(
+    uiState: SunloomUiState,
+    current: WallpaperRecord?,
+    restricted: Boolean,
+    isFullscreen: Boolean,
+    onNextWallpaper: () -> Unit,
+    onPreviousWallpaper: () -> Unit,
+    onToggleKeep: () -> Unit,
+    onRestoreOriginal: () -> Unit,
+    onToggleFullscreen: () -> Unit,
+    onRequestRejectConfirm: () -> Unit
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(Spacing.s),
+        itemVerticalAlignment = Alignment.CenterVertically
+    ) {
+        TodayTransportButtons(uiState, current, restricted, onNextWallpaper, onPreviousWallpaper, onToggleKeep)
+        TodaySecondaryButtons(restricted, isFullscreen, onRestoreOriginal, onToggleFullscreen, onRequestRejectConfirm)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TodayTransportButtons(
+    uiState: SunloomUiState,
+    current: WallpaperRecord?,
+    restricted: Boolean,
+    onNextWallpaper: () -> Unit,
+    onPreviousWallpaper: () -> Unit,
+    onToggleKeep: () -> Unit
+) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+        verticalArrangement = Arrangement.spacedBy(Spacing.s)
+    ) {
+        ShortcutTooltip(if (restricted) stringResource(R.string.host_restricted_tooltip) else stringResource(R.string.next_wallpaper), if (restricted) null else "N") {
+            Button(
+                onClick = onNextWallpaper,
+                enabled = !restricted,
+                modifier = Modifier.desktopControl().testTag("next_wallpaper_button")
+            ) {
+                Icon(
+                    imageVector = if (uiState.isApplyingWallpaper) SunloomIcons.Refresh else SunloomIcons.SkipNext,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(if (uiState.isApplyingWallpaper) stringResource(R.string.applying) else stringResource(R.string.next))
+            }
+        }
+
+        ShortcutTooltip(if (restricted) stringResource(R.string.host_restricted_tooltip) else stringResource(R.string.previous_wallpaper), if (restricted) null else "P") {
+            OutlinedButton(
+                onClick = onPreviousWallpaper,
+                enabled = uiState.previousWallpaperId != null && !restricted,
+                modifier = Modifier.desktopControl().testTag("previous_wallpaper_button")
+            ) {
+                Icon(SunloomIcons.SkipPrevious, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.previous))
+            }
+        }
+
+        ShortcutTooltip(
+            if (current?.isFavorite == true) stringResource(R.string.remove_from_favorites) else stringResource(R.string.keep_in_favorites),
+            "K"
+        ) {
+            OutlinedIconButton(
+                onClick = onToggleKeep,
+                modifier = Modifier.desktopControl(CircleShape).testTag("keep_wallpaper_button")
+            ) {
+                Icon(
+                    imageVector = if (current?.isFavorite == true) SunloomIcons.Favorite else SunloomIcons.FavoriteBorder,
+                    contentDescription = if (current?.isFavorite == true) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
+                    tint = if (current?.isFavorite == true) SunloomColors.Favorite else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TodaySecondaryButtons(
+    restricted: Boolean,
+    isFullscreen: Boolean,
+    onRestoreOriginal: () -> Unit,
+    onToggleFullscreen: () -> Unit,
+    onRequestRejectConfirm: () -> Unit
+) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+        verticalArrangement = Arrangement.spacedBy(Spacing.s)
+    ) {
+        ShortcutTooltip(if (restricted) stringResource(R.string.host_restricted_tooltip) else stringResource(R.string.restore_original_wallpaper)) {
+            OutlinedButton(
+                onClick = onRestoreOriginal,
+                enabled = !restricted,
+                modifier = Modifier.desktopControl().testTag("restore_original_button")
+            ) {
+                Icon(SunloomIcons.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.restore))
+            }
+        }
+
+        ShortcutTooltip(if (isFullscreen) stringResource(R.string.exit_fullscreen) else stringResource(R.string.view_fullscreen), "F11") {
+            OutlinedIconButton(
+                onClick = onToggleFullscreen,
+                modifier = Modifier.desktopControl(CircleShape).testTag("fullscreen_button")
+            ) {
+                Icon(
+                    imageVector = if (isFullscreen) SunloomIcons.FullscreenExit else SunloomIcons.Fullscreen,
+                    contentDescription = if (isFullscreen) stringResource(R.string.exit_fullscreen) else stringResource(R.string.view_fullscreen),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        ShortcutTooltip(stringResource(R.string.dislike_and_exclude), "Del") {
+            OutlinedIconButton(
+                onClick = onRequestRejectConfirm,
+                modifier = Modifier.desktopControl(CircleShape).testTag("reject_wallpaper_button")
+            ) {
+                Icon(
+                    imageVector = SunloomIcons.ThumbDown,
+                    contentDescription = stringResource(R.string.dislike_wallpaper),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TodayProvenanceCard(current: WallpaperRecord?, modifier: Modifier) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = MaterialTheme.shapes.large,
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(Spacing.l),
+            verticalArrangement = Arrangement.spacedBy(Spacing.m)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
+                Icon(SunloomIcons.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(
+                    text = stringResource(R.string.about_this_wallpaper),
+                    modifier = Modifier.sectionHeading(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            if (current != null) {
+                ProvenanceDetails(current)
+            }
+        }
     }
 }
 
