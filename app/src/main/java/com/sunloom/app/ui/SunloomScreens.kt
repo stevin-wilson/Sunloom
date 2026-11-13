@@ -674,7 +674,6 @@ private fun ColumnScope.ActiveWorkspacePane(uiState: SunloomUiState, actions: Su
                 onUpdateChangeEvery = actions.onUpdateChangeEvery,
                 onSetChosenWallpaper = actions.onSetChosenWallpaper,
                 onUpdateCustomCoordinates = actions.onUpdateCustomCoordinates,
-                onToggleBatterySaverDeferral = actions.onToggleBatterySaverDeferral,
                 onUpdateDisplayPolicy = actions.onUpdateDisplayPolicy,
                 onForgetRememberedDisplay = actions.onForgetRememberedDisplay,
                 onToggleAutoSwitch = actions.onToggleAutoSwitch,

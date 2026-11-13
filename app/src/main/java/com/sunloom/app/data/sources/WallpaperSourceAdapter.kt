@@ -265,7 +265,7 @@ class DefaultHttpsClient(
             require(contentLength <= maxBytes) { "Asset Content-Length ($contentLength bytes) exceeds maximum ($maxBytes bytes)" }
             val contentType = conn.contentType?.lowercase(Locale.ROOT).orEmpty()
             if (contentType.startsWith("text/html") || contentType.startsWith("application/xhtml")) {
-                throw IllegalStateException("Unexpected HTML Content-Type '$contentType' when downloading image asset")
+                error("Unexpected HTML Content-Type '$contentType' when downloading image asset")
             }
             BufferedInputStream(conn.inputStream).use { input ->
                 val buffer = DownloadBuffer(contentLength, maxBytes)
@@ -311,11 +311,11 @@ class DefaultHttpsClient(
                 val code = conn.responseCode
                 if (code in REDIRECT_STATUS_CODES) {
                     if (hop == MAX_REDIRECT_HOPS) {
-                        throw IllegalStateException("Exceeded maximum redirect hops ($MAX_REDIRECT_HOPS) for $initialUrl")
+                        error("Exceeded maximum redirect hops ($MAX_REDIRECT_HOPS) for $initialUrl")
                     }
                     val location = conn.getHeaderField("Location")?.trim().orEmpty()
                     if (location.isEmpty()) {
-                        throw IllegalStateException("HTTP $code redirect missing Location header from $currentUrl")
+                        error("HTTP $code redirect missing Location header from $currentUrl")
                     }
                     val resolvedUrl = URL(URL(currentUrl), location).toString()
                     validateHttpsAndHost(resolvedUrl, scopeSourceId)
@@ -333,14 +333,14 @@ class DefaultHttpsClient(
                     return reader(conn, code)
                 }
                 if (code !in 200..299) {
-                    throw IllegalStateException("HTTP $code from $currentUrl")
+                    error("HTTP $code from $currentUrl")
                 }
                 return reader(conn, code)
             } finally {
                 conn.disconnect()
             }
         }
-        throw IllegalStateException("Redirect loop terminated unexpectedly for $initialUrl")
+        error("Redirect loop terminated unexpectedly for $initialUrl")
     }
 
     companion object {
