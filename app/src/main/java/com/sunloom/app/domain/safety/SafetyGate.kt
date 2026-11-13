@@ -76,109 +76,128 @@ class SafetyGate {
     ): SafetyVerdict {
         val auditNotes = ArrayList<String>()
 
-        // L1a. Check asset, SHA-256, & perceptual hash blocklists (Article VII §4 L2 & L5)
-        if (candidate.id in blockedAssetIds || candidate.provenance.assetId in blockedAssetIds) {
-            return SafetyVerdict.Rejected(
-                reasonCode = "BLOCKLISTED_ASSET",
-                explanation = "Asset '${candidate.id}' is in the permanent rejection blocklist.",
-                failedLayer = "L2"
-            )
-        }
-        if (candidate.provenance.sha256Checksum.isNotBlank() &&
-            candidate.provenance.sha256Checksum.lowercase(Locale.ROOT) in blockedSha256Checksums
-        ) {
-            return SafetyVerdict.Rejected(
-                reasonCode = "BLOCKLISTED_SHA256",
-                explanation = "Asset SHA-256 checksum matches a permanently blocklisted file.",
-                failedLayer = "L2"
-            )
-        }
-        if (candidate.provenance.perceptualHash.isNotBlank() &&
-            blockedPerceptualHashes.any { isNearDuplicateDHash(candidate.provenance.perceptualHash, it) }
-        ) {
-            return SafetyVerdict.Rejected(
-                reasonCode = "BLOCKLISTED_PERCEPTUAL_HASH",
-                explanation = "Asset perceptual hash matches a previously rejected wallpaper.",
-                failedLayer = "L2"
-            )
-        }
+        // The checks run in this order and the first to object decides; the order is part of the gate's behaviour.
+        checkBlocklists(candidate, blockedAssetIds, blockedPerceptualHashes, blockedSha256Checksums)?.let { return it }
 
         // Article VI §10 & VII §4: User-selected local imports are exempt from L1/L2 source & lexical gates
         if (candidate.isUserLocal) {
             auditNotes.add("User-selected local file: L1 & L2 exempt per Article VI §10")
-            return SafetyVerdict.Approved(
-                sha256Checksum = candidate.provenance.sha256Checksum,
-                detectedFormat = ImageFormat.JPEG,
-                auditNotes = auditNotes,
-                gateLayerOutcomes = GateTrace.metadataPass(isUserLocal = true)
-            )
+            return approved(candidate, auditNotes)
         }
 
-        // L1b. Admitted & enabled source check (Article VI §4 & VII §4 L1)
         val srcId = candidate.provenance.sourceId
+        checkSource(srcId, enabledSources)?.let { return it }
+        checkClassification(candidate, auditNotes)?.let { return it }
+        checkLicense(candidate, auditNotes)?.let { return it }
+        checkTransport(candidate, srcId)?.let { return it }
+        checkLexical(candidate, auditNotes)?.let { return it }
+        checkNasaRecord(candidate, srcId)?.let { return it }
+        checkSafeDomain(candidate, auditNotes)?.let { return it }
+
+        return approved(candidate, auditNotes)
+    }
+
+    private fun approved(candidate: CandidateAsset, auditNotes: List<String>) = SafetyVerdict.Approved(
+        sha256Checksum = candidate.provenance.sha256Checksum,
+        detectedFormat = ImageFormat.JPEG,
+        auditNotes = auditNotes,
+        gateLayerOutcomes = GateTrace.metadataPass(candidate.isUserLocal)
+    )
+
+    private fun rejected(reasonCode: String, explanation: String, failedLayer: String) =
+        SafetyVerdict.Rejected(reasonCode = reasonCode, explanation = explanation, failedLayer = failedLayer)
+
+    /** L1a. Check asset, SHA-256, & perceptual hash blocklists (Article VII §4 L2 & L5) */
+    private fun checkBlocklists(
+        candidate: CandidateAsset,
+        blockedAssetIds: Set<String>,
+        blockedPerceptualHashes: Set<String>,
+        blockedSha256Checksums: Set<String>
+    ): SafetyVerdict.Rejected? {
+        if (candidate.id in blockedAssetIds || candidate.provenance.assetId in blockedAssetIds) {
+            return rejected("BLOCKLISTED_ASSET", "Asset '${candidate.id}' is in the permanent rejection blocklist.", "L2")
+        }
+        if (candidate.provenance.sha256Checksum.isNotBlank() &&
+            candidate.provenance.sha256Checksum.lowercase(Locale.ROOT) in blockedSha256Checksums
+        ) {
+            return rejected("BLOCKLISTED_SHA256", "Asset SHA-256 checksum matches a permanently blocklisted file.", "L2")
+        }
+        if (candidate.provenance.perceptualHash.isNotBlank() &&
+            blockedPerceptualHashes.any { isNearDuplicateDHash(candidate.provenance.perceptualHash, it) }
+        ) {
+            return rejected("BLOCKLISTED_PERCEPTUAL_HASH", "Asset perceptual hash matches a previously rejected wallpaper.", "L2")
+        }
+        return null
+    }
+
+    /** L1b. Admitted & enabled source check (Article VI §4 & VII §4 L1) */
+    private fun checkSource(srcId: String, enabledSources: Set<String>?): SafetyVerdict.Rejected? {
         if (!SourceRegistry.isSourceAdmitted(srcId)) {
-            return SafetyVerdict.Rejected(
-                reasonCode = "UNADMITTED_SOURCE",
-                explanation = "Source '$srcId' is not an admitted Schedule A source.",
-                failedLayer = "L1"
-            )
+            return rejected("UNADMITTED_SOURCE", "Source '$srcId' is not an admitted Schedule A source.", "L1")
         }
         if (enabledSources != null && srcId !in enabledSources && srcId != SourceIds.SEED_RESERVE) {
-            return SafetyVerdict.Rejected(
-                reasonCode = "DISABLED_SOURCE",
-                explanation = "Source '$srcId' is currently disabled.",
-                failedLayer = "L1"
-            )
+            return rejected("DISABLED_SOURCE", "Source '$srcId' is currently disabled.", "L1")
         }
+        return null
+    }
 
-        // L1c. Fail-closed safety classification & Schedule A signal provenance check (Article VII §1 & §4 L2)
+    /** L1c. Fail-closed safety classification & Schedule A signal provenance check (Article VII §1 & §4 L2) */
+    private fun checkClassification(candidate: CandidateAsset, auditNotes: MutableList<String>): SafetyVerdict.Rejected? {
         val classificationSignal = candidate.provenance.safetyClassificationSource.trim()
         if (candidate.provenance.safetyClassification != SafetyClassification.SAFE || classificationSignal.isEmpty()) {
-            return SafetyVerdict.Rejected(
-                reasonCode = "UNVERIFIED_OR_UNSAFE_CLASSIFICATION",
-                explanation = if (classificationSignal.isEmpty()) {
+            return rejected(
+                "UNVERIFIED_OR_UNSAFE_CLASSIFICATION",
+                if (classificationSignal.isEmpty()) {
                     "Safety classification signal source is missing (Article VII §4 L2)."
                 } else {
                     "Safety classification is ${candidate.provenance.safetyClassification} (must be explicitly SAFE)."
                 },
-                failedLayer = "L2"
+                "L2"
             )
         }
         auditNotes.add("Safety classification verified as SAFE via $classificationSignal")
+        return null
+    }
 
-        // L1d. License & rights check (Article VI §5)
+    /** L1d. License & rights check (Article VI §5) */
+    private fun checkLicense(candidate: CandidateAsset, auditNotes: MutableList<String>): SafetyVerdict.Rejected? {
         if (!candidate.provenance.licenseType.permitsWallpaperUse) {
-            return SafetyVerdict.Rejected(
-                reasonCode = "INCOMPATIBLE_LICENSE",
-                explanation = "License ${candidate.provenance.licenseType.label} does not explicitly permit wallpaper use.",
-                failedLayer = "L1"
+            return rejected(
+                "INCOMPATIBLE_LICENSE",
+                "License ${candidate.provenance.licenseType.label} does not explicitly permit wallpaper use.",
+                "L1"
             )
         }
         // Article VI §8: Attribution-required licenses (CC BY, CC BY-SA) must have a valid human/institutional creator
         if (candidate.provenance.licenseType in ATTRIBUTION_REQUIRED_LICENSES) {
             val normalizedCreator = SafetyDenylist.normalizeRaw(candidate.provenance.creatorName)
             if (normalizedCreator.isEmpty() || normalizedCreator in INVALID_CREATOR_PLACEHOLDERS) {
-                return SafetyVerdict.Rejected(
-                    reasonCode = "MISSING_REQUIRED_CREATOR",
-                    explanation = "License ${candidate.provenance.licenseType.label} requires creator attribution, but creatorName was missing or unknown.",
-                    failedLayer = "L1"
+                return rejected(
+                    "MISSING_REQUIRED_CREATOR",
+                    "License ${candidate.provenance.licenseType.label} requires creator attribution, " +
+                        "but creatorName was missing or unknown.",
+                    "L1"
                 )
             }
         }
         auditNotes.add("License verified: ${candidate.provenance.licenseType.label}")
+        return null
+    }
 
-        // L1e. Transport security check for internet assets (Article VI §4f & VIII)
-        if (!candidate.isUserLocal && srcId != SourceIds.SEED_RESERVE) {
-            if (!candidate.downloadUrl.startsWith("https://")) {
-                return SafetyVerdict.Rejected(
-                    reasonCode = "INSECURE_TRANSPORT",
-                    explanation = "Internet download URL must use encrypted HTTPS transport.",
-                    failedLayer = "L1"
-                )
-            }
+    /** L1e. Transport security check for internet assets (Article VI §4f & VIII) */
+    private fun checkTransport(candidate: CandidateAsset, srcId: String): SafetyVerdict.Rejected? {
+        if (!candidate.isUserLocal && srcId != SourceIds.SEED_RESERVE && !candidate.downloadUrl.startsWith("https://")) {
+            return rejected("INSECURE_TRANSPORT", "Internet download URL must use encrypted HTTPS transport.", "L1")
         }
+        return null
+    }
 
-        // L2a. Mandatory tiered lexical denylist check across metadata (Article VII §1, §2 & §4)
+    /**
+     * L2a. Mandatory tiered lexical denylist check across metadata (Article VII §1, §2 & §4), then
+     * L2c. the single-scene guard: reject montages, collages, N x M arrays and labelled figure plates
+     * (Article VII §2 & §4, Constitution v0.13)
+     */
+    private fun checkLexical(candidate: CandidateAsset, auditNotes: MutableList<String>): SafetyVerdict.Rejected? {
         val matchedProhibited = SafetyDenylist.findProhibitedMatch(
             title = candidate.title,
             description = candidate.description,
@@ -186,101 +205,92 @@ class SafetyGate {
             attributionText = candidate.provenance.attributionText
         )
         if (matchedProhibited != null) {
-            return SafetyVerdict.Rejected(
-                reasonCode = "PROHIBITED_CONTENT_TERM",
-                explanation = "Asset metadata matched prohibited safety or public-display term '$matchedProhibited'.",
-                failedLayer = "L2"
+            return rejected(
+                "PROHIBITED_CONTENT_TERM",
+                "Asset metadata matched prohibited safety or public-display term '$matchedProhibited'.",
+                "L2"
             )
         }
         auditNotes.add("Passed L2 safety & public-display denylist gate ($COMPOSITE_GATE_VERSION)")
 
-        // L2c. Single-scene guard: reject montages, collages, N x M arrays and labelled figure plates
-        // (Article VII §2 & §4, Constitution v0.13)
         val compositeMatch = SafetyDenylist.findCompositeLayoutMatch(
             title = candidate.title,
             description = candidate.description,
             rawCategoriesAndTags = candidate.rawCategoriesAndTags
         )
         if (compositeMatch != null) {
-            return SafetyVerdict.Rejected(
-                reasonCode = "COMPOSITE_OR_MULTI_PANEL_LAYOUT",
-                explanation = "Asset is a montage, collage or multi-panel figure rather than a single scene (matched '$compositeMatch').",
-                failedLayer = "L2"
+            return rejected(
+                "COMPOSITE_OR_MULTI_PANEL_LAYOUT",
+                "Asset is a montage, collage or multi-panel figure rather than a single scene (matched '$compositeMatch').",
+                "L2"
             )
         }
+        return null
+    }
 
-        // L2d. Not a scene: data maps, charts, diagrams and artist renderings (Constitution v0.25)
-        // Only NASA's library mixes photographs with maps, products and staff shots; museum prints and user files
-        // are not judged here. The record family is read from the stored asset id (`nasa-<id>`).
-        if (srcId == SourceIds.NASA_LIBRARY) {
-            val notAdmitted = NasaRecordPolicy.rejection(
-                nasaId = candidate.provenance.assetId.removePrefix("nasa-"),
-                title = candidate.title,
-                description = candidate.description,
-                keywords = candidate.rawCategoriesAndTags
-            )
-            if (notAdmitted != null) {
-                return SafetyVerdict.Rejected(
-                    reasonCode = "NASA_RECORD_NOT_ADMITTED",
-                    explanation = "NASA record is not a wallpaper-grade photograph: $notAdmitted.",
-                    failedLayer = "L2"
-                )
-            }
-        }
-        val nonPhotographicMatch = if (srcId == SourceIds.NASA_LIBRARY) {
-            SafetyDenylist.findNonPhotographicMatch(
-                title = candidate.title,
-                description = candidate.description,
-                rawCategoriesAndTags = candidate.rawCategoriesAndTags
-            )
-        } else {
-            null
-        }
-        if (nonPhotographicMatch != null) {
-            return SafetyVerdict.Rejected(
-                reasonCode = "NON_PHOTOGRAPHIC_CONTENT",
-                explanation = "Asset is a map, chart, diagram or rendering rather than a photograph (matched '$nonPhotographicMatch').",
-                failedLayer = "L2"
-            )
-        }
-
-        // L2b. Internet candidates must have non-empty source tags and match a recognized safe visual domain
-        if (!candidate.isUserLocal) {
-            if (candidate.rawCategoriesAndTags.isEmpty()) {
-                return SafetyVerdict.Rejected(
-                    reasonCode = "MISSING_SAFETY_TAGS",
-                    explanation = "Internet-sourced candidate has no category or subject tags from the source.",
-                    failedLayer = "L2"
-                )
-            }
-            val declaredByMuseumQuery = srcId in MUSEUM_SOURCES_WITH_CLASSIFICATION_FILTER &&
-                candidate.category in MUSEUM_SAFE_CATEGORIES
-            if (!declaredByMuseumQuery &&
-                !SafetyDenylist.matchesSafeDomain(candidate.title, candidate.rawCategoriesAndTags)
-            ) {
-                return SafetyVerdict.Rejected(
-                    reasonCode = "UNRECOGNIZED_SAFE_DOMAIN",
-                    explanation = "Candidate does not match any verified safe visual domain (landscape, nature, space, architecture, abstract, scenic).",
-                    failedLayer = "L2"
-                )
-            }
-            auditNotes.add(
-                if (declaredByMuseumQuery &&
-                    !SafetyDenylist.matchesSafeDomain(candidate.title, candidate.rawCategoriesAndTags)
-                ) {
-                    "Safe visual domain taken from the filtered museum query (${candidate.category.displayName}); L2a passed"
-                } else {
-                    "Verified safe visual domain membership (${candidate.category.displayName})"
-                }
-            )
-        }
-
-        return SafetyVerdict.Approved(
-            sha256Checksum = candidate.provenance.sha256Checksum,
-            detectedFormat = ImageFormat.JPEG,
-            auditNotes = auditNotes,
-            gateLayerOutcomes = GateTrace.metadataPass(candidate.isUserLocal)
+    /**
+     * L2d. Not a scene: data maps, charts, diagrams and artist renderings (Constitution v0.25)
+     * Only NASA's library mixes photographs with maps, products and staff shots; museum prints and user files
+     * are not judged here. The record family is read from the stored asset id (`nasa-<id>`).
+     */
+    private fun checkNasaRecord(candidate: CandidateAsset, srcId: String): SafetyVerdict.Rejected? {
+        if (srcId != SourceIds.NASA_LIBRARY) return null
+        val notAdmitted = NasaRecordPolicy.rejection(
+            nasaId = candidate.provenance.assetId.removePrefix("nasa-"),
+            title = candidate.title,
+            description = candidate.description,
+            keywords = candidate.rawCategoriesAndTags
         )
+        if (notAdmitted != null) {
+            return rejected(
+                "NASA_RECORD_NOT_ADMITTED",
+                "NASA record is not a wallpaper-grade photograph: $notAdmitted.",
+                "L2"
+            )
+        }
+        val nonPhotographicMatch = SafetyDenylist.findNonPhotographicMatch(
+            title = candidate.title,
+            description = candidate.description,
+            rawCategoriesAndTags = candidate.rawCategoriesAndTags
+        )
+        if (nonPhotographicMatch != null) {
+            return rejected(
+                "NON_PHOTOGRAPHIC_CONTENT",
+                "Asset is a map, chart, diagram or rendering rather than a photograph (matched '$nonPhotographicMatch').",
+                "L2"
+            )
+        }
+        return null
+    }
+
+    /** L2b. Internet candidates must have non-empty source tags and match a recognized safe visual domain */
+    private fun checkSafeDomain(candidate: CandidateAsset, auditNotes: MutableList<String>): SafetyVerdict.Rejected? {
+        if (candidate.isUserLocal) return null
+        if (candidate.rawCategoriesAndTags.isEmpty()) {
+            return rejected(
+                "MISSING_SAFETY_TAGS",
+                "Internet-sourced candidate has no category or subject tags from the source.",
+                "L2"
+            )
+        }
+        val declaredByMuseumQuery = candidate.provenance.sourceId in MUSEUM_SOURCES_WITH_CLASSIFICATION_FILTER &&
+            candidate.category in MUSEUM_SAFE_CATEGORIES
+        val matchesSafeDomain = SafetyDenylist.matchesSafeDomain(candidate.title, candidate.rawCategoriesAndTags)
+        if (!declaredByMuseumQuery && !matchesSafeDomain) {
+            return rejected(
+                "UNRECOGNIZED_SAFE_DOMAIN",
+                "Candidate does not match any verified safe visual domain (landscape, nature, space, architecture, abstract, scenic).",
+                "L2"
+            )
+        }
+        auditNotes.add(
+            if (declaredByMuseumQuery && !matchesSafeDomain) {
+                "Safe visual domain taken from the filtered museum query (${candidate.category.displayName}); L2a passed"
+            } else {
+                "Verified safe visual domain membership (${candidate.category.displayName})"
+            }
+        )
+        return null
     }
 
     fun evaluatePayload(
