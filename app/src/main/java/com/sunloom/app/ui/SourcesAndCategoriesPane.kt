@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sunloom.app.domain.model.SafeCategory
+import com.sunloom.app.domain.model.SourceDiagnostics
 import com.sunloom.app.domain.model.SourceHealthState
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -50,10 +51,28 @@ internal fun SourcesAndCategoriesPane(
     onSyncOnline: () -> Unit
 ) {
     val scrollState = rememberScrollState()
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .desktopScrollbar(scrollState)
+            .verticalScroll(scrollState),
+        verticalArrangement = Arrangement.spacedBy(Spacing.m)
+    ) {
+        SourcesCard(uiState, onToggleSource, onToggleWifiOnly, onToggleBatterySaverDeferral)
+        CategoriesCard(uiState, onToggleCategory, onSyncOnline)
+    }
+}
+
+@Composable
+private fun SourcesCard(
+    uiState: SunloomUiState,
+    onToggleSource: (String) -> Unit,
+    onToggleWifiOnly: (Boolean) -> Unit,
+    onToggleBatterySaverDeferral: (Boolean) -> Unit
+) {
     val diagMap = remember(uiState.sourceDiagnostics) {
         uiState.sourceDiagnostics.associateBy { it.sourceId }
     }
-
     val admittedRegistrations = remember {
         com.sunloom.app.data.sources.SourceRegistry.admittedSources()
     }
@@ -64,138 +83,170 @@ internal fun SourcesAndCategoriesPane(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .desktopScrollbar(scrollState)
-            .verticalScroll(scrollState),
-        verticalArrangement = Arrangement.spacedBy(Spacing.m)
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = MaterialTheme.shapes.large,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
-                Text(stringResource(R.string.wallpaper_sources), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())
-                Text(
-                    stringResource(R.string.online_and_user_sources_always_take_prio),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
+            Text(
+                stringResource(R.string.wallpaper_sources),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.sectionHeading()
+            )
+            Text(
+                stringResource(R.string.online_and_user_sources_always_take_prio),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            sourceCatalog.forEach { (id, title, desc) ->
+                SourceRow(
+                    title = title,
+                    description = desc,
+                    diagnostics = diagMap[id],
+                    enabled = id in uiState.preferences.enabledSources,
+                    onToggle = { onToggleSource(id) }
                 )
+            }
 
-                sourceCatalog.forEach { (id, title, desc) ->
-                    val diag = diagMap[id]
-                    val isUnhealthy = diag != null && diag.healthState != SourceHealthState.HEALTHY
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(Spacing.s)
-                            ) {
-                                Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                if (isUnhealthy) {
-                                    Text(
-                                        text = "• ${diag.healthState.title()}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                            }
-                            Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (diag != null && diag.lastSyncSummary.isNotBlank()) {
-                                Text(
-                                    text = stringResource(R.string.last_sync, diag.lastSyncSummary),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            if (diag != null && diag.lastError.isNotBlank()) {
-                                Text(
-                                    text = diag.lastError,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.secondary
-                                )
-                            }
-                        }
-                        Switch(
-                            checked = id in uiState.preferences.enabledSources,
-                            onCheckedChange = { onToggleSource(id) }, modifier = Modifier.desktopControl(CircleShape).switchLabel(title)
-                        )
-                    }
-                }
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            SettingSwitchRow(
+                title = stringResource(R.string.unmetered_wi_fi_or_ethernet_only),
+                description = stringResource(R.string.pause_background_downloads_when_connecte),
+                checked = uiState.preferences.wifiOnlyDownloads,
+                onCheckedChange = onToggleWifiOnly
+            )
+            SettingSwitchRow(
+                title = stringResource(R.string.pause_downloads_on_battery_saver),
+                description = stringResource(R.string.defer_background_catalog_refreshes_when),
+                checked = uiState.preferences.deferOnBatterySaver,
+                onCheckedChange = onToggleBatterySaverDeferral,
+                switchTag = "defer_battery_saver_switch"
+            )
+        }
+    }
+}
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.unmetered_wi_fi_or_ethernet_only), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        Text(stringResource(R.string.pause_background_downloads_when_connecte), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Switch(
-                        checked = uiState.preferences.wifiOnlyDownloads,
-                        onCheckedChange = onToggleWifiOnly, modifier = Modifier.desktopControl(CircleShape).switchLabel(stringResource(R.string.unmetered_wi_fi_or_ethernet_only))
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.pause_downloads_on_battery_saver), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            stringResource(R.string.defer_background_catalog_refreshes_when),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = uiState.preferences.deferOnBatterySaver,
-                        onCheckedChange = onToggleBatterySaverDeferral,
-                        modifier = Modifier.desktopControl(CircleShape)
-                            .switchLabel(stringResource(R.string.pause_downloads_on_battery_saver))
-                            .testTag("defer_battery_saver_switch")
+@Composable
+private fun SourceRow(
+    title: String,
+    description: String,
+    diagnostics: SourceDiagnostics?,
+    enabled: Boolean,
+    onToggle: () -> Unit
+) {
+    val isUnhealthy = diagnostics != null && diagnostics.healthState != SourceHealthState.HEALTHY
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.s)
+            ) {
+                Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                if (isUnhealthy) {
+                    Text(
+                        text = "• ${diagnostics.healthState.title()}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error
                     )
                 }
             }
+            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (diagnostics != null && diagnostics.lastSyncSummary.isNotBlank()) {
+                Text(
+                    text = stringResource(R.string.last_sync, diagnostics.lastSyncSummary),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (diagnostics != null && diagnostics.lastError.isNotBlank()) {
+                Text(
+                    text = diagnostics.lastError,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
         }
+        Switch(
+            checked = enabled,
+            onCheckedChange = { onToggle() },
+            modifier = Modifier.desktopControl(CircleShape).switchLabel(title)
+        )
+    }
+}
 
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = MaterialTheme.shapes.large,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
-                Text(stringResource(R.string.categories), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.sectionHeading())
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.s)
-                ) {
-                    SafeCategory.entries.forEach { cat ->
-                        FilterChip(
-                            selected = cat in uiState.preferences.enabledCategories,
-                            onClick = { onToggleCategory(cat) },
-                            label = { Text(cat.title()) }, modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
-                        )
-                    }
+/** A titled setting with a one-line explanation and a switch. */
+@Composable
+private fun SettingSwitchRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    switchTag: String? = null
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.desktopControl(CircleShape).switchLabel(title)
+                .let { if (switchTag != null) it.testTag(switchTag) else it }
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CategoriesCard(uiState: SunloomUiState, onToggleCategory: (SafeCategory) -> Unit, onSyncOnline: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
+            Text(
+                stringResource(R.string.categories),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.sectionHeading()
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                verticalArrangement = Arrangement.spacedBy(Spacing.s)
+            ) {
+                SafeCategory.entries.forEach { cat ->
+                    FilterChip(
+                        selected = cat in uiState.preferences.enabledCategories,
+                        onClick = { onToggleCategory(cat) },
+                        label = { Text(cat.title()) },
+                        modifier = Modifier.desktopControl(MaterialTheme.shapes.small)
+                    )
                 }
-                Button(onClick = onSyncOnline, enabled = !uiState.isSyncingOnline, modifier = Modifier.desktopControl(CircleShape).testTag("sync_online_button")) {
-                    Icon(SunloomIcons.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (uiState.isSyncingOnline) stringResource(R.string.syncing) else stringResource(R.string.sync_catalog_now))
-                }
+            }
+            Button(
+                onClick = onSyncOnline,
+                enabled = !uiState.isSyncingOnline,
+                modifier = Modifier.desktopControl(CircleShape).testTag("sync_online_button")
+            ) {
+                Icon(SunloomIcons.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(if (uiState.isSyncingOnline) stringResource(R.string.syncing) else stringResource(R.string.sync_catalog_now))
             }
         }
     }
