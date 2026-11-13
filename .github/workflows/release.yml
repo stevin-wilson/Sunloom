@@ -40,7 +40,7 @@ jobs:
           python3 -m unittest discover -s scripts -p 'test_*.py'
           python3 scripts/release_version.py "$TAG" | tee -a "$GITHUB_ENV"
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 17
