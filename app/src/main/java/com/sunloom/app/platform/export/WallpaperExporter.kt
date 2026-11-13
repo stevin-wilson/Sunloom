@@ -58,19 +58,23 @@ class WallpaperExporter(
             val source = File(record.localFilePath)
             val payload = if (mimeTypeFor(record) == "image/jpeg") withEmbeddedCredit(record, source) else source
             try {
-                contentResolver.openOutputStream(target, "wt")?.use { out ->
-                    payload.inputStream().use { it.copyTo(out) }
-                } ?: return false
+                copyPayload(payload, target)
             } finally {
                 if (payload !== source) payload.delete()
             }
-            true
         } catch (e: IOException) {
             false
         } catch (e: SecurityException) {
             false
         }
     }
+
+    /** Writes [payload] to [target]; false when the target cannot be opened. */
+    private fun copyPayload(payload: File, target: Uri): Boolean =
+        contentResolver.openOutputStream(target, "wt")?.use { out ->
+            payload.inputStream().use { it.copyTo(out) }
+            true
+        } ?: false
 
     fun writeAttribution(record: WallpaperRecord, target: Uri): Boolean {
         return try {

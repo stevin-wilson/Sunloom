@@ -292,55 +292,83 @@ class DefaultHttpsClient(
         reader: (HttpURLConnection, Int) -> T
     ): T {
         var currentUrl = initialUrl
+        val conditional = !ifNoneMatch.isNullOrBlank() || !ifModifiedSince.isNullOrBlank()
         for (hop in 0..MAX_REDIRECT_HOPS) {
-            validateHttpsAndHost(currentUrl, scopeSourceId)
-            val conn = connectionFactory(URL(currentUrl)).apply {
-                instanceFollowRedirects = false
-                requestMethod = "GET"
-                connectTimeout = 10_000
-                readTimeout = 20_000
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Accept", acceptHeader)
-                if (hop == 0) {
-                    if (!ifNoneMatch.isNullOrBlank()) setRequestProperty("If-None-Match", ifNoneMatch)
-                    if (!ifModifiedSince.isNullOrBlank()) setRequestProperty("If-Modified-Since", ifModifiedSince)
-                }
-            }
+            val conn = openHop(currentUrl, hop, scopeSourceId, acceptHeader, ifNoneMatch, ifModifiedSince)
             track(conn)
             try {
                 val code = conn.responseCode
                 if (code in REDIRECT_STATUS_CODES) {
-                    if (hop == MAX_REDIRECT_HOPS) {
-                        error("Exceeded maximum redirect hops ($MAX_REDIRECT_HOPS) for $initialUrl")
-                    }
-                    val location = conn.getHeaderField("Location")?.trim().orEmpty()
-                    if (location.isEmpty()) {
-                        error("HTTP $code redirect missing Location header from $currentUrl")
-                    }
-                    val resolvedUrl = URL(URL(currentUrl), location).toString()
-                    validateHttpsAndHost(resolvedUrl, scopeSourceId)
-                    currentUrl = resolvedUrl
+                    currentUrl = redirectTarget(conn, code, hop, currentUrl, initialUrl, scopeSourceId)
                     continue
                 }
-                if (code == 429) {
-                    val retryAfterSec = parseRetryAfterSeconds(conn.getHeaderField("Retry-After"))
-                    throw RateLimitException(
-                        retryAfterSeconds = retryAfterSec,
-                        message = "HTTP 429 rate-limited from $currentUrl (Retry-After: ${retryAfterSec}s)"
-                    )
-                }
-                if (code == HttpURLConnection.HTTP_NOT_MODIFIED && (!ifNoneMatch.isNullOrBlank() || !ifModifiedSince.isNullOrBlank())) {
-                    return reader(conn, code)
-                }
-                if (code !in 200..299) {
-                    error("HTTP $code from $currentUrl")
-                }
+                checkFinalStatus(conn, code, currentUrl, conditional)
                 return reader(conn, code)
             } finally {
                 conn.disconnect()
             }
         }
         error("Redirect loop terminated unexpectedly for $initialUrl")
+    }
+
+    /** Opens [url] (https, and a host this source may use) without following redirects; conditional headers only on the first hop. */
+    private fun openHop(
+        url: String,
+        hop: Int,
+        scopeSourceId: String?,
+        acceptHeader: String,
+        ifNoneMatch: String?,
+        ifModifiedSince: String?
+    ): HttpURLConnection {
+        validateHttpsAndHost(url, scopeSourceId)
+        return connectionFactory(URL(url)).apply {
+            instanceFollowRedirects = false
+            requestMethod = "GET"
+            connectTimeout = 10_000
+            readTimeout = 20_000
+            setRequestProperty("User-Agent", USER_AGENT)
+            setRequestProperty("Accept", acceptHeader)
+            if (hop == 0) {
+                if (!ifNoneMatch.isNullOrBlank()) setRequestProperty("If-None-Match", ifNoneMatch)
+                if (!ifModifiedSince.isNullOrBlank()) setRequestProperty("If-Modified-Since", ifModifiedSince)
+            }
+        }
+    }
+
+    /** The validated URL a redirect points to; too many hops or a missing Location is an error. */
+    private fun redirectTarget(
+        conn: HttpURLConnection,
+        code: Int,
+        hop: Int,
+        currentUrl: String,
+        initialUrl: String,
+        scopeSourceId: String?
+    ): String {
+        if (hop == MAX_REDIRECT_HOPS) {
+            error("Exceeded maximum redirect hops ($MAX_REDIRECT_HOPS) for $initialUrl")
+        }
+        val location = conn.getHeaderField("Location")?.trim().orEmpty()
+        if (location.isEmpty()) {
+            error("HTTP $code redirect missing Location header from $currentUrl")
+        }
+        val resolvedUrl = URL(URL(currentUrl), location).toString()
+        validateHttpsAndHost(resolvedUrl, scopeSourceId)
+        return resolvedUrl
+    }
+
+    /** Throws for a rate limit or any status that is neither success nor an expected 304 on a conditional request. */
+    private fun checkFinalStatus(conn: HttpURLConnection, code: Int, currentUrl: String, conditional: Boolean) {
+        if (code == 429) {
+            val retryAfterSec = parseRetryAfterSeconds(conn.getHeaderField("Retry-After"))
+            throw RateLimitException(
+                retryAfterSeconds = retryAfterSec,
+                message = "HTTP 429 rate-limited from $currentUrl (Retry-After: ${retryAfterSec}s)"
+            )
+        }
+        val notModified = code == HttpURLConnection.HTTP_NOT_MODIFIED && conditional
+        if (!notModified && code !in 200..299) {
+            error("HTTP $code from $currentUrl")
+        }
     }
 
     companion object {

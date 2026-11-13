@@ -37,20 +37,7 @@ object GridAverager {
             sums.fill(0L)
             for (y in y0 until y1) {
                 readRow(y, row)
-                for (gx in 0 until gridW) {
-                    var r = 0L
-                    var g = 0L
-                    var b = 0L
-                    for (x in xStart[gx] until xEnd[gx]) {
-                        val p = row[x]
-                        r += (p shr 16) and 0xFF
-                        g += (p shr 8) and 0xFF
-                        b += p and 0xFF
-                    }
-                    sums[gx * 3] += r
-                    sums[gx * 3 + 1] += g
-                    sums[gx * 3 + 2] += b
-                }
+                addRowToSums(row, xStart, xEnd, sums)
             }
             val rowsInCell = y1 - y0
             for (gx in 0 until gridW) {
@@ -62,6 +49,24 @@ object GridAverager {
             }
         }
         return result
+    }
+
+    /** Adds this source row's channel totals for each grid column (columns [xStart, xEnd)) into [sums], three per column. */
+    private fun addRowToSums(row: IntArray, xStart: IntArray, xEnd: IntArray, sums: LongArray) {
+        for (gx in xStart.indices) {
+            var r = 0L
+            var g = 0L
+            var b = 0L
+            for (x in xStart[gx] until xEnd[gx]) {
+                val p = row[x]
+                r += (p shr 16) and 0xFF
+                g += (p shr 8) and 0xFF
+                b += p and 0xFF
+            }
+            sums[gx * 3] += r
+            sums[gx * 3 + 1] += g
+            sums[gx * 3 + 2] += b
+        }
     }
 
     /** Convenience for pixels already in memory (row-major, [width] x [height]). */

@@ -737,28 +737,33 @@ class GoogleBookPlatformAdapter(
         val temp = IntArray(w * h)
         for (y in 0 until h) {
             for (x in 0 until w) {
-                var rSum = 0
-                var gSum = 0
-                var bSum = 0
-                var count = 0
-                for (dy in -radius..radius) {
-                    val ny = (y + dy).coerceIn(0, h - 1)
-                    for (dx in -radius..radius) {
-                        val nx = (x + dx).coerceIn(0, w - 1)
-                        val c = pixels[ny * w + nx]
-                        rSum += (c shr 16) and 0xFF
-                        gSum += (c shr 8) and 0xFF
-                        bSum += c and 0xFF
-                        count++
-                    }
-                }
-                val r = ((rSum / count) * darkenFactor).roundToInt().coerceIn(0, 255)
-                val g = ((gSum / count) * darkenFactor).roundToInt().coerceIn(0, 255)
-                val b = ((bSum / count) * darkenFactor).roundToInt().coerceIn(0, 255)
-                temp[y * w + x] = Color.rgb(r, g, b)
+                temp[y * w + x] = boxBlurredPixel(pixels, w, h, x, y, radius, darkenFactor)
             }
         }
         bmp.setPixels(temp, 0, w, 0, 0, w, h)
+    }
+
+    /** The mean colour of the (2 * [radius] + 1) square around ([x], [y]), edges clamped, scaled by [darkenFactor]. */
+    private fun boxBlurredPixel(pixels: IntArray, w: Int, h: Int, x: Int, y: Int, radius: Int, darkenFactor: Float): Int {
+        var rSum = 0
+        var gSum = 0
+        var bSum = 0
+        var count = 0
+        for (dy in -radius..radius) {
+            val ny = (y + dy).coerceIn(0, h - 1)
+            for (dx in -radius..radius) {
+                val nx = (x + dx).coerceIn(0, w - 1)
+                val c = pixels[ny * w + nx]
+                rSum += (c shr 16) and 0xFF
+                gSum += (c shr 8) and 0xFF
+                bSum += c and 0xFF
+                count++
+            }
+        }
+        val r = ((rSum / count) * darkenFactor).roundToInt().coerceIn(0, 255)
+        val g = ((gSum / count) * darkenFactor).roundToInt().coerceIn(0, 255)
+        val b = ((bSum / count) * darkenFactor).roundToInt().coerceIn(0, 255)
+        return Color.rgb(r, g, b)
     }
 
     /** See [SunloomWallpaperScheduler.cancelAllScheduledWorkAndWait]. */
