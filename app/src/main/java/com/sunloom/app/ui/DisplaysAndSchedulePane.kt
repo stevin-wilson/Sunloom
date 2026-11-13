@@ -270,7 +270,6 @@ internal fun DisplaysAndSchedulePane(
     onUpdateChangeEvery: (hours: Int) -> Unit = {},
     onSetChosenWallpaper: (ChosenSlot, String?) -> Unit = { _, _ -> },
     onUpdateCustomCoordinates: (lat: Double, lon: Double, label: String) -> Unit,
-    onToggleBatterySaverDeferral: (Boolean) -> Unit,
     onUpdateDisplayPolicy: (DisplayPolicy) -> Unit = {},
     onForgetRememberedDisplay: (String) -> Unit = {},
     onToggleAutoSwitch: (Boolean) -> Unit = {},

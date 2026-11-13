@@ -10,3 +10,6 @@ internal fun String.cleanedOrNull(): String? =
 /** Every entry of the array as clean text (see [cleanedOrNull]), in order, skipping unusable ones. */
 internal fun SimpleJson.JsonArr.cleanStrings(): List<String> =
     (0 until size).mapNotNull { str(it, "").cleanedOrNull() }
+
+/** True when this text contains at least one of [terms] (case sensitive, like [String.contains]). */
+internal fun String.containsAnyOf(vararg terms: String): Boolean = terms.any { contains(it) }

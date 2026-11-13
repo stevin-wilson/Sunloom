@@ -34,7 +34,7 @@ class ImageEvaluator(
         display: DisplayProfile,
         allowBlurredFrameFill: Boolean = false
     ): ImageEvaluationResult {
-        if (imageWidth <= 0 || imageHeight <= 0 || gridWidth <= 0 || gridHeight <= 0 || rgbGrid.size < gridWidth * gridHeight) {
+        if (!isUsableSample(imageWidth, imageHeight, rgbGrid, gridWidth, gridHeight)) {
             return rejected(
                 "INVALID_DIMENSIONS",
                 "Image dimensions ($imageWidth × $imageHeight) or pixel sample grid are invalid."
@@ -107,6 +107,11 @@ class ImageEvaluator(
         )
     }
 
+    private fun isUsableSample(imageWidth: Int, imageHeight: Int, rgbGrid: IntArray, gridWidth: Int, gridHeight: Int): Boolean {
+        val sizesValid = imageWidth > 0 && imageHeight > 0 && gridWidth > 0 && gridHeight > 0
+        return sizesValid && rgbGrid.size >= gridWidth * gridHeight
+    }
+
     private fun floorDescription(display: DisplayProfile) = when (display.qualityTier) {
         DisplayQualityTier.HIGH_65 -> "65% high-DPI floor (>= 1600px long edge)"
         DisplayQualityTier.MID_80 -> "80% mid-PPI floor (120–209 PPI)"
@@ -159,16 +164,19 @@ class ImageEvaluator(
         val yEndNorm = ((cropRect.top + cropRect.height).toDouble() / imageHeight.toDouble()).coerceIn(yStartNorm + 0.01, 1.0)
 
         val acc = CropAccumulator(gridWidth * gridHeight)
-        for (gy in 0 until gridHeight) {
-            if (gy < margins.top || gy >= gridHeight - margins.bottom) continue
+        val rows = (margins.top until gridHeight - margins.bottom).filter { gy ->
             val vGlobal = (gy + 0.5) / gridHeight.toDouble()
-            if (vGlobal < yStartNorm || vGlobal > yEndNorm) continue
+            vGlobal >= yStartNorm && vGlobal <= yEndNorm
+        }
+        val columns = (margins.left until gridWidth - margins.right).filter { gx ->
+            val uGlobal = (gx + 0.5) / gridWidth.toDouble()
+            uGlobal >= xStartNorm && uGlobal <= xEndNorm
+        }
+        for (gy in rows) {
+            val vGlobal = (gy + 0.5) / gridHeight.toDouble()
             val vCrop = ((vGlobal - yStartNorm) / (yEndNorm - yStartNorm)).coerceIn(0.0, 1.0)
-
-            for (gx in 0 until gridWidth) {
-                if (gx < margins.left || gx >= gridWidth - margins.right) continue
+            for (gx in columns) {
                 val uGlobal = (gx + 0.5) / gridWidth.toDouble()
-                if (uGlobal < xStartNorm || uGlobal > xEndNorm) continue
                 val uCrop = ((uGlobal - xStartNorm) / (xEndNorm - xStartNorm)).coerceIn(0.0, 1.0)
                 acc.add(rgbGrid[gy * gridWidth + gx], uCrop, vCrop)
             }

@@ -92,18 +92,19 @@ class DisplayProbe(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
             val bounds = runCatching { wm?.maximumWindowMetrics?.bounds }.getOrNull()
+            val usableBounds = bounds?.takeIf { it.width() > 0 && it.height() > 0 }
             val dm = context.resources.displayMetrics
             val dpi = context.resources.configuration.densityDpi.takeIf { it > 0 }
                 ?: dm.densityDpi.takeIf { it > 0 }
-            if (bounds != null && bounds.width() > 0 && bounds.height() > 0 && dpi != null) {
+            if (usableBounds != null && dpi != null) {
                 val fallbackDisplay = DisplayProfile(
                     displayId = Display.DEFAULT_DISPLAY,
                     name = "GoogleBook Built-in Display",
-                    widthPx = bounds.width(),
-                    heightPx = bounds.height(),
+                    widthPx = usableBounds.width(),
+                    heightPx = usableBounds.height(),
                     densityDpi = dpi,
                     isPrimary = true,
-                    physicalPpi = resolvePhysicalPpi(bounds.width(), bounds.height(), dm.xdpi, dm.ydpi)
+                    physicalPpi = resolvePhysicalPpi(usableBounds.width(), usableBounds.height(), dm.xdpi, dm.ydpi)
                 )
                 if (recordHistory) {
                     historyStore.recordConnectedDisplays(listOf(fallbackDisplay))
@@ -209,13 +210,10 @@ class DisplayProbe(
             fallbackMetricsHeight: Int,
             useNaturalOrientation: Boolean = false
         ): Pair<Int, Int>? {
+            val fallbackKnown = fallbackMetricsWidth > 0 && fallbackMetricsHeight > 0
             if (modeWidth > 0 && modeHeight > 0) {
                 if (useNaturalOrientation) return modeWidth to modeHeight
-                if (fallbackMetricsWidth > 0 &&
-                    fallbackMetricsHeight > 0 &&
-                    fallbackMetricsWidth != fallbackMetricsHeight &&
-                    modeWidth != modeHeight
-                ) {
+                if (fallbackKnown && fallbackMetricsWidth != fallbackMetricsHeight && modeWidth != modeHeight) {
                     val longEdge = max(modeWidth, modeHeight)
                     val shortEdge = min(modeWidth, modeHeight)
                     return if (fallbackMetricsWidth > fallbackMetricsHeight) {
@@ -230,7 +228,7 @@ class DisplayProbe(
                     modeWidth to modeHeight
                 }
             }
-            if (fallbackMetricsWidth > 0 && fallbackMetricsHeight > 0) {
+            if (fallbackKnown) {
                 return fallbackMetricsWidth to fallbackMetricsHeight
             }
             return null

@@ -137,7 +137,8 @@ class AndroidSunloomGateway(
         val reapplied = reconcileActiveWallpaperForDisplay(repo, display, connectedDisplays, prefs, activeBefore)
         promoteNonSeedOverSeedIfNeeded(repo, prefs, display, connectedDisplays)
         currentGeometryKey?.let(reconcileGate::markReconciled)
-        val banner = if (reapplied || reserveChanged || (prevGeometryKey != null && prevGeometryKey != currentGeometryKey)) {
+        val geometryChanged = prevGeometryKey != null && prevGeometryKey != currentGeometryKey
+        val banner = if (reapplied || reserveChanged || geometryChanged) {
             if (connectedDisplays.size > 1 && prefs.displayPolicy == DisplayPolicy.SAME_ON_ALL_DISPLAYS) {
                 context.resources.getQuantityString(R.plurals.msg_adapted_multi_display, connectedDisplays.size, connectedDisplays.size)
             } else {
@@ -185,72 +186,13 @@ class AndroidSunloomGateway(
             (!currentRecord.isBaselineRestore && !currentRecord.evaluation.isEligible)
 
         if (needsReplacement) {
-            val activePool = filterActiveLibraryPool(repo.getAllWallpapers(), prefs)
-            val targetBrightness = solarCalculator.resolveSolarSnapshot(
-                preferences = prefs,
-                isSystemInDarkTheme = isSystemInDarkTheme()
-            ).targetBrightness
-            val excludeId = currentId ?: activeBeforeInvalidation
-            val replacements = matcher.rankCandidatesForSelection(
-                candidates = activePool,
-                targetBrightness = targetBrightness,
-                preferences = prefs,
-                currentWallpaperId = excludeId,
-                recentlyUsedIds = setOfNotNull(excludeId, repo.getPreviousWallpaperId()),
-                maxResults = 3,
-                taste = TasteProfile.from(repo.getAllWallpapers()),
-                subjectFit = SubjectFit.forDisplays(connectedDisplays, prefs)
+            return replaceInvalidatedWallpaper(
+                repo, display, connectedDisplays, prefs, currentId, activeBeforeInvalidation, currentGeometryKey
             )
-            for (replacement in replacements) {
-                val status = platformAdapter.applyWallpaperAtomically(
-                    record = replacement,
-                    policy = prefs.lockWorkspacePolicy,
-                    targetDisplay = display,
-                    dryRunPreviewOnly = prefs.dryRunPreviewOnly,
-                    connectedDisplays = connectedDisplays,
-                    displayPolicy = prefs.displayPolicy,
-                    onApplied = { repo.recordWallpaperApplied(replacement.id) }
-                )
-                if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) {
-                    repo.setLastAppliedDisplayGeometryKey(currentGeometryKey)
-                    return true
-                }
-            }
-            // Fallback to baseline restore if active wallpaper was invalidated and no reserve item applied
-            if (activeBeforeInvalidation != null) {
-                val baseline = repo.getAllWallpapers().firstOrNull { it.isBaselineRestore && !it.isRejected }
-                if (baseline != null) {
-                    val baseStatus = platformAdapter.applyWallpaperAtomically(
-                        record = baseline,
-                        policy = prefs.lockWorkspacePolicy,
-                        targetDisplay = display,
-                        dryRunPreviewOnly = prefs.dryRunPreviewOnly,
-                        connectedDisplays = connectedDisplays,
-                        displayPolicy = prefs.displayPolicy,
-                    onApplied = { repo.recordWallpaperApplied(baseline.id) }
-                    )
-                    if (baseStatus == WallpaperStatus.APPLIED_SUCCESSFULLY) {
-                        repo.setLastAppliedDisplayGeometryKey(currentGeometryKey)
-                        return true
-                    }
-                }
-                if (platformAdapter.restoreSystemDefaultWallpaper(prefs.dryRunPreviewOnly)) {
-                    repo.clearCurrentWallpaperId()
-                    return true
-                }
-            }
-            return false
         }
 
         if (lastGeometryKey != null && lastGeometryKey != currentGeometryKey) {
-            val status = platformAdapter.applyWallpaperAtomically(
-                record = currentRecord,
-                policy = prefs.lockWorkspacePolicy,
-                targetDisplay = display,
-                dryRunPreviewOnly = prefs.dryRunPreviewOnly,
-                connectedDisplays = connectedDisplays,
-                displayPolicy = prefs.displayPolicy
-            )
+            val status = applyForDisplay(repo, currentRecord, display, connectedDisplays, prefs, recordApplied = false)
             if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) {
                 repo.setLastAppliedDisplayGeometryKey(currentGeometryKey)
                 return true
@@ -258,6 +200,75 @@ class AndroidSunloomGateway(
         }
         return false
     }
+
+    /** Applies the best ranked replacement; failing that, the baseline copy; failing that, the system default. */
+    private fun replaceInvalidatedWallpaper(
+        repo: LocalLibraryRepository,
+        display: DisplayProfile,
+        connectedDisplays: List<DisplayProfile>,
+        prefs: UserPreferences,
+        currentId: String?,
+        activeBeforeInvalidation: String?,
+        currentGeometryKey: String
+    ): Boolean {
+        val activePool = filterActiveLibraryPool(repo.getAllWallpapers(), prefs)
+        val targetBrightness = solarCalculator.resolveSolarSnapshot(
+            preferences = prefs,
+            isSystemInDarkTheme = isSystemInDarkTheme()
+        ).targetBrightness
+        val excludeId = currentId ?: activeBeforeInvalidation
+        val replacements = matcher.rankCandidatesForSelection(
+            candidates = activePool,
+            targetBrightness = targetBrightness,
+            preferences = prefs,
+            currentWallpaperId = excludeId,
+            recentlyUsedIds = setOfNotNull(excludeId, repo.getPreviousWallpaperId()),
+            maxResults = 3,
+            taste = TasteProfile.from(repo.getAllWallpapers()),
+            subjectFit = SubjectFit.forDisplays(connectedDisplays, prefs)
+        )
+        val applied = replacements.firstOrNull { replacement ->
+            applyForDisplay(repo, replacement, display, connectedDisplays, prefs, recordApplied = true) ==
+                WallpaperStatus.APPLIED_SUCCESSFULLY
+        }
+        if (applied != null) {
+            repo.setLastAppliedDisplayGeometryKey(currentGeometryKey)
+            return true
+        }
+        // Fallback to baseline restore if active wallpaper was invalidated and no reserve item applied
+        if (activeBeforeInvalidation == null) return false
+        val baseline = repo.getAllWallpapers().firstOrNull { it.isBaselineRestore && !it.isRejected }
+        if (baseline != null &&
+            applyForDisplay(repo, baseline, display, connectedDisplays, prefs, recordApplied = true) ==
+            WallpaperStatus.APPLIED_SUCCESSFULLY
+        ) {
+            repo.setLastAppliedDisplayGeometryKey(currentGeometryKey)
+            return true
+        }
+        if (platformAdapter.restoreSystemDefaultWallpaper(prefs.dryRunPreviewOnly)) {
+            repo.clearCurrentWallpaperId()
+            return true
+        }
+        return false
+    }
+
+    /** Applies [record] for [display]; the library notes it as shown only when [recordApplied] and the apply succeeds. */
+    private fun applyForDisplay(
+        repo: LocalLibraryRepository,
+        record: WallpaperRecord,
+        display: DisplayProfile,
+        connectedDisplays: List<DisplayProfile>,
+        prefs: UserPreferences,
+        recordApplied: Boolean
+    ): WallpaperStatus = platformAdapter.applyWallpaperAtomically(
+        record = record,
+        policy = prefs.lockWorkspacePolicy,
+        targetDisplay = display,
+        dryRunPreviewOnly = prefs.dryRunPreviewOnly,
+        connectedDisplays = connectedDisplays,
+        displayPolicy = prefs.displayPolicy,
+        onApplied = { if (recordApplied) repo.recordWallpaperApplied(record.id) }
+    )
 
     private fun promoteNonSeedOverSeedIfNeeded(
         repo: LocalLibraryRepository,
@@ -269,38 +280,26 @@ class AndroidSunloomGateway(
         val currentId = repo.getCurrentWallpaperId()
         val all = repo.getAllWallpapers()
         val currentRecord = all.firstOrNull { it.id == currentId }
-        if (currentRecord == null || currentRecord.provenance.sourceId == SourceIds.SEED_RESERVE) {
-            val nonSeedPool = matcher.filterEligiblePool(all, prefs)
-                .filter { it.provenance.sourceId != SourceIds.SEED_RESERVE }
-            if (nonSeedPool.isNotEmpty()) {
-                val targetBrightness = solarCalculator.resolveSolarSnapshot(
-                    preferences = prefs,
-                    isSystemInDarkTheme = isSystemInDarkTheme()
-                ).targetBrightness
-                val nextNonSeed = matcher.selectNextWallpaper(
-                    candidates = nonSeedPool,
-                    targetBrightness = targetBrightness,
-                    preferences = prefs,
-                    currentWallpaperId = currentId,
-                    subjectFit = SubjectFit.forDisplays(connectedDisplays, prefs)
-                )
-                if (nextNonSeed != null) {
-                    val status = platformAdapter.applyWallpaperAtomically(
-                        record = nextNonSeed,
-                        policy = prefs.lockWorkspacePolicy,
-                        targetDisplay = display,
-                        dryRunPreviewOnly = prefs.dryRunPreviewOnly,
-                        connectedDisplays = connectedDisplays,
-                        displayPolicy = prefs.displayPolicy,
-                    onApplied = { repo.recordWallpaperApplied(nextNonSeed.id) }
-                    )
-                    if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) {
-                        repo.setLastAppliedDisplayGeometryKey(
-                            platformAdapter.computeDisplayGeometryKey(connectedDisplays, prefs.displayPolicy)
-                        )
-                    }
-                }
-            }
+        if (currentRecord != null && currentRecord.provenance.sourceId != SourceIds.SEED_RESERVE) return
+        val nonSeedPool = matcher.filterEligiblePool(all, prefs)
+            .filter { it.provenance.sourceId != SourceIds.SEED_RESERVE }
+        if (nonSeedPool.isEmpty()) return
+        val targetBrightness = solarCalculator.resolveSolarSnapshot(
+            preferences = prefs,
+            isSystemInDarkTheme = isSystemInDarkTheme()
+        ).targetBrightness
+        val nextNonSeed = matcher.selectNextWallpaper(
+            candidates = nonSeedPool,
+            targetBrightness = targetBrightness,
+            preferences = prefs,
+            currentWallpaperId = currentId,
+            subjectFit = SubjectFit.forDisplays(connectedDisplays, prefs)
+        ) ?: return
+        val status = applyForDisplay(repo, nextNonSeed, display, connectedDisplays, prefs, recordApplied = true)
+        if (status == WallpaperStatus.APPLIED_SUCCESSFULLY) {
+            repo.setLastAppliedDisplayGeometryKey(
+                platformAdapter.computeDisplayGeometryKey(connectedDisplays, prefs.displayPolicy)
+            )
         }
     }
 

@@ -316,28 +316,34 @@ fun Modifier.pointerPressWithModifiers(
     val latest = androidx.compose.runtime.rememberUpdatedState(onPress)
     pointerInput(guard) {
         awaitPointerEventScope {
-            while (true) {
-                val initial = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                if (initial.type != androidx.compose.ui.input.pointer.PointerEventType.Press) continue
-                // Children see the press after this Initial pass; wait for the Final pass to learn whether
-                // one of them claimed it.
-                guard?.onControl = false
-                val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Final)
-                if (guard?.onControl == true) continue
-                val change = event.changes.firstOrNull() ?: continue
-                val isTouch = change.type == androidx.compose.ui.input.pointer.PointerType.Touch
-                if (isTouch || event.buttons.isPrimaryPressed) {
-                    latest.value(
-                        event.keyboardModifiers.isPointerCtrlPressed,
-                        event.keyboardModifiers.isPointerShiftPressed,
-                        isTouch
-                    )
-                }
-            }
+            while (true) awaitSelectionPress(guard, latest.value)
         }
     }
 }
 
+
+/** Waits for one press and reports it, unless a child control claimed it. */
+private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.awaitSelectionPress(
+    guard: SelectionPressGuard?,
+    onPress: (ctrl: Boolean, shift: Boolean, isTouch: Boolean) -> Unit
+) {
+    val initial = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+    if (initial.type != androidx.compose.ui.input.pointer.PointerEventType.Press) return
+    // Children see the press after this Initial pass; wait for the Final pass to learn whether
+    // one of them claimed it.
+    guard?.onControl = false
+    val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Final)
+    if (guard?.onControl == true) return
+    val change = event.changes.firstOrNull() ?: return
+    val isTouch = change.type == androidx.compose.ui.input.pointer.PointerType.Touch
+    if (isTouch || event.buttons.isPrimaryPressed) {
+        onPress(
+            event.keyboardModifiers.isPointerCtrlPressed,
+            event.keyboardModifiers.isPointerShiftPressed,
+            isTouch
+        )
+    }
+}
 
 /**
  * Shows the system "busy" pointer over non-interactive areas while a long operation (applying a

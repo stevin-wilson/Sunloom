@@ -23,26 +23,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-/** Vertical position and size of a scrollbar thumb, in pixels within the viewport. */
-internal data class ScrollbarThumb(val top: Float, val height: Float)
-
-/**
- * Computes the thumb for a vertical scrollbar. Returns null when everything fits (nothing to scroll)
- * or the inputs are not yet meaningful (unmeasured content).
- *
- * @param viewport visible height in px
- * @param content total scrollable content height in px
- * @param offset current scroll offset in px (0 .. content - viewport)
- * @param minThumb smallest thumb height in px so it stays grabbable/visible on very long content
- */
-internal fun scrollbarThumb(viewport: Float, content: Float, offset: Float, minThumb: Float): ScrollbarThumb? {
-    if (viewport <= 0f || content <= viewport || !content.isFinite() || !offset.isFinite()) return null
-    val height = (viewport * viewport / content).coerceAtLeast(minThumb).coerceAtMost(viewport)
-    val maxOffset = content - viewport
-    val fraction = (offset / maxOffset).coerceIn(0f, 1f)
-    return ScrollbarThumb(top = (viewport - height) * fraction, height = height)
-}
-
 /**
  * Draws a visible, non-interactive scrollbar thumb on the right edge of a [verticalScroll][androidx.compose.foundation.verticalScroll]
  * container. Place this modifier BEFORE `verticalScroll` so it measures the viewport, not the content.
@@ -100,8 +80,8 @@ fun Modifier.desktopScrollbar(state: LazyGridState): Modifier =
 
 private val ScrollbarThickness: Dp = 8.dp
 private val ScrollbarMinThumb: Dp = 36.dp
-private const val ScrollbarIdleAlpha = 0.4f
-private const val ScrollbarActiveAlpha = 0.9f
+private const val SCROLLBAR_IDLE_ALPHA = 0.4f
+private const val SCROLLBAR_ACTIVE_ALPHA = 0.9f
 
 @Composable
 private fun Modifier.scrollbarCore(
@@ -112,13 +92,13 @@ private fun Modifier.scrollbarCore(
     // Keep hover/scroll/alpha as State objects that are only read in the draw phase, so pointer
     // enter/exit and scroll start/stop repaint the thumb without recomposing the whole pane.
     val hovered = interactionSource.collectIsHoveredAsState()
-    val alpha = remember { Animatable(ScrollbarIdleAlpha) }
+    val alpha = remember { Animatable(SCROLLBAR_IDLE_ALPHA) }
     val currentIsScrolling by rememberUpdatedState(isScrolling)
     LaunchedEffect(Unit) {
         snapshotFlow { currentIsScrolling() || hovered.value }
             .distinctUntilChanged()
             .collect { active ->
-                alpha.animateTo(if (active) ScrollbarActiveAlpha else ScrollbarIdleAlpha)
+                alpha.animateTo(if (active) SCROLLBAR_ACTIVE_ALPHA else SCROLLBAR_IDLE_ALPHA)
             }
     }
     val color = MaterialTheme.colorScheme.onSurfaceVariant

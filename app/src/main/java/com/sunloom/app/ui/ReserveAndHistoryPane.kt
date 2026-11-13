@@ -82,7 +82,7 @@ import androidx.compose.ui.semantics.liveRegion
 import com.sunloom.app.domain.model.WallpaperRecord
 
 private val SelectionSaver = listSaver<SelectionState, Any?>(
-    save = { listOf(it.anchorId, *it.selected.toTypedArray()) },
+    save = { state -> buildList<Any?> { add(state.anchorId); addAll(state.selected) } },
     restore = { saved ->
         SelectionState(
             selected = saved.drop(1).filterIsInstance<String>().toSet(),
@@ -166,14 +166,12 @@ internal fun ReserveAndHistoryPane(
         fun ItemCard(item: WallpaperRecord, index: Int) {
             ReserveItemCard(
                 item = item,
-                index = index,
                 grid = gridView,
                 thumbnailAspect = thumbnailAspect,
-                uiState = uiState,
+                isActive = uiState.currentWallpaper?.id == item.id,
                 restricted = restricted,
                 selected = item.id in selection.selected,
                 focusRequester = focusRequesters.getOrPut(item.id) { FocusRequester() },
-                columns = columns,
                 onNavigate = { move ->
                     reserveNavTarget(move, index, order.size, columns)?.let { focusItem(it) }
                 },
@@ -186,9 +184,7 @@ internal fun ReserveAndHistoryPane(
                     }
                 },
                 onToggleSelected = { selection = toggleSelection(selection, item.id) },
-                onApplySpecific = onApplySpecific,
-                onDeleteFromReserve = onDeleteFromReserve,
-                onToggleKeepSpecific = onToggleKeepSpecific,
+                callbacks = ReserveItemCallbacks(onApplySpecific, onDeleteFromReserve, onToggleKeepSpecific),
                 onShowAbout = { aboutRecordId = item.id }
             )
         }
@@ -239,7 +235,7 @@ internal fun ReserveAndHistoryPane(
                 if (visibleItems.isEmpty()) {
                     item(key = "reserve_empty", span = { GridItemSpan(maxLineSpan) }) { EmptyCard() }
                 }
-                itemsIndexed(visibleItems, key = { _, it -> it.id }) { index, item -> ItemCard(item, index) }
+                itemsIndexed(visibleItems, key = { _, record -> record.id }) { index, item -> ItemCard(item, index) }
             }
         } else {
             LazyColumn(
@@ -251,7 +247,7 @@ internal fun ReserveAndHistoryPane(
                 if (visibleItems.isEmpty()) {
                     item(key = "reserve_empty") { EmptyCard() }
                 }
-                itemsIndexed(visibleItems, key = { _, it -> it.id }) { index, item -> ItemCard(item, index) }
+                itemsIndexed(visibleItems, key = { _, record -> record.id }) { index, item -> ItemCard(item, index) }
             }
         }
     }
@@ -444,28 +440,33 @@ private fun ReserveEmptyState(isSyncing: Boolean, onSyncOnline: () -> Unit, onPi
     }
 }
 
+/** What a Reserve card can do to its own wallpaper, passed together so the card's parameter list stays short. */
+private class ReserveItemCallbacks(
+    val onApplySpecific: (String) -> Unit,
+    val onDeleteFromReserve: (String) -> Unit,
+    val onToggleKeepSpecific: (String) -> Unit
+)
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ReserveItemCard(
     item: WallpaperRecord,
-    index: Int,
     grid: Boolean,
     thumbnailAspect: Float,
-    uiState: SunloomUiState,
+    isActive: Boolean,
     restricted: Boolean,
     selected: Boolean,
     focusRequester: FocusRequester,
-    columns: Int,
     onNavigate: (NavMove) -> Unit,
     onPress: (ctrl: Boolean, shift: Boolean, isTouch: Boolean) -> Unit,
     onToggleSelected: () -> Unit,
-    onApplySpecific: (String) -> Unit,
-    onDeleteFromReserve: (String) -> Unit,
-    onToggleKeepSpecific: (String) -> Unit,
+    callbacks: ReserveItemCallbacks,
     onShowAbout: () -> Unit
 ) {
+    val onApplySpecific = callbacks.onApplySpecific
+    val onDeleteFromReserve = callbacks.onDeleteFromReserve
+    val onToggleKeepSpecific = callbacks.onToggleKeepSpecific
     val actions = LocalWallpaperActions.current
-    val isActive = uiState.currentWallpaper?.id == item.id
     val shape = MaterialTheme.shapes.medium
     val pressGuard = remember { SelectionPressGuard() }
     val selectLabel = stringResource(R.string.select_card)

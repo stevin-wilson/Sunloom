@@ -29,9 +29,7 @@ class CropRenderer {
         allowBlurredFrameFill: Boolean = false,
         preferFullFrame: Boolean = false
     ): CropRect? {
-        if (sourceWidth <= 0 || sourceHeight <= 0 || display.widthPx <= 0 || display.heightPx <= 0) {
-            return null
-        }
+        if (!hasUsableSize(sourceWidth, sourceHeight, display)) return null
 
         val targetAspect = display.aspectRatio
         val sourceAspect = sourceWidth.toDouble() / sourceHeight.toDouble()
@@ -176,9 +174,7 @@ class CropRenderer {
         display: DisplayProfile,
         allowBlurredFrameFill: Boolean = false
     ): CropRect? {
-        if (sourceWidth <= 0 || sourceHeight <= 0 || display.widthPx <= 0 || display.heightPx <= 0) {
-            return null
-        }
+        if (!hasUsableSize(sourceWidth, sourceHeight, display)) return null
         val baseBounds = computeAspectCropBounds(
             sourceWidth = sourceWidth,
             sourceHeight = sourceHeight,
@@ -262,37 +258,8 @@ class CropRenderer {
 
                 val edgeEnergy = abs(right - left) + abs(down - up)
 
-                // Local 3x3 quantized Shannon entropy (8 luminance bins)
-                val bins = IntArray(8)
-                var count = 0
-                for (dy in -1..1) {
-                    for (dx in -1..1) {
-                        val nx = (x + dx).coerceIn(0, gridWidth - 1)
-                        val ny = (y + dy).coerceIn(0, gridHeight - 1)
-                        val bin = (lum[ny * gridWidth + nx] * 7.999).toInt().coerceIn(0, 7)
-                        bins[bin]++
-                        count++
-                    }
-                }
-                var entropy = 0.0
-                for (b in bins) {
-                    if (b > 0) {
-                        val p = b.toDouble() / count.toDouble()
-                        entropy -= p * ln(p)
-                    }
-                }
-
-                // Centre-surround contrast: how much this cell stands out from its 5x5 neighbourhood.
-                var surround = 0.0
-                var surroundCount = 0
-                for (dy in -2..2) {
-                    for (dx in -2..2) {
-                        if (dx == 0 && dy == 0) continue
-                        surround += lum[(y + dy).coerceIn(0, gridHeight - 1) * gridWidth + (x + dx).coerceIn(0, gridWidth - 1)]
-                        surroundCount++
-                    }
-                }
-                val centreSurround = abs(lum[y * gridWidth + x] - surround / surroundCount)
+                val entropy = localEntropy(lum, x, y, gridWidth, gridHeight)
+                val centreSurround = centreSurroundContrast(lum, x, y, gridWidth, gridHeight)
 
                 val px = rgbGrid[y * gridWidth + x]
                 val dr = ((px shr 16) and 0xFF) / 255.0 - meanR
@@ -305,6 +272,43 @@ class CropRenderer {
             }
         }
         return importance
+    }
+
+    /** Local 3x3 quantized Shannon entropy (8 luminance bins) around cell ([x], [y]). */
+    private fun localEntropy(lum: DoubleArray, x: Int, y: Int, gridWidth: Int, gridHeight: Int): Double {
+        val bins = IntArray(8)
+        var count = 0
+        for (dy in -1..1) {
+            for (dx in -1..1) {
+                val nx = (x + dx).coerceIn(0, gridWidth - 1)
+                val ny = (y + dy).coerceIn(0, gridHeight - 1)
+                val bin = (lum[ny * gridWidth + nx] * 7.999).toInt().coerceIn(0, 7)
+                bins[bin]++
+                count++
+            }
+        }
+        var entropy = 0.0
+        for (b in bins) {
+            if (b > 0) {
+                val p = b.toDouble() / count.toDouble()
+                entropy -= p * ln(p)
+            }
+        }
+        return entropy
+    }
+
+    /** Centre-surround contrast: how much cell ([x], [y]) stands out from its 5x5 neighbourhood. */
+    private fun centreSurroundContrast(lum: DoubleArray, x: Int, y: Int, gridWidth: Int, gridHeight: Int): Double {
+        var surround = 0.0
+        var surroundCount = 0
+        for (dy in -2..2) {
+            for (dx in -2..2) {
+                if (dx == 0 && dy == 0) continue
+                surround += lum[(y + dy).coerceIn(0, gridHeight - 1) * gridWidth + (x + dx).coerceIn(0, gridWidth - 1)]
+                surroundCount++
+            }
+        }
+        return abs(lum[y * gridWidth + x] - surround / surroundCount)
     }
 
     private fun findFocalCenter(importance: DoubleArray, gridWidth: Int, gridHeight: Int): Pair<Double, Double> {
@@ -395,6 +399,9 @@ class CropRenderer {
 
         /** Share of the picture a crop must keep; below it the whole frame is shown (blurred fill) or the image skipped. */
         const val MIN_VISIBLE_AREA = 0.5
+
+        private fun hasUsableSize(sourceWidth: Int, sourceHeight: Int, display: DisplayProfile): Boolean =
+            sourceWidth > 0 && sourceHeight > 0 && display.widthPx > 0 && display.heightPx > 0
 
         /** Fraction of the source picture's area that a display-shaped crop keeps. */
         fun visibleAreaFraction(sourceWidth: Int, sourceHeight: Int, display: DisplayProfile): Double {

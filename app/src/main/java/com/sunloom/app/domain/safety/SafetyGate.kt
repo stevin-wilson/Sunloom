@@ -467,83 +467,78 @@ class SafetyGate {
          * from the byte stream without allocating a Bitmap. Returns null if the byte stream
          * is a synthetic test buffer without a full dimension header.
          */
-        fun inspectImageHeaderBounds(bytes: ByteArray): ImageHeaderBounds? {
-            val format = detectImageFormat(bytes)
-            when (format) {
-                ImageFormat.PNG -> {
-                    // PNG IHDR chunk starts at byte 8: length(4), 'IHDR'(4), width(4 BE), height(4 BE)
-                    if (bytes.size >= 24 &&
-                        bytes[12] == 'I'.code.toByte() &&
-                        bytes[13] == 'H'.code.toByte() &&
-                        bytes[14] == 'D'.code.toByte() &&
-                        bytes[15] == 'R'.code.toByte()
-                    ) {
-                        val w = readInt32Be(bytes, 16)
-                        val h = readInt32Be(bytes, 20)
-                        if (w > 0 && h > 0) {
-                            return ImageHeaderBounds(w, h, ImageFormat.PNG.mimeType)
-                        }
-                    }
+        fun inspectImageHeaderBounds(bytes: ByteArray): ImageHeaderBounds? = when (detectImageFormat(bytes)) {
+            ImageFormat.PNG -> pngBounds(bytes)
+            ImageFormat.JPEG -> jpegBounds(bytes)
+            ImageFormat.WEBP -> webpSimpleBounds(bytes) ?: webpExtendedBounds(bytes)
+            ImageFormat.UNSUPPORTED -> null
+        }
+
+        /** PNG IHDR chunk starts at byte 8: length(4), 'IHDR'(4), width(4 BE), height(4 BE) */
+        private fun pngBounds(bytes: ByteArray): ImageHeaderBounds? {
+            if (bytes.size < 24 || !bytes.hasAsciiAt(12, "IHDR")) return null
+            val w = readInt32Be(bytes, 16)
+            val h = readInt32Be(bytes, 20)
+            return if (w > 0 && h > 0) ImageHeaderBounds(w, h, ImageFormat.PNG.mimeType) else null
+        }
+
+        /** Extended `VP8X` WebP: 24-bit width-1 at byte 24 and height-1 at byte 27, little-endian. */
+        private fun webpExtendedBounds(bytes: ByteArray): ImageHeaderBounds? {
+            if (bytes.size < 30 || !bytes.hasAsciiAt(12, "VP8X")) return null
+            fun u8(i: Int) = bytes[i].toInt() and 0xFF
+            val w = 1 + (u8(24) or (u8(25) shl 8) or (u8(26) shl 16))
+            val h = 1 + (u8(27) or (u8(28) shl 8) or (u8(29) shl 16))
+            return if (w > 0 && h > 0) ImageHeaderBounds(w, h, ImageFormat.WEBP.mimeType) else null
+        }
+
+        /** What one look at a JPEG segment yields: where to look next, or the final answer. */
+        private sealed interface JpegStep {
+            class Next(val offset: Int) : JpegStep
+            class Done(val bounds: ImageHeaderBounds?) : JpegStep
+        }
+
+        private fun jpegBounds(bytes: ByteArray): ImageHeaderBounds? {
+            var offset = 2
+            while (offset + 9 < bytes.size) {
+                when (val step = jpegStep(bytes, offset)) {
+                    is JpegStep.Next -> offset = step.offset
+                    is JpegStep.Done -> return step.bounds
                 }
-                ImageFormat.JPEG -> {
-                    var offset = 2
-                    while (offset + 9 < bytes.size) {
-                        if (bytes[offset] != 0xFF.toByte()) {
-                            offset++
-                            continue
-                        }
-                        var marker = bytes[offset + 1].toInt() and 0xFF
-                        while (marker == 0xFF && offset + 2 < bytes.size) {
-                            offset++
-                            marker = bytes[offset + 1].toInt() and 0xFF
-                        }
-                        if (marker == 0xD8 || marker == 0xD9 || marker in 0xD0..0xD7 || marker == 0x01) {
-                            offset += 2
-                            continue
-                        }
-                        if (offset + 4 >= bytes.size) break
-                        val segLen = ((bytes[offset + 2].toInt() and 0xFF) shl 8) or
-                            (bytes[offset + 3].toInt() and 0xFF)
-                        if (segLen < 2) break
-                        // Every frame header (SOF0..SOF15) carries the size, except DHT (C4), JPG (C8) and DAC (CC).
-                        if (isJpegFrameMarker(marker)) {
-                            if (offset + 9 < bytes.size) {
-                                val h = ((bytes[offset + 5].toInt() and 0xFF) shl 8) or
-                                    (bytes[offset + 6].toInt() and 0xFF)
-                                val w = ((bytes[offset + 7].toInt() and 0xFF) shl 8) or
-                                    (bytes[offset + 8].toInt() and 0xFF)
-                                if (w > 0 && h > 0) {
-                                    return ImageHeaderBounds(w, h, ImageFormat.JPEG.mimeType)
-                                }
-                            }
-                            break
-                        }
-                        offset += 2 + segLen
-                    }
-                }
-                ImageFormat.WEBP -> {
-                    webpSimpleBounds(bytes)?.let { return it }
-                    if (bytes.size >= 30 &&
-                        bytes[12] == 'V'.code.toByte() &&
-                        bytes[13] == 'P'.code.toByte() &&
-                        bytes[14] == '8'.code.toByte() &&
-                        bytes[15] == 'X'.code.toByte()
-                    ) {
-                        val w = 1 + ((bytes[24].toInt() and 0xFF) or
-                            ((bytes[25].toInt() and 0xFF) shl 8) or
-                            ((bytes[26].toInt() and 0xFF) shl 16))
-                        val h = 1 + ((bytes[27].toInt() and 0xFF) or
-                            ((bytes[28].toInt() and 0xFF) shl 8) or
-                            ((bytes[29].toInt() and 0xFF) shl 16))
-                        if (w > 0 && h > 0) {
-                            return ImageHeaderBounds(w, h, ImageFormat.WEBP.mimeType)
-                        }
-                    }
-                }
-                ImageFormat.UNSUPPORTED -> return null
             }
             return null
         }
+
+        private fun jpegStep(bytes: ByteArray, start: Int): JpegStep {
+            if (bytes[start] != 0xFF.toByte()) return JpegStep.Next(start + 1)
+            // Any run of 0xFF bytes before a marker is padding.
+            var offset = start
+            var marker = bytes[offset + 1].toInt() and 0xFF
+            while (marker == 0xFF && offset + 2 < bytes.size) {
+                offset++
+                marker = bytes[offset + 1].toInt() and 0xFF
+            }
+            if (isJpegMarkerWithoutLength(marker)) return JpegStep.Next(offset + 2)
+            if (offset + 4 >= bytes.size) return JpegStep.Done(null)
+            val segLen = readUInt16Be(bytes, offset + 2)
+            if (segLen < 2) return JpegStep.Done(null)
+            // Every frame header (SOF0..SOF15) carries the size, except DHT (C4), JPG (C8) and DAC (CC).
+            if (isJpegFrameMarker(marker)) return JpegStep.Done(jpegFrameBounds(bytes, offset))
+            return JpegStep.Next(offset + 2 + segLen)
+        }
+
+        /** SOI, EOI, RSTn and TEM stand alone: they have no length field. */
+        private fun isJpegMarkerWithoutLength(marker: Int): Boolean =
+            marker == 0xD8 || marker == 0xD9 || marker in 0xD0..0xD7 || marker == 0x01
+
+        private fun jpegFrameBounds(bytes: ByteArray, offset: Int): ImageHeaderBounds? {
+            if (offset + 9 >= bytes.size) return null
+            val h = readUInt16Be(bytes, offset + 5)
+            val w = readUInt16Be(bytes, offset + 7)
+            return if (w > 0 && h > 0) ImageHeaderBounds(w, h, ImageFormat.JPEG.mimeType) else null
+        }
+
+        private fun readUInt16Be(bytes: ByteArray, offset: Int): Int =
+            ((bytes[offset].toInt() and 0xFF) shl 8) or (bytes[offset + 1].toInt() and 0xFF)
 
         private fun readInt32Be(bytes: ByteArray, offset: Int): Int {
             return ((bytes[offset].toInt() and 0xFF) shl 24) or
@@ -552,44 +547,24 @@ class SafetyGate {
                 (bytes[offset + 3].toInt() and 0xFF)
         }
 
-        fun detectImageFormat(bytes: ByteArray): ImageFormat {
-            if (bytes.size < 12) return ImageFormat.UNSUPPORTED
+        private val JPEG_MAGIC = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())
+        private val PNG_MAGIC = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
 
+        private fun ByteArray.hasBytesAt(offset: Int, expected: ByteArray): Boolean =
+            offset + expected.size <= size && expected.indices.all { this[offset + it] == expected[it] }
+
+        private fun ByteArray.hasAsciiAt(offset: Int, text: String): Boolean =
+            hasBytesAt(offset, text.toByteArray(Charsets.ISO_8859_1))
+
+        fun detectImageFormat(bytes: ByteArray): ImageFormat = when {
+            bytes.size < 12 -> ImageFormat.UNSUPPORTED
             // JPEG: FF D8 FF
-            if (bytes[0] == 0xFF.toByte() &&
-                bytes[1] == 0xD8.toByte() &&
-                bytes[2] == 0xFF.toByte()
-            ) {
-                return ImageFormat.JPEG
-            }
-
+            bytes.hasBytesAt(0, JPEG_MAGIC) -> ImageFormat.JPEG
             // PNG: 89 50 4E 47 0D 0A 1A 0A
-            if (bytes[0] == 0x89.toByte() &&
-                bytes[1] == 0x50.toByte() &&
-                bytes[2] == 0x4E.toByte() &&
-                bytes[3] == 0x47.toByte() &&
-                bytes[4] == 0x0D.toByte() &&
-                bytes[5] == 0x0A.toByte() &&
-                bytes[6] == 0x1A.toByte() &&
-                bytes[7] == 0x0A.toByte()
-            ) {
-                return ImageFormat.PNG
-            }
-
+            bytes.hasBytesAt(0, PNG_MAGIC) -> ImageFormat.PNG
             // WebP: "RIFF" .... "WEBP"
-            if (bytes[0] == 'R'.code.toByte() &&
-                bytes[1] == 'I'.code.toByte() &&
-                bytes[2] == 'F'.code.toByte() &&
-                bytes[3] == 'F'.code.toByte() &&
-                bytes[8] == 'W'.code.toByte() &&
-                bytes[9] == 'E'.code.toByte() &&
-                bytes[10] == 'B'.code.toByte() &&
-                bytes[11] == 'P'.code.toByte()
-            ) {
-                return ImageFormat.WEBP
-            }
-
-            return ImageFormat.UNSUPPORTED
+            bytes.hasAsciiAt(0, "RIFF") && bytes.hasAsciiAt(8, "WEBP") -> ImageFormat.WEBP
+            else -> ImageFormat.UNSUPPORTED
         }
 
         fun sha256Hex(bytes: ByteArray): String {

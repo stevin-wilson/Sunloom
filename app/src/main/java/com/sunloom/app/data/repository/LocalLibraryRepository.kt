@@ -890,10 +890,11 @@ class LocalLibraryRepository(
      */
     fun healMissingFiles(): Int {
         var healed = 0
-        for (record in getAllWallpapers()) {
-            if (record.isRejected || record.provenance.sourceId in HEAL_EXEMPT_SOURCES) continue
-            if (record.localFilePath.isBlank() && record.fileSizeBytes == 0L) continue
-            if (hasUsableFile(record)) continue
+        val candidates = getAllWallpapers().asSequence().filter { record ->
+            !record.isRejected && record.provenance.sourceId !in HEAL_EXEMPT_SOURCES &&
+                !(record.localFilePath.isBlank() && record.fileSizeBytes == 0L) && !hasUsableFile(record)
+        }
+        for (record in candidates) {
             // Re-read the row: a sync may have re-downloaded it since the list was read, and blanking a fresh
             // record would orphan its new file.
             // The lock is shared with the sync's write of a downloaded record (any repository instance), so the

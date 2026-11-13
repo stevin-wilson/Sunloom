@@ -140,19 +140,23 @@ class MainViewModel(
     private suspend fun topUpReserve(maxRounds: Int, forceFirstRound: Boolean): Int? {
         var total = 0
         for (round in 1..maxRounds) {
-            val skipCheck = round == 1 && forceFirstRound
-            if (!skipCheck && !_uiState.value.reserveNeedsTopUp) break
-            val before = _uiState.value.fetchedStockCount
-            if (!syncOnlineCatalogNow()) return if (round == 1) null else total
-            val gained = _uiState.value.fetchedStockCount - before
-            if (gained <= 0) break
+            val gained = topUpRound(round, forceFirstRound)
+                ?: return if (round == 1) null else total
             total += gained
-            if (!_uiState.value.reserveNeedsTopUp) break
+            if (gained == 0 || !_uiState.value.reserveNeedsTopUp) break
             if (round < maxRounds && roundPauseMs > 0L) delay(roundPauseMs)
         }
         return total
     }
 
+    /** One fetch round: how many images it added (0 when none were needed or none arrived), or null when another sync is running. */
+    private suspend fun topUpRound(round: Int, forceFirstRound: Boolean): Int? {
+        val skipCheck = round == 1 && forceFirstRound
+        if (!skipCheck && !_uiState.value.reserveNeedsTopUp) return 0
+        val before = _uiState.value.fetchedStockCount
+        if (!syncOnlineCatalogNow()) return null
+        return (_uiState.value.fetchedStockCount - before).coerceAtLeast(0)
+    }
 
     /**
      * Publishes a gateway result without undoing what the user did while it was being computed: the tab,
@@ -752,14 +756,17 @@ class MainViewModel(
     /**
      * Responds to live OS Light/Dark theme changes when `FOLLOW_OS_THEME` is active.
      */
+    /** Following the OS theme, automatic and not paused, and the theme changed the brightness this wallpaper should have. */
+    private fun followsOsThemeAndThemeChanged(current: SunloomUiState, refreshed: SunloomUiState): Boolean {
+        val prefs = current.preferences
+        val following = prefs.autoChangeEnabled && !prefs.isPaused && prefs.scheduleMode == ScheduleMode.FOLLOW_OS_THEME
+        return following && refreshed.targetBrightnessNow != current.targetBrightnessNow
+    }
+
     fun onSystemUiModeChanged() {
         launchGatewayMutation { currentState ->
             val refreshed = gateway.loadInitialSnapshot()
-            if (currentState.preferences.autoChangeEnabled &&
-                !currentState.preferences.isPaused &&
-                currentState.preferences.scheduleMode == ScheduleMode.FOLLOW_OS_THEME &&
-                refreshed.targetBrightnessNow != currentState.targetBrightnessNow
-            ) {
+            if (followsOsThemeAndThemeChanged(currentState, refreshed)) {
                 gateway.applyNextWallpaper()
             } else {
                 refreshed
