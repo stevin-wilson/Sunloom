@@ -6,7 +6,7 @@ the release's version as its notes.
 
 ## [Unreleased]
 
-## [2.0.0-rc.2] - 2026-11-13
+## [2.0.0-rc.2] - 2026-11-17
 
 The second release candidate. It adds scheduling choices and changes a lot of code underneath, so a full try-out is
 welcome, especially on a second monitor and across a sunrise or sunset. Please
@@ -26,6 +26,8 @@ welcome, especially on a second monitor and across a sunrise or sunset. Please
   instead of being refused, and can look soft. Disliking or removing the picture sets its slot back to Automatic.
 
 ### Changed
+- New installs follow the system theme by default instead of switching at sunrise and sunset. Anyone who already chose a
+  schedule keeps it.
 - Inside the app, the screens and the wallpaper-apply code were split into smaller parts. Nothing should look or behave
   differently; if something does, that is a bug worth reporting.
 - "Follow system theme" remembers which side it last handled, and stops retrying a chosen picture that cannot be used.

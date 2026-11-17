@@ -9,8 +9,8 @@ keyboard).
 Setup is four short steps, and **Start with defaults** on the first one finishes everything:
 
 1. **Welcome**: what Sunloom does and where its pictures come from.
-2. **When**: whether it changes by itself, the schedule, and your city (guessed from your time zone; change it with one
-   click).
+2. **When**: whether it changes by itself and the schedule. If you pick Sunrise & sunset, your city is guessed from your
+   time zone and you can change it with one click.
 3. **What**: the kinds of picture, and whether the wallpaper is set for Home and Lock screen or just one.
 4. **Preview and start**: a light and a dark example. On the GitHub build you can also opt in to a weekly check for a
    new version when you open the app.
@@ -53,7 +53,7 @@ downloads on Battery Saver*. **Sync Catalog Now** asks the sources for new pictu
 - **Automatic switching** turns the schedule on and off.
 - **Sunrise & sunset**: light by day, dark in the evening, for the city you pick (or type coordinates under *Custom
   coordinates*).
-- **Follow system theme**: light when your device is light, dark when it is dark.
+- **Follow system theme** (the default for new installs): light when your device is light, dark when it is dark.
 - **Custom schedule**: you choose the hours.
 - **Manual only**: it changes only when you press Next.
 - **Change every**: off to begin with. Choose 3, 6 or 12 hours and Sunloom also changes the wallpaper during the day and

@@ -131,7 +131,7 @@ class SetupStepperComposeTest {
 
     @Test
     fun `the schedule step shows the guessed city and says where the guess came from`() {
-        show(zone = "Europe/Berlin")
+        show(UserPreferences(isSetupCompleted = false, scheduleMode = ScheduleMode.SUNRISE_SUNSET), zone = "Europe/Berlin")
 
         tap("setup_customize_button")
 
