@@ -6,6 +6,16 @@ the release's version as its notes.
 
 ## [Unreleased]
 
+## [2.0.0-rc.2] - 2026-11-17
+
+The second release candidate. It adds scheduling choices and changes a lot of code underneath, so a full try-out is
+welcome, especially on a second monitor and across a sunrise or sunset. Please
+[tell us what you find](https://github.com/stevin-wilson/Sunloom/issues/new/choose).
+
+**Check your download.** Every Sunloom release is signed with one key. Its certificate SHA-256 fingerprint is
+`28:67:7F:15:15:29:90:DB:45:BD:49:8B:5D:B0:32:FE:73:45:71:58:C5:5C:11:27:3C:C9:C5:BA:8D:90:34:9F`.
+`apksigner verify --print-certs` must show the same value (without the colons), and `SHA256SUMS` must match the APK.
+
 ### Added
 - **Change every** (Schedule): Off, 3, 6 or 12 hours. Sunloom also changes the wallpaper during the day and the evening,
   about that often, in addition to the sunrise, sunset or hours you chose. Off to begin with, so nothing changes unless
@@ -14,6 +24,13 @@ the release's version as its notes.
   Reserve or on Today and choose *Use as daytime wallpaper* or *Use as evening wallpaper*. It appears when that period
   starts and stays until the next one; Next and Previous still work. A small picture is shown with a blurred background
   instead of being refused, and can look soft. Disliking or removing the picture sets its slot back to Automatic.
+
+### Changed
+- New installs follow the system theme by default instead of switching at sunrise and sunset. Anyone who already chose a
+  schedule keeps it.
+- Inside the app, the screens and the wallpaper-apply code were split into smaller parts. Nothing should look or behave
+  differently; if something does, that is a bug worth reporting.
+- "Follow system theme" remembers which side it last handled, and stops retrying a chosen picture that cannot be used.
 
 ### Fixed
 - **Check for updates** now works on a release candidate: it reads GitHub's list of releases and offers the highest newer
@@ -67,5 +84,6 @@ anyone can download. Please try it and [tell us what you find](https://github.co
 ### Security
 - No secrets in the package; `Log` calls below warning level are removed from release builds.
 
-[Unreleased]: https://github.com/stevin-wilson/Sunloom/compare/v2.0.0-rc.1...main
+[Unreleased]: https://github.com/stevin-wilson/Sunloom/compare/v2.0.0-rc.2...main
+[2.0.0-rc.2]: https://github.com/stevin-wilson/Sunloom/compare/v2.0.0-rc.1...v2.0.0-rc.2
 [2.0.0-rc.1]: https://github.com/stevin-wilson/Sunloom/releases/tag/v2.0.0-rc.1

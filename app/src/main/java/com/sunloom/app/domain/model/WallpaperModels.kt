@@ -350,7 +350,7 @@ data class UserPreferences(
     val isSetupCompleted: Boolean = false,
     val autoChangeEnabled: Boolean = true,
     val isPaused: Boolean = false,
-    val scheduleMode: ScheduleMode = ScheduleMode.SUNRISE_SUNSET,
+    val scheduleMode: ScheduleMode = ScheduleMode.FOLLOW_OS_THEME,
     val selectedCityName: String = "San Francisco, United States",
     val latitude: Double = 37.7749,
     val longitude: Double = -122.4194,
