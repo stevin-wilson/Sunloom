@@ -33,8 +33,9 @@ import com.sunloom.app.domain.solar.SolarCalculator
 import com.sunloom.app.platform.DefaultSystemWallpaperGateway
 import com.sunloom.app.platform.GoogleBookPlatformAdapter
 import com.sunloom.app.platform.SystemWallpaperGateway
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.ZoneId
 import java.io.File
 import java.time.ZonedDateTime
@@ -310,14 +311,14 @@ class SunloomWallpaperScheduler(
         internal fun refreshConstraintsSignature(wifiOnly: Boolean, deferBatterySaver: Boolean): String =
             "$wifiOnly:$deferBatterySaver:storage:${RefreshSchedulePolicy.REFRESH_INTERVAL_HOURS}h"
 
+        /** One change run at a time: a run started by the open app and the background job for the same theme flip must not both choose. */
+        private val changeRunLock = Mutex()
+
         /**
          * Executes the local wallpaper transition logic for [ChangeWorker], walking up to 3
          * ranked fallback candidates when an apply fails, and honestly updating active state
          * only when `WallpaperManager` succeeds.
          */
-        /** One change run at a time: a run started by the open app and the background job for the same theme flip must not both choose. */
-        private val changeRunLock = kotlinx.coroutines.sync.Mutex()
-
         suspend fun executeScheduledWallpaperChange(
             appContext: Context,
             repo: LocalLibraryRepository = appContext.appContainer().newRepository(),
