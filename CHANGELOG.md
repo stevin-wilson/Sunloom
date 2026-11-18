@@ -6,6 +6,10 @@ the release's version as its notes.
 
 ## [Unreleased]
 
+### Fixed
+- Finishing setup now sets a wallpaper straight away, in every mode and even with no network. Before, setup only showed a
+  preview and the first real change came about 15 minutes later. If the system refuses the picture, setup says so.
+
 ## [2.0.0-rc.2] - 2026-11-17
 
 The second release candidate. It adds scheduling choices and changes a lot of code underneath, so a full try-out is
