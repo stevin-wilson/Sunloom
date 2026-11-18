@@ -33,6 +33,7 @@ import com.sunloom.app.domain.solar.SolarCalculator
 import com.sunloom.app.platform.DefaultSystemWallpaperGateway
 import com.sunloom.app.platform.GoogleBookPlatformAdapter
 import com.sunloom.app.platform.SystemWallpaperGateway
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.CancellationException
 import java.time.ZoneId
 import java.io.File
@@ -314,11 +315,23 @@ class SunloomWallpaperScheduler(
          * ranked fallback candidates when an apply fails, and honestly updating active state
          * only when `WallpaperManager` succeeds.
          */
+        /** One change run at a time: a run started by the open app and the background job for the same theme flip must not both choose. */
+        private val changeRunLock = kotlinx.coroutines.sync.Mutex()
+
         suspend fun executeScheduledWallpaperChange(
             appContext: Context,
             repo: LocalLibraryRepository = appContext.appContainer().newRepository(),
             platform: GoogleBookPlatformAdapter = GoogleBookPlatformAdapter(appContext),
             nowZonedOverride: ZonedDateTime? = null
+        ): WallpaperStatus? = changeRunLock.withLock {
+            runScheduledWallpaperChange(appContext, repo, platform, nowZonedOverride)
+        }
+
+        private suspend fun runScheduledWallpaperChange(
+            appContext: Context,
+            repo: LocalLibraryRepository,
+            platform: GoogleBookPlatformAdapter,
+            nowZonedOverride: ZonedDateTime?
         ): WallpaperStatus? {
             val prefs = repo.loadPreferences()
             if (!prefs.autoChangeEnabled || prefs.isPaused || prefs.scheduleMode == ScheduleMode.MANUAL_ONLY) {

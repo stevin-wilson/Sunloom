@@ -767,7 +767,7 @@ class MainViewModel(
         launchGatewayMutation { currentState ->
             val refreshed = gateway.loadInitialSnapshot()
             if (followsOsThemeAndThemeChanged(currentState, refreshed)) {
-                gateway.applyNextWallpaper()
+                gateway.applyThemeChange()
             } else {
                 refreshed
             }

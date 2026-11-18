@@ -6,6 +6,10 @@ the release's version as its notes.
 
 ## [Unreleased]
 
+### Fixed
+- Following the system theme with a chosen Daytime or Evening picture: switching the theme no longer flashes another picture
+  first. The chosen picture is the only one shown.
+
 ## [2.0.0-rc.2] - 2026-11-17
 
 The second release candidate. It adds scheduling choices and changes a lot of code underneath, so a full try-out is
