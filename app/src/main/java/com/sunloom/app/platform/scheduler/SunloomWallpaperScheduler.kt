@@ -73,7 +73,7 @@ class SunloomWallpaperScheduler(
     fun cancelAllScheduledWorkAndWait(timeoutMs: Long = 5_000L): Boolean {
         cancelAllScheduledWork()
         val workManager = runCatching { WorkManager.getInstance(context) }.getOrNull() ?: return true
-        val names = listOf(WORK_NAME, WORK_NAME_CHANGE, WORK_NAME_REFRESH, WORK_NAME_STORE_WATCH)
+        val names = listOf(WORK_NAME, WORK_NAME_CHANGE, WORK_NAME_REFRESH, WORK_NAME_FIRST_REFRESH, WORK_NAME_STORE_WATCH)
         return WorkIdle.awaitIdle(
             isBusy = { names.any { name -> workManager.getWorkInfosForUniqueWork(name).get().any { it.state == WorkInfo.State.RUNNING } } },
             timeoutMs = timeoutMs
@@ -92,6 +92,7 @@ class SunloomWallpaperScheduler(
         workManager.cancelUniqueWork(WORK_NAME)
         workManager.cancelUniqueWork(WORK_NAME_CHANGE)
         workManager.cancelUniqueWork(WORK_NAME_REFRESH)
+        workManager.cancelUniqueWork(WORK_NAME_FIRST_REFRESH)
         ChangeAlarm.cancel(context)
         schedulePrefs.edit { remove(PREF_REFRESH_CONSTRAINTS_SIG) }
     }
@@ -242,6 +243,20 @@ class SunloomWallpaperScheduler(
         scheduleRefreshWork(workManager, schedulePrefs, wifiOnly, deferBatterySaver, rescheduleRefreshWork)
     }
 
+    /**
+     * One catalog refresh that runs as soon as the network rules allow, asked for when first-run setup finishes. A person
+     * who set up offline gets pictures when they go online instead of waiting for the next periodic run. It follows the
+     * same constraints as the periodic refresh, and a request that is already waiting is kept.
+     */
+    fun requestFirstRefresh(wifiOnly: Boolean, deferBatterySaver: Boolean) {
+        val workManager = runCatching { WorkManager.getInstance(context) }.getOrNull() ?: return
+        workManager.enqueueUniqueWork(
+            WORK_NAME_FIRST_REFRESH,
+            ExistingWorkPolicy.KEEP,
+            OneTimeWorkRequestBuilder<RefreshWorker>().setConstraints(buildRefreshConstraints(wifiOnly, deferBatterySaver)).build()
+        )
+    }
+
     /** RefreshWorker: periodic online reserve replenishment, independent of wallpaper-change scheduling. */
     private fun scheduleRefreshWork(
         workManager: WorkManager,
@@ -299,6 +314,7 @@ class SunloomWallpaperScheduler(
         const val WORK_NAME = "sunloom_periodic_schedule_work"
         const val WORK_NAME_CHANGE = "sunloom_change_work"
         const val WORK_NAME_REFRESH = "sunloom_refresh_work"
+        const val WORK_NAME_FIRST_REFRESH = "sunloom_first_refresh_work"
         const val WORK_NAME_STORE_WATCH = "sunloom_store_watch_work"
         private const val PREF_REFRESH_CONSTRAINTS_SIG = "scheduled_refresh_constraints_sig"
 

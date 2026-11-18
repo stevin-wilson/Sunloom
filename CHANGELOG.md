@@ -6,6 +6,10 @@ the release's version as its notes.
 
 ## [Unreleased]
 
+### Fixed
+- Setting up with no network, then going online: Sunloom now fetches its first pictures by itself as soon as a suitable
+  network is available, instead of waiting hours or for you to press Next.
+
 ## [2.0.0-rc.2] - 2026-11-17
 
 The second release candidate. It adds scheduling choices and changes a lot of code underneath, so a full try-out is
