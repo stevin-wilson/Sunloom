@@ -91,7 +91,6 @@ class SetupAppliesWallpaperTest {
         val applied = repo.getCurrentWallpaperId()
 
         gateway.savePreferences(finishedSetup(mode = ScheduleMode.SUNRISE_SUNSET))
-        gateway.savePreferences(finishedSetup().copy(isSetupCompleted = true))
 
         assertEquals(1, applies)
         assertEquals(applied, repo.getCurrentWallpaperId())
@@ -126,5 +125,16 @@ class SetupAppliesWallpaperTest {
 
         assertEquals(0, applies)
         assertNull(repo.getCurrentWallpaperId())
+    }
+
+    @Test
+    fun `setup does not replace a wallpaper that is already applied`() = runTest {
+        val seeds = repo.ensureSeedReserveLoaded(display)
+        repo.recordWallpaperApplied(seeds.first().id)
+
+        gateway().savePreferences(finishedSetup())
+
+        assertEquals(0, applies)
+        assertEquals(seeds.first().id, repo.getCurrentWallpaperId())
     }
 }
