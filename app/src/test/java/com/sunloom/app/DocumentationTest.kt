@@ -20,7 +20,7 @@ class DocumentationTest {
         "README.md", "LICENSE", "NOTICE", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md",
         "docs/USER_GUIDE.md", "docs/ARCHITECTURE.md", "docs/RELEASING.md", "docs/PRIVACY_POLICY.md",
         ".github/ISSUE_TEMPLATE/bug_report.yml", ".github/ISSUE_TEMPLATE/feature_request.yml",
-        ".github/ISSUE_TEMPLATE/config.yml", ".github/pull_request_template.md"
+        ".github/ISSUE_TEMPLATE/config.yml", ".github/ISSUE_TEMPLATE/image_report.yml", ".github/pull_request_template.md"
     )
 
     @Test
@@ -102,5 +102,23 @@ class DocumentationTest {
     @Test
     fun `the issue form asks for diagnostics`() {
         assertTrue(text(".github/ISSUE_TEMPLATE/bug_report.yml").contains("Copy diagnostics"))
+    }
+
+    @Test
+    fun `the image report form is the one the app opens and asks for a reason without the picture`() {
+        val form = text(".github/ISSUE_TEMPLATE/image_report.yml")
+        // The app opens it by file name and fills the field with this id (ReportImage.issueUrl).
+        assertTrue(form.contains("id: details"))
+        assertTrue("the reason is required", Regex("id: reason[\\s\\S]*?required: true").containsMatchIn(form))
+        assertTrue("it labels the issue for triage", form.contains("image-report"))
+        assertTrue("it asks people not to post the picture", form.contains("do not attach") || form.contains("Please do not attach"))
+    }
+
+    @Test
+    fun `the privacy policy and the user guide describe reporting an image`() {
+        val policy = text("docs/PRIVACY_POLICY.md")
+        assertTrue(policy.contains("Report this image"))
+        assertTrue("it says the issue is public", policy.contains("public"))
+        assertTrue(text("docs/USER_GUIDE.md").contains("Report this image"))
     }
 }

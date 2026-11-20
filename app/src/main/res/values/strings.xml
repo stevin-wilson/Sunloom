@@ -91,6 +91,10 @@
     <string name="apply_wallpaper_now">Apply wallpaper now</string>
     <string name="applying">Applying…</string>
     <string name="dislike_and_exclude">Dislike</string>
+    <string name="dislike_and_report">Dislike and report…</string>
+    <string name="report_this_image">Report this image…</string>
+    <string name="msg_report_not_opened">Could not open a browser to send the report. The picture was not removed.</string>
+    <string name="report_image_note">Reporting opens a public GitHub form and also removes this picture for you.</string>
     <string name="exit_fullscreen">Exit fullscreen</string>
     <string name="fetch_wallpapers">Fetch wallpapers</string>
     <string name="fetching">Fetching…</string>

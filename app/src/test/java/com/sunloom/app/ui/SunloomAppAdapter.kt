@@ -57,6 +57,7 @@ internal fun SunloomApp(
     onResetSunloom: () -> Unit = {},
     onCopyDiagnostics: () -> Unit = {},
     onReportProblem: () -> Unit = {},
+    onReportImage: (com.sunloom.app.domain.model.WallpaperRecord) -> Unit = {},
     onCheckForUpdates: () -> Unit = {},
     isFullscreen: Boolean = false,
     darkTheme: Boolean = isSystemInDarkTheme()
@@ -105,6 +106,7 @@ internal fun SunloomApp(
             onResetSunloom = onResetSunloom,
             onCopyDiagnostics = onCopyDiagnostics,
             onReportProblem = onReportProblem,
+            onReportImage = onReportImage,
             onCheckForUpdates = onCheckForUpdates
         ),
         isFullscreen = isFullscreen,

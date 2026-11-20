@@ -1,7 +1,7 @@
 # Wallpaper Tool Development Constitution
 
 - **Product:** Sunloom (`com.sunloom.app`)
-- **Status:** Adopted v0.62 (Governing Engineering Law) **[v0.62]**
+- **Status:** Adopted v0.63 (Governing Engineering Law) **[v0.63]**
 - **Scope:** Product principles, user experience, platform-independent requirements, and platform and distribution obligations confined to Article XVIII **[v0.3]**
 - **Purpose:** Guide product and engineering decisions. Articles I–XVII remain platform-independent; platform-specific obligations live only in Article XVIII so the core law survives a future port. **[v0.3]**
 - **How to read this:** If you are new here, read Article I (the core product promise) and the article for the part you are changing; skim the rest when a test points you to it. Articles are numbered; `§n` is the numbered item inside one. A tag such as **[v0.46]** marks the version that added or changed a sentence, and the amendment log below says why. Tests name the rule they guard with `@Requirement("XII.1")`. Plain-language companions: the [README](README.md), the [user guide](docs/USER_GUIDE.md) and the [architecture notes](docs/ARCHITECTURE.md).
@@ -75,6 +75,7 @@ The articles and schedules below carry the current rules; the `[vX.Y]` tags in t
 | v0.60 | 2026-11-18 | Finishing first-run setup sets a wallpaper immediately (QA of 2.0.0-rc.2 found setup only previewed one); a change run armed before setup finished does nothing; a refused first apply is reported honestly. Article IX §1. |
 | v0.61 | 2026-11-18 | A change of the system theme while following it changes the wallpaper once: the open app and the background change run the same pin-aware change one at a time (QA of 2.0.0-rc.2 saw another picture flash before the chosen one) (X §1). |
 | v0.62 | 2026-11-18 | Finishing first-run setup queues one catalog refresh that runs as soon as the network rules allow (QA of 2.0.0-rc.2: nothing fetched after setting up offline and going online until Next was pressed) (X §1). |
+| v0.63 | 2026-11-20 | Reporting a picture: "Dislike and report…" (beside Dislike) and "Report this image…" (About this image, Reserve cards) remove a picture from a source for the user and open a pre-filled public GitHub issue so the maintainer can review it and add it to the denylist in a later release; never offered for the user's own photos (VII §11). |
 
 ---
 
@@ -215,6 +216,7 @@ A wallpaper should look intentionally selected for the display on which it appea
 8. **Safe browsing surfaces:** Preview, history, and browse screens show only approved assets.
 9. **Measurable acceptance:** No release ships unless the gate passes Schedule B.
 10. **Safety data delivery:** Thresholds and denylists ship only inside signed app releases.
+11. **Reporting a picture:** Any picture that came from a source can be reported, so the denylist can learn from people who see what the gate missed or what they find unsuitable; the user's own photos and saved original wallpaper never offer a report. "Dislike and report…" (beside Dislike) and "Report this image…" (in About this image and on Reserve cards) remove the picture for the user with the usual timed Undo (XII §3) and open a pre-filled GitHub issue form in the browser, which the user reviews and sends; the app itself transmits nothing. The form names the picture by its title, source, asset id, source page, creator, safety classification and gate version only, never the picture, a file path, a location or device details (VIII). The maintainer reviews each report by hand; a confirmed picture reaches the denylist only in a later signed release (§10), with a test that the gate now rejects it. **[v0.63]**
 
 ---
 

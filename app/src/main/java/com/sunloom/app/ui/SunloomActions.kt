@@ -57,6 +57,7 @@ data class SunloomActions(
     val onResetSunloom: () -> Unit,
     val onCopyDiagnostics: () -> Unit,
     val onReportProblem: () -> Unit,
+    val onReportImage: (WallpaperRecord) -> Unit,
     val onCheckForUpdates: () -> Unit
 ) {
     companion object {
@@ -107,6 +108,7 @@ data class SunloomActions(
             onResetSunloom = {},
             onCopyDiagnostics = {},
             onReportProblem = {},
+            onReportImage = { _ -> },
             onCheckForUpdates = {}
         )
     }

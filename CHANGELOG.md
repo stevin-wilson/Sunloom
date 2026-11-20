@@ -6,6 +6,12 @@ the release's version as its notes.
 
 ## [Unreleased]
 
+### Added
+- **Report an inappropriate picture.** *Dislike and report…* (right-click menu and ⋮ More) and *Report this image…* (in
+  *About this image* and on Reserve cards) remove the picture for you and open a pre-filled GitHub issue so the maintainer
+  can review it and block it in a later release. The form never contains the picture or anything about your device, and
+  it is not offered for photos you added yourself.
+
 ## [2.0.0-rc.3] - 2026-11-20
 
 The third release candidate. The second one was never published, so everything in it is included here (see below). Please

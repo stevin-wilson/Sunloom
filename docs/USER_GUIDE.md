@@ -24,6 +24,11 @@ The picture on your wallpaper now. Under it:
 - **Next** and **Previous** step through your Reserve. (Keys: N, P.)
 - **Restore** puts back the wallpaper you had before Sunloom.
 - **Dislike** removes the picture for good and chooses another. You get a few seconds to **Undo** before it is final.
+- **Dislike and report…** (in the right-click menu and under ⋮ More) does the same, then opens a GitHub form so you can
+  tell us a picture was inappropriate. **Report this image…** in *About this image* and on Reserve cards does the same for a
+  picture you noticed later. Either way the picture is removed for you, the form is public and nothing is sent until you
+  press Submit, and nothing is offered for photos you added yourself. We review each report and block confirmed pictures in
+  a later release.
 - **⋮ More** opens *About this image* (who made it, its licence, where it came from), *Copy attribution* and *Save as…*.
   Right-clicking the picture opens the same menu.
 - The bar at the top says what Sunloom just did, with **Pause / Resume** for the schedule. A long message opens when you

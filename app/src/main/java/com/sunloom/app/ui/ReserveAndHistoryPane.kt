@@ -2,6 +2,7 @@ package com.sunloom.app.ui
 
 import com.sunloom.app.labels.title
 import com.sunloom.app.R
+import com.sunloom.app.diagnostics.ReportImage
 import com.sunloom.app.domain.matcher.ChosenSlot
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.border
@@ -567,6 +568,12 @@ private fun ReserveItemMenuItems(
         actions.saveAs(item)
     }
     HorizontalDivider()
+    if (ReportImage.canReport(item)) {
+        ContextMenuItem(stringResource(R.string.report_this_image), "ctx_report_${item.id}", destructive = true) {
+            dismiss()
+            actions.reportImage(item)
+        }
+    }
     ContextMenuItem(stringResource(R.string.remove_from_reserve), "ctx_delete_${item.id}", destructive = true) {
         dismiss()
         onDeleteFromReserve(item.id)

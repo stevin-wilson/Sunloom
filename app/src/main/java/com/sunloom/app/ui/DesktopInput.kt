@@ -158,7 +158,9 @@ class WallpaperActions(
     val copyAttribution: (com.sunloom.app.domain.model.WallpaperRecord) -> Unit = {},
     val removeMany: (Collection<String>) -> Unit = {},
     val showMessage: (String) -> Unit = {},
-    val setChosen: (com.sunloom.app.domain.matcher.ChosenSlot, String?) -> Unit = { _, _ -> }
+    val setChosen: (com.sunloom.app.domain.matcher.ChosenSlot, String?) -> Unit = { _, _ -> },
+    /** Opens the image report for a picture from a source and removes it for the user (offered only when reportable). */
+    val reportImage: (com.sunloom.app.domain.model.WallpaperRecord) -> Unit = {}
 )
 
 val LocalWallpaperActions = staticCompositionLocalOf { WallpaperActions() }

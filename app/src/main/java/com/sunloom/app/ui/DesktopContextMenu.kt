@@ -1,6 +1,7 @@
 package com.sunloom.app.ui
 
 import com.sunloom.app.R
+import com.sunloom.app.diagnostics.ReportImage
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -199,6 +200,8 @@ fun ConfirmDestructiveDialog(
 @Composable
 fun WallpaperAboutDialog(record: WallpaperRecord, onDismiss: () -> Unit) {
     val scrollState = rememberScrollState()
+    val actions = LocalWallpaperActions.current
+    val canReport = ReportImage.canReport(record)
     RestoreRootFocusOnDispose()
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -216,8 +219,23 @@ fun WallpaperAboutDialog(record: WallpaperRecord, onDismiss: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(Spacing.s)
             ) {
                 ProvenanceDetails(record)
+                if (canReport) {
+                    Text(
+                        text = stringResource(R.string.report_image_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         },
+        dismissButton = if (canReport) ({
+            TextButton(
+                onClick = { onDismiss(); actions.reportImage(record) },
+                modifier = Modifier.desktopControl().testTag("wallpaper_about_report")
+            ) {
+                Text(stringResource(R.string.report_this_image), color = MaterialTheme.colorScheme.error)
+            }
+        }) else null,
         confirmButton = {
             TextButton(onClick = onDismiss, modifier = Modifier.desktopControl().testTag("wallpaper_about_close")) {
                 Text(stringResource(R.string.close))
