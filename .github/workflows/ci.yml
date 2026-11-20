@@ -45,7 +45,7 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       # One Gradle run, so the daemon starts and the build is configured once. It covers the deterministic JVM +
       # Robolectric suite (safety drills, desktop conduct, accessibility, Laws of UX, manifest conformance and
