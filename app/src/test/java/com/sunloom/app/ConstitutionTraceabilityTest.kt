@@ -210,6 +210,18 @@ class ConstitutionTraceabilityTest {
         assertTrue("workflow evidence that is no longer in the file: $missing", missing.isEmpty())
     }
 
+    @Requirement("XVI.1.g")
+    @Test
+    fun `every domain package has a branch floor as well as a line floor`() {
+        val floors = File("coverage-floors.csv")
+        require(floors.isFile) { "coverage-floors.csv not found from ${File(".").absolutePath}" }
+        val rows = floors.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.map { row -> row.split(',').map { it.trim() } }
+        val domain = rows.filter { it[0].startsWith("com.sunloom.app.domain.") }
+        assertTrue("no domain packages in coverage-floors.csv", domain.isNotEmpty())
+        val missing = domain.filter { it.size < 3 || it[2].toDoubleOrNull() == null }.map { it[0] }
+        assertTrue("domain packages with no branch floor (XVI.1.g): $missing", missing.isEmpty())
+    }
+
     @Test
     fun `every traced constitution section has at least one test`() {
         val refs = referencedIds()

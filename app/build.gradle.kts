@@ -277,29 +277,45 @@ tasks.register<JacocoReport>("jacocoTestReport") {
     )
 }
 
-// Coverage gate (Article XVI). Reads per-package line-coverage floors from coverage-floors.csv and fails when the
-// jacocoTestReport CSV falls below any of them. Run by CI only: it is deliberately not wired into `check`.
+// Coverage gate (Article XVI). Reads per-package floors from coverage-floors.csv (`package,minLinePercent` and, for the
+// packages that have one, `,minBranchPercent`) and fails when the jacocoTestReport CSV falls below any of them. Run by CI
+// only: it is deliberately not wired into `check`, and the floors are set against CI's numbers, so on an arm64 dev box
+// (which skips the real-SQLite and WorkManager tests) a few packages report lower than their floor.
 tasks.register("coverageFloors") {
     dependsOn("jacocoTestReport")
     val report = layout.buildDirectory.file("reports/jacoco/jacocoTestReport/jacocoTestReport.csv")
     val floors = layout.projectDirectory.file("coverage-floors.csv")
     doLast {
+        // Per package: line missed, line covered, branch missed, branch covered.
         val covered = mutableMapOf<String, LongArray>()
         report.get().asFile.readLines().drop(1).filter { it.isNotBlank() }.forEach { line ->
             val c = line.split(',')
-            val pkg = c[1]
-            val missed = c[7].toLong()
-            val hit = c[8].toLong()
-            val acc = covered.getOrPut(pkg) { LongArray(2) }
-            acc[0] += missed
-            acc[1] += hit
+            val acc = covered.getOrPut(c[1]) { LongArray(4) }
+            acc[0] += c[7].toLong()
+            acc[1] += c[8].toLong()
+            acc[2] += c[5].toLong()
+            acc[3] += c[6].toLong()
         }
         val failures = mutableListOf<String>()
         floors.asFile.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.forEach { line ->
-            val (pkg, min) = line.split(',').map { it.trim() }
+            val parts = line.split(',').map { it.trim() }
+            val pkg = parts[0]
+            val minLine = parts.getOrNull(1)?.toDoubleOrNull()
+                ?: throw GradleException("coverage-floors.csv: '$line' needs a numeric line floor after the package")
+            val minBranch = parts.getOrNull(2)?.takeIf { it.isNotEmpty() }?.let {
+                it.toDoubleOrNull() ?: throw GradleException("coverage-floors.csv: '$line' has a branch floor that is not a number")
+            }
             val acc = covered[pkg] ?: run { failures += "$pkg: no coverage data"; return@forEach }
-            val pct = 100.0 * acc[1] / (acc[0] + acc[1]).coerceAtLeast(1)
-            if (pct + 1e-9 < min.toDouble()) failures += "%s: %.1f%% is below the %s%% floor".format(pkg, pct, min)
+            val linePct = 100.0 * acc[1] / (acc[0] + acc[1]).coerceAtLeast(1)
+            if (linePct + 1e-9 < minLine) failures += "%.1f%% of lines in %s is below the %s%% floor".format(linePct, pkg, parts[1])
+            if (minBranch != null) {
+                val branches = acc[2] + acc[3]
+                if (branches == 0L) {
+                    failures += "$pkg: a branch floor is set but the report has no branch data"
+                } else if (100.0 * acc[3] / branches + 1e-9 < minBranch) {
+                    failures += "%.1f%% of branches in %s is below the %s%% floor".format(100.0 * acc[3] / branches, pkg, parts[2])
+                }
+            }
         }
         if (failures.isNotEmpty()) throw GradleException("Coverage fell below its floor:\n  " + failures.joinToString("\n  "))
         println("Coverage floors met for ${floors.asFile.readLines().count { it.isNotBlank() && !it.startsWith("#") }} packages.")
