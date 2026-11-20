@@ -264,10 +264,11 @@ class MainViewModel(
             newState.copy(
                 activeTab = DesktopNavTab.TODAY_CANVAS,
                 showLegibilityZonesOverlay = _uiState.value.showLegibilityZonesOverlay,
-                statusBannerMessage = if (completed.autoChangeEnabled) {
-                    strings.scheduleEnabled(completed.scheduleMode)
-                } else {
-                    strings.manualModeEnabled
+                // When the first wallpaper could not be set, keep the gateway's explanation instead of a cheerful banner.
+                statusBannerMessage = when {
+                    !newState.isCurrentWallpaperAppliedToSystem -> newState.statusBannerMessage
+                    completed.autoChangeEnabled -> strings.scheduleEnabled(completed.scheduleMode)
+                    else -> strings.manualModeEnabled
                 }
             )
         }
@@ -767,7 +768,7 @@ class MainViewModel(
         launchGatewayMutation { currentState ->
             val refreshed = gateway.loadInitialSnapshot()
             if (followsOsThemeAndThemeChanged(currentState, refreshed)) {
-                gateway.applyNextWallpaper()
+                gateway.applyThemeChange()
             } else {
                 refreshed
             }

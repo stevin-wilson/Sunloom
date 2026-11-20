@@ -73,6 +73,9 @@ class MainViewModelTest {
             lastExcludeIds = excludeIds
             return applyWallpaper("seed-2")
         }
+        var themeChangeCalls = 0
+        override suspend fun applyThemeChange(): SunloomUiState { themeChangeCalls++; return state }
+
         override suspend fun applyPreviousWallpaper(): SunloomUiState = applyWallpaper(state.previousWallpaperId ?: "seed-1")
         override suspend fun restoreBaselineWallpaper(): SunloomUiState = applyWallpaper("seed-1")
 
@@ -284,6 +287,34 @@ class MainViewModelTest {
         viewModel.completeFirstRunSetup(UserPreferences(autoChangeEnabled = false))
         assertFalse(viewModel.uiState.value.isSetupReopened)
         assertFalse(viewModel.uiState.value.preferences.autoChangeEnabled)
+    }
+
+    @Test
+    fun `a theme flip while following the system theme changes the wallpaper through the background logic once`() {
+        fakeGateway.state = fakeGateway.state.copy(
+            preferences = UserPreferences(isSetupCompleted = true, scheduleMode = ScheduleMode.FOLLOW_OS_THEME, autoChangeEnabled = true),
+            targetBrightnessNow = BrightnessClass.DARK
+        )
+        viewModel = MainViewModel(gateway = fakeGateway, workDispatcher = kotlinx.coroutines.test.UnconfinedTestDispatcher())
+        fakeGateway.state = fakeGateway.state.copy(targetBrightnessNow = BrightnessClass.LIGHT)
+
+        viewModel.onSystemUiModeChanged()
+
+        assertEquals(1, fakeGateway.themeChangeCalls)
+    }
+
+    @Test
+    fun `a theme flip when not following the system theme changes nothing`() {
+        fakeGateway.state = fakeGateway.state.copy(
+            preferences = UserPreferences(isSetupCompleted = true, scheduleMode = ScheduleMode.SUNRISE_SUNSET, autoChangeEnabled = true),
+            targetBrightnessNow = BrightnessClass.DARK
+        )
+        viewModel = MainViewModel(gateway = fakeGateway, workDispatcher = kotlinx.coroutines.test.UnconfinedTestDispatcher())
+        fakeGateway.state = fakeGateway.state.copy(targetBrightnessNow = BrightnessClass.LIGHT)
+
+        viewModel.onSystemUiModeChanged()
+
+        assertEquals(0, fakeGateway.themeChangeCalls)
     }
 
     @Test

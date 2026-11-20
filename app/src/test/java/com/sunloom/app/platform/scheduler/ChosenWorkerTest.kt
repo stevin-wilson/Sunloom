@@ -245,4 +245,14 @@ class ChosenWorkerTest {
         assertEquals(WallpaperStatus.APPLIED_SUCCESSFULLY, status)
         assertEquals(BrightnessClass.LIGHT, repo.getLastTargetSeen())
     }
+
+    @Test
+    fun `a change run waits until first-run setup is finished`() {
+        repo.savePreferences(repo.loadPreferences().copy(isSetupCompleted = false))
+
+        val status = run(noon)
+
+        assertNull("nothing is chosen or applied before setup is done", status)
+        assertEquals(0, applies)
+    }
 }

@@ -17,6 +17,8 @@ interface SunloomGateway {
     /** [excludeIds] are records the caller is about to remove and must not be chosen. */
     suspend fun applyNextWallpaper(excludeIds: Set<String> = emptySet()): SunloomUiState
     suspend fun applyPreviousWallpaper(): SunloomUiState
+    /** The system theme flipped while following it: changes the wallpaper as the background change would (chosen pictures first). */
+    suspend fun applyThemeChange(): SunloomUiState = applyNextWallpaper()
     suspend fun restoreBaselineWallpaper(): SunloomUiState
     suspend fun restoreSystemDefaultWallpaper(): SunloomUiState = restoreBaselineWallpaper()
     suspend fun toggleKeepWallpaper(recordId: String): SunloomUiState

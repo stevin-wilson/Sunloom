@@ -39,8 +39,8 @@ internal class PreferencesStore(private val prefs: SharedPreferences) {
             autoChangeEnabled = prefs.getBoolean("auto_change_enabled", true),
             isPaused = prefs.getBoolean("is_paused", false),
             scheduleMode = ScheduleMode.entries.firstOrNull {
-                it.name == prefs.getString("schedule_mode", ScheduleMode.SUNRISE_SUNSET.name)
-            } ?: ScheduleMode.SUNRISE_SUNSET,
+                it.name == prefs.getString("schedule_mode", ScheduleMode.FOLLOW_OS_THEME.name)
+            } ?: ScheduleMode.FOLLOW_OS_THEME,
             selectedCityName = prefs.getString("selected_city", "San Francisco, United States") ?: "San Francisco, United States",
             latitude = Double.fromBits(prefs.getLong("latitude_bits", (37.7749).toRawBits())),
             longitude = Double.fromBits(prefs.getLong("longitude_bits", (-122.4194).toRawBits())),

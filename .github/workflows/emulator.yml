@@ -28,7 +28,7 @@ jobs:
       matrix:
         api-level: [30, 36]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The hosted runner needs KVM opened up for the emulator to run at a usable speed.
       - name: Enable KVM
@@ -37,12 +37,12 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Run the smoke tests
         uses: reactivecircus/android-emulator-runner@v2
@@ -58,7 +58,7 @@ jobs:
 
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: emulator-reports-api${{ matrix.api-level }}
           path: app/build/reports/androidTests

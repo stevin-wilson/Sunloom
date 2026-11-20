@@ -23,6 +23,7 @@ import com.sunloom.app.domain.model.WallpaperStatus
 import com.sunloom.app.domain.solar.SolarCalculator
 import com.sunloom.app.platform.GoogleBookPlatformAdapter
 import java.io.File
+import com.sunloom.app.platform.scheduler.SunloomWallpaperScheduler
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -325,9 +326,16 @@ class AndroidSunloomGateway(
             deferBatterySaver = cleanPreferences.deferOnBatterySaver,
             preferences = cleanPreferences
         )
+        if (!previousPreferences.isSetupCompleted && cleanPreferences.isSetupCompleted) {
+            platformAdapter.requestFirstRefresh(cleanPreferences.wifiOnlyDownloads, cleanPreferences.deferOnBatterySaver)
+        }
         if (display != null && reserveAffected) {
             reconcileActiveWallpaperForDisplay(repo, display, connectedDisplays, cleanPreferences, activeBefore)
             promoteNonSeedOverSeedIfNeeded(repo, cleanPreferences, display, connectedDisplays)
+        }
+        // Finishing first-run setup sets a wallpaper now, in every mode, instead of waiting for the first change.
+        if (!previousPreferences.isSetupCompleted && cleanPreferences.isSetupCompleted && repo.getCurrentWallpaperId() == null) {
+            return@withGatewayIo applyNextInternal(repo)
         }
         val msg = when {
             cleanPreferences.isPaused -> context.getString(R.string.msg_automatic_changes_paused)
@@ -464,6 +472,13 @@ class AndroidSunloomGateway(
         ) ?: return buildSnapshot(repo, context.getString(R.string.msg_no_additional_eligible_wallpapers_found), preloadedPrefs = prefs)
 
         return applyRecordAndBuildSnapshot(repo, next, prefs)
+    }
+
+    override suspend fun applyThemeChange(): SunloomUiState = withGatewayIo { repo ->
+        // The same run the background change makes, so a chosen Daytime or Evening picture wins and the period is
+        // recorded; the background change that follows the same flip then has nothing left to do.
+        SunloomWallpaperScheduler.executeScheduledWallpaperChange(context, repo, platformAdapter)
+        buildSnapshot(repo, "") // an automatic change, not something the person asked for: no banner
     }
 
     override suspend fun applyPreviousWallpaper(): SunloomUiState = withGatewayIo { repo ->

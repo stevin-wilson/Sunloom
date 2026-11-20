@@ -144,6 +144,17 @@ class PreferencesStoreTest {
     }
 
     @Test
+    fun `a new install follows the system theme`() {
+        assertEquals(ScheduleMode.FOLLOW_OS_THEME, store.load().scheduleMode)
+    }
+
+    @Test
+    fun `a stored sunrise and sunset choice is kept`() {
+        store.save(UserPreferences(scheduleMode = ScheduleMode.SUNRISE_SUNSET))
+        assertEquals(ScheduleMode.SUNRISE_SUNSET, store.load().scheduleMode)
+    }
+
+    @Test
     fun `what is saved is read back`() {
         val chosen = UserPreferences(
             isSetupCompleted = true, autoChangeEnabled = false, isPaused = true,
@@ -164,7 +175,7 @@ class PreferencesStoreTest {
         raw.edit().putString("schedule_mode", "NOPE").putString("display_policy", "NOPE")
             .putString("lock_workspace_policy", "NOPE").putStringSet("enabled_categories", setOf("NOT_A_CATEGORY")).commit()
         val loaded = store.load()
-        assertEquals(ScheduleMode.SUNRISE_SUNSET, loaded.scheduleMode)
+        assertEquals(ScheduleMode.FOLLOW_OS_THEME, loaded.scheduleMode)
         assertEquals(DisplayPolicy.SAME_ON_ALL_DISPLAYS, loaded.displayPolicy)
         assertEquals(LockWorkspacePolicy.SAME_ON_BOTH, loaded.lockWorkspacePolicy)
         assertEquals(UserPreferences().enabledCategories, loaded.enabledCategories)

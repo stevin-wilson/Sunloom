@@ -33,19 +33,19 @@ jobs:
     env:
       TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Derive version from the tag
         run: |
           python3 -m unittest discover -s scripts -p 'test_*.py'
           python3 scripts/release_version.py "$TAG" | tee -a "$GITHUB_ENV"
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Restore the upload keystore
         env:
@@ -81,7 +81,7 @@ jobs:
 
       # AGP 9 writes R8's mapping as partitions in mapping.prt (a zip), not a plain mapping.txt. Archive it untouched.
       - name: Keep the R8 mapping for reading crash traces
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mapping-${{ env.versionName }}
           path: app/build/outputs/mapping/githubRelease/mapping.prt

@@ -781,6 +781,9 @@ class GoogleBookPlatformAdapter(
         scheduler.ensureScheduled(preferences)
     }
 
+    /** Asks for one catalog refresh as soon as the network rules allow (first-run setup finished). */
+    fun requestFirstRefresh(wifiOnly: Boolean, deferBatterySaver: Boolean) = scheduler.requestFirstRefresh(wifiOnly, deferBatterySaver)
+
     fun syncPeriodicSchedule(
         autoEnabled: Boolean,
         isPaused: Boolean,
