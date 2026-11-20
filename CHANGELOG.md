@@ -6,6 +6,16 @@ the release's version as its notes.
 
 ## [Unreleased]
 
+## [2.0.0-rc.3] - 2026-11-20
+
+The third release candidate. The second one was never published, so everything in it is included here (see below). Please
+try it, especially setting up with no network and then going online, and following the system theme with a chosen
+Daytime or Evening picture. [Tell us what you find](https://github.com/stevin-wilson/Sunloom/issues/new/choose).
+
+**Check your download.** Every Sunloom release is signed with one key. Its certificate SHA-256 fingerprint is
+`28:67:7F:15:15:29:90:DB:45:BD:49:8B:5D:B0:32:FE:73:45:71:58:C5:5C:11:27:3C:C9:C5:BA:8D:90:34:9F`.
+`apksigner verify --print-certs` must show the same value (without the colons), and `SHA256SUMS` must match the APK.
+
 ### Fixed
 - Finishing setup now sets a wallpaper straight away, in every mode and even with no network. Before, setup only showed a
   preview and the first real change came about 15 minutes later. If the system refuses the picture, setup says so.
@@ -14,7 +24,15 @@ the release's version as its notes.
 - Setting up with no network, then going online: Sunloom now fetches its first pictures by itself as soon as a suitable
   network is available, instead of waiting hours or for you to press Next.
 
-## [2.0.0-rc.2] - 2026-11-17
+### Changed
+- Updated the build tools and libraries underneath: Gradle 9.9, the Android Gradle Plugin 9.5, WorkManager 2.12 and
+  the GitHub Actions that build releases. Nothing should look different; if something does, please report it.
+
+### Known limitations
+- Turning on a source such as NASA does not fetch from it by itself; press **Sync Catalog Now** to bring its pictures in.
+- *Custom schedule* has one set of hours; separate start times for the daytime and the evening are not possible yet.
+
+## [2.0.0-rc.2] - 2026-11-17 (never published; included in rc.3)
 
 The second release candidate. It adds scheduling choices and changes a lot of code underneath, so a full try-out is
 welcome, especially on a second monitor and across a sunrise or sunset. Please
