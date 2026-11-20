@@ -329,6 +329,10 @@ class AndroidSunloomGateway(
             reconcileActiveWallpaperForDisplay(repo, display, connectedDisplays, cleanPreferences, activeBefore)
             promoteNonSeedOverSeedIfNeeded(repo, cleanPreferences, display, connectedDisplays)
         }
+        // Finishing first-run setup sets a wallpaper now, in every mode, instead of waiting for the first change.
+        if (!previousPreferences.isSetupCompleted && cleanPreferences.isSetupCompleted && repo.getCurrentWallpaperId() == null) {
+            return@withGatewayIo applyNextInternal(repo)
+        }
         val msg = when {
             cleanPreferences.isPaused -> context.getString(R.string.msg_automatic_changes_paused)
             cleanPreferences.autoChangeEnabled -> context.getString(

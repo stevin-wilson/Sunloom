@@ -321,6 +321,8 @@ class SunloomWallpaperScheduler(
             nowZonedOverride: ZonedDateTime? = null
         ): WallpaperStatus? {
             val prefs = repo.loadPreferences()
+            // Setup applies the first wallpaper itself; a run armed before the person finished it must not pre-empt that.
+            if (!prefs.isSetupCompleted) return null
             if (!prefs.autoChangeEnabled || prefs.isPaused || prefs.scheduleMode == ScheduleMode.MANUAL_ONLY) {
                 return null
             }
