@@ -1,0 +1,35 @@
+name: Report an image
+description: A picture Sunloom showed that should not be in it (opened by "Report this image" in the app)
+title: "Image report: "
+labels: [image-report]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for telling us. **This issue is public.** Please do not attach or paste the picture, and do not add
+        anything that is not already filled in below. We look at each report, and a picture that should not have been
+        allowed is blocked in a later release. The app has already removed it for you.
+  - type: dropdown
+    id: reason
+    attributes:
+      label: What is wrong with it?
+      options:
+        - Inappropriate or disturbing
+        - Shows a real person
+        - Mostly text, a collage, a map or a chart
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Image details
+      description: Filled in by Sunloom so we can find the picture. Please leave it as it is.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Optional. A few words about why, if it helps. Please do not describe anything graphic.

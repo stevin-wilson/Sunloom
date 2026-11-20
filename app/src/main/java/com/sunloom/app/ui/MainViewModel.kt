@@ -578,6 +578,14 @@ class MainViewModel(
         beginDiscard(current.id, current.title, DiscardKind.DISLIKE)
     }
 
+    /**
+     * Dislike a specific picture (the one a report was made about), switching away only when it is the active one.
+     * Takes the record itself so it works for any picture the screen shows. Same timed Undo as [dislikeCurrentWithUndo].
+     */
+    fun dislikeWithUndo(record: com.sunloom.app.domain.model.WallpaperRecord) {
+        beginDiscard(record.id, record.title, DiscardKind.DISLIKE)
+    }
+
     /** Remove a reserve item now (hiding it immediately), finalizing after the undo window. */
     fun removeFromReserveWithUndo(recordId: String) {
         val record = _uiState.value.libraryWallpapers.firstOrNull { it.id == recordId }

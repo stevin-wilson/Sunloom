@@ -173,6 +173,20 @@ class MainActivity : ComponentActivity() {
                             startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, url.toUri()))
                         }
                     },
+                    onReportImage = { record ->
+                        val url = com.sunloom.app.diagnostics.ReportImage.issueUrl(com.sunloom.app.diagnostics.AppInfo.current(), record)
+                        if (url != null) {
+                            // Open the form first: if the device cannot, say so and leave the picture alone, so the
+                            // report is not lost behind a removal the person did not ask for.
+                            runCatching {
+                                startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, url.toUri()))
+                            }.onSuccess {
+                                viewModel.dislikeWithUndo(record)
+                            }.onFailure {
+                                android.widget.Toast.makeText(this, R.string.msg_report_not_opened, android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    },
                     onTogglePause = { viewModel.togglePauseAutomation() },
                     onRestoreOriginal = { viewModel.restoreOriginalBaselineWallpaper() },
                     onRestoreSystemDefault = { viewModel.restoreSystemDefaultWallpaper() },

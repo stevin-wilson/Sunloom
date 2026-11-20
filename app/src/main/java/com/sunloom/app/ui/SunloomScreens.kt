@@ -143,8 +143,14 @@ private fun rememberWallpaperActions(actions: SunloomActions, snackbarHostState:
                 showMessage(attributionCopiedMessage)
             }
         }
-    return remember(actions.onSaveAs, copyAttribution, actions.onDeleteManyFromReserve, showMessage, actions.onSetChosenWallpaper) {
-        WallpaperActions(actions.onSaveAs, copyAttribution, actions.onDeleteManyFromReserve, showMessage, actions.onSetChosenWallpaper)
+    return remember(
+        actions.onSaveAs, copyAttribution, actions.onDeleteManyFromReserve, showMessage, actions.onSetChosenWallpaper,
+        actions.onReportImage
+    ) {
+        WallpaperActions(
+            actions.onSaveAs, copyAttribution, actions.onDeleteManyFromReserve, showMessage, actions.onSetChosenWallpaper,
+            actions.onReportImage
+        )
     }
 }
 

@@ -2,6 +2,7 @@ package com.sunloom.app.ui
 
 import com.sunloom.app.labels.title
 import com.sunloom.app.R
+import com.sunloom.app.diagnostics.ReportImage
 import com.sunloom.app.domain.matcher.ChosenSlot
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.getValue
@@ -230,6 +231,12 @@ private fun TodayContextMenuItems(
         dismiss()
         onRequestRejectConfirm()
     }
+    if (ReportImage.canReport(current)) {
+        ContextMenuItem(stringResource(R.string.dislike_and_report), "ctx_dislike_and_report", destructive = true) {
+            dismiss()
+            actions.reportImage(current)
+        }
+    }
 }
 
 /** The title with its menu, and the empty state that offers to fetch a first batch. */
@@ -255,7 +262,8 @@ private fun TodayHeader(
                 MoreMenuButton(
                     onAbout = { onShowAbout() },
                     onCopyAttribution = { actions.copyAttribution(current) },
-                    onSaveAs = { actions.saveAs(current) }
+                    onSaveAs = { actions.saveAs(current) },
+                    onDislikeAndReport = if (ReportImage.canReport(current)) ({ actions.reportImage(current) }) else null
                 )
             }
         }
@@ -708,7 +716,12 @@ internal fun HostRestrictionNotice() {
 
 /** A visible button for what the right-click menu offers, for touch, keyboard and screen-reader users. */
 @Composable
-private fun MoreMenuButton(onAbout: () -> Unit, onCopyAttribution: () -> Unit, onSaveAs: () -> Unit) {
+private fun MoreMenuButton(
+    onAbout: () -> Unit,
+    onCopyAttribution: () -> Unit,
+    onSaveAs: () -> Unit,
+    onDislikeAndReport: (() -> Unit)?
+) {
     var open by remember { mutableStateOf(false) }
     Box {
         ShortcutTooltip(stringResource(R.string.more_actions)) {
@@ -729,6 +742,12 @@ private fun MoreMenuButton(onAbout: () -> Unit, onCopyAttribution: () -> Unit, o
                 open = false; onCopyAttribution()
             }
             ContextMenuItem(stringResource(R.string.save_wallpaper_as), "more_save_as") { open = false; onSaveAs() }
+            if (onDislikeAndReport != null) {
+                HorizontalDivider()
+                ContextMenuItem(stringResource(R.string.dislike_and_report), "more_dislike_and_report", destructive = true) {
+                    open = false; onDislikeAndReport()
+                }
+            }
         }
     }
 }

@@ -72,6 +72,15 @@ environment, and still only drafts. It was rehearsed once on 2026-11-11 with a t
 every step passed, and the draft held `Sunloom-0.0.1-rc.1-github.apk` (signature schemes v2 and v3 verified, checksum
 matched) and `SHA256SUMS`. Delete the throwaway secrets and the draft afterwards.
 
+## Image reports (before every release)
+
+People report pictures from the app (*Dislike and report…*, *Report this image…*); each becomes a public issue labelled
+`image-report`, with the source, asset id, source page and the gate version that approved it. Before a release: open every
+`image-report` issue, look at the source page yourself, and for each confirmed picture add its terms or id to
+`SafetyDenylist` (or the source's own exclusion), add a test that the gate now rejects it, bump
+`SafetyDenylist.DENYLIST_VERSION`, list it under *Changed* in the changelog without naming the picture, and close the
+issue with a thank-you. A picture that is fine: close the issue and say so.
+
 ## Reading a crash trace from a release
 
 Release builds shrink and rename code (R8), so a trace from a user shows names like `q5.a`. Each release run keeps the

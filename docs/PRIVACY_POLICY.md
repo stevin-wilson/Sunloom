@@ -42,6 +42,13 @@ Opening a "source page" or licence link, or **Report a problem**, opens your bro
 that site's own privacy policy. **Report a problem** only opens a GitHub issue form with the app version, build and Android version
 filled in; nothing is sent until you review it and press Submit.
 
+**Report this image** (and **Dislike and report…**) works the same way, for a picture that came from one of the sources.
+It opens a GitHub issue form with that picture's public details filled in: its title, the source's name and the picture's
+address there, the creator's name, how Sunloom classified it, the safety-check version and the app build. It never
+contains the picture, a file name, your location or anything about your device. Reports are **public** on GitHub and need
+a GitHub account to send; nothing is sent until you review the form and press Submit. Photos you added yourself and your
+saved original wallpaper cannot be reported.
+
 ## Checking for updates (the GitHub build only)
 
 The build you download from GitHub has **Check for updates** in Storage & About. When you tap it, the app asks
