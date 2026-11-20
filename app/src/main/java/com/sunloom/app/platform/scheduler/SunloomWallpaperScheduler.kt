@@ -34,6 +34,8 @@ import com.sunloom.app.platform.DefaultSystemWallpaperGateway
 import com.sunloom.app.platform.GoogleBookPlatformAdapter
 import com.sunloom.app.platform.SystemWallpaperGateway
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.ZoneId
 import java.io.File
 import java.time.ZonedDateTime
@@ -309,6 +311,9 @@ class SunloomWallpaperScheduler(
         internal fun refreshConstraintsSignature(wifiOnly: Boolean, deferBatterySaver: Boolean): String =
             "$wifiOnly:$deferBatterySaver:storage:${RefreshSchedulePolicy.REFRESH_INTERVAL_HOURS}h"
 
+        /** One change run at a time: a run started by the open app and the background job for the same theme flip must not both choose. */
+        private val changeRunLock = Mutex()
+
         /**
          * Executes the local wallpaper transition logic for [ChangeWorker], walking up to 3
          * ranked fallback candidates when an apply fails, and honestly updating active state
@@ -319,6 +324,15 @@ class SunloomWallpaperScheduler(
             repo: LocalLibraryRepository = appContext.appContainer().newRepository(),
             platform: GoogleBookPlatformAdapter = GoogleBookPlatformAdapter(appContext),
             nowZonedOverride: ZonedDateTime? = null
+        ): WallpaperStatus? = changeRunLock.withLock {
+            runScheduledWallpaperChange(appContext, repo, platform, nowZonedOverride)
+        }
+
+        private suspend fun runScheduledWallpaperChange(
+            appContext: Context,
+            repo: LocalLibraryRepository,
+            platform: GoogleBookPlatformAdapter,
+            nowZonedOverride: ZonedDateTime?
         ): WallpaperStatus? {
             val prefs = repo.loadPreferences()
             // Setup applies the first wallpaper itself; a run armed before the person finished it must not pre-empt that.
