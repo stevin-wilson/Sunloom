@@ -40,7 +40,7 @@ jobs:
       - name: Release script tests
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 17
