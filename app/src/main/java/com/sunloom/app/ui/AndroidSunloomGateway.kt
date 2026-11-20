@@ -326,6 +326,9 @@ class AndroidSunloomGateway(
             deferBatterySaver = cleanPreferences.deferOnBatterySaver,
             preferences = cleanPreferences
         )
+        if (!previousPreferences.isSetupCompleted && cleanPreferences.isSetupCompleted) {
+            platformAdapter.requestFirstRefresh(cleanPreferences.wifiOnlyDownloads, cleanPreferences.deferOnBatterySaver)
+        }
         if (display != null && reserveAffected) {
             reconcileActiveWallpaperForDisplay(repo, display, connectedDisplays, cleanPreferences, activeBefore)
             promoteNonSeedOverSeedIfNeeded(repo, cleanPreferences, display, connectedDisplays)
