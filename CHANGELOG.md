@@ -7,6 +7,10 @@ the release's version as its notes.
 ## [Unreleased]
 
 ### Fixed
+- Finishing setup now sets a wallpaper straight away, in every mode and even with no network. Before, setup only showed a
+  preview and the first real change came about 15 minutes later. If the system refuses the picture, setup says so.
+- Following the system theme with a chosen Daytime or Evening picture: switching the theme no longer flashes another picture
+  first. The chosen picture is the only one shown.
 - Setting up with no network, then going online: Sunloom now fetches its first pictures by itself as soon as a suitable
   network is available, instead of waiting hours or for you to press Next.
 
