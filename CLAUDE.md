@@ -20,6 +20,9 @@ Run one class with `--tests 'com.sunloom.app.domain.safety.SafetyGateTest'`.
 - **Failing test first**, then the smallest change, then tidy. Say in the PR what you ran and what you did not.
 - **Name the rule.** A test class that guards a Constitution rule carries `@Requirement("XII.1")`.
   `ConstitutionTraceabilityTest` fails when a rule has no test or a test names a rule that does not exist.
+  A section split into clauses (`**(a)**`, `**(b)**` ... in `CONSTITUTION.md`, ids like `XVI.1.a`) needs a test for
+  **each clause**; a test naming only `XVI.1` does not cover them. A clause can instead be proved by a marker in a
+  workflow file (`workflowEvidence` in that test) or listed in `unverifiable` with the reason.
 - **Behavior change means amend the Constitution in the same PR**: version bump, a row in the amendment log, and a
   `**[v0.NN]**` tag on the changed sentence. Never renumber an article or section.
 - **Coverage floors only go up** (`app/coverage-floors.csv`). Raise a floor in the PR that raises the coverage.

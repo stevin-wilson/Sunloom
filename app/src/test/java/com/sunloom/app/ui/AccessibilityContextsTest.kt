@@ -31,7 +31,7 @@ import org.robolectric.annotation.Config
  * normal size. They hold in the other places people use Sunloom too: the dark theme, first-run setup, dialogs, and a
  * narrow window with the system font at 200 percent (Constitution Article XII §4).
  */
-@Requirement("XII.4")
+@Requirement("XII.4", "XVI.1.h")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w1280dp-h4000dp")
 class AccessibilityContextsTest {

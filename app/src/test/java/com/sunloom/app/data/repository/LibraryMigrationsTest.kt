@@ -11,7 +11,7 @@ import org.junit.Test
  * failure (a missing table, a full disk) is never swallowed, and a database an older build wrote to after a downgrade
  * (version lowered, columns still there) upgrades again without error.
  */
-@Requirement("XIV.1")
+@Requirement("XIV.1", "XVI.1.a")
 class LibraryMigrationsTest {
 
     private val v1Wallpapers = setOf(

@@ -34,7 +34,7 @@ import org.robolectric.annotation.Config
  */
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w1280dp-h2000dp")
-@Requirement("XII.1")
+@Requirement("XII.1", "XVI.1.b")
 class UxLawsComposeTest {
 
     @get:Rule

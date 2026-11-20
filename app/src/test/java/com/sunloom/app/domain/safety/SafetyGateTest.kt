@@ -13,6 +13,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
+@Requirement("XVI.1.a")
 class SafetyGateTest {
 
     private lateinit var safetyGate: SafetyGate
