@@ -1,4 +1,5 @@
 import java.io.File
+import java.util.zip.ZipFile
 import org.gradle.testing.jacoco.tasks.JacocoReport
 
 plugins {
@@ -190,6 +191,75 @@ if (domainOnly) {
     tasks.withType<Test>().configureEach { filter.includeTestsMatching("com.sunloom.app.domain.*") }
 }
 
+// Mutation testing of the platform-independent core (a report to read, not a gate): `./gradlew :app:mutationDomain`
+// changes the compiled domain classes one small way at a time (flips a comparison, drops a call) with PIT and re-runs
+// the domain tests; a change no test notices ("survived") is a missing or weak test. Plain PIT through its command
+// line rather than a Gradle plugin, which would have to keep up with the Android Gradle plugin. It reuses the unit-test
+// classpath, so nothing extra is compiled. The report is app/build/reports/pitest/domain/index.html.
+//   -Psunloom.mutation.classes=com.sunloom.app.domain.safety.*   narrows what is mutated
+//   -Psunloom.mutation.tests=...                                  narrows which tests run (default: the domain tests)
+//   -Psunloom.mutation.threads=N                                  parallel test runs (default 4)
+val pitest: Configuration by configurations.creating
+tasks.register<JavaExec>("mutationDomain") {
+    group = "verification"
+    description = "Mutation-tests the domain layer with PIT and writes a report (no pass/fail threshold)."
+    val testTask = tasks.named<Test>("testGithubDebugUnitTest")
+    val reportDir = layout.buildDirectory.dir("reports/pitest/domain")
+    val classPathFile = layout.buildDirectory.file("pitest/classpath.txt")
+    // The unit-test classpath carries the app's classes in a jar, and PIT mutates only code in directories: use the
+    // compiled-classes directory instead (the same one the coverage report reads).
+    val appClasses = layout.buildDirectory.dir("intermediates/built_in_kotlinc/githubDebug/compileGithubDebugKotlin/classes")
+    val sourceDir = layout.projectDirectory.dir("src/main/java")
+    val targetClasses = providers.gradleProperty("sunloom.mutation.classes").orElse("com.sunloom.app.domain.*")
+    val targetTests = providers.gradleProperty("sunloom.mutation.tests").orElse("com.sunloom.app.domain.*")
+    val threads = providers.gradleProperty("sunloom.mutation.threads").orElse("4")
+    classpath = pitest
+    mainClass.set("org.pitest.mutationtest.commandline.MutationCoverageReport")
+    // Only what builds the classpath (the compile tasks), not the test task itself: PIT runs the tests its own way.
+    dependsOn(provider { testTask.get().classpath }, "compileGithubDebugKotlin")
+    outputs.upToDateWhen { false }
+    notCompatibleWithConfigurationCache("reads the unit-test classpath when it runs")
+    doFirst {
+        val file = classPathFile.get().asFile
+        file.parentFile.mkdirs()
+        val appClassesDir = appClasses.get().asFile
+        val entries = listOf(appClassesDir) + testTask.get().classpath.files.filter { it.exists() && "runtime_app_classes_jar" !in it.path }
+        // Fail loudly rather than report nonsense: if the layout changes, PIT could mutate a copy the tests never load,
+        // and every mutant would look like it survived.
+        check(File(appClassesDir, "com/sunloom/app/domain").isDirectory) {
+            "mutationDomain: no compiled domain classes in $appClassesDir (did the build output layout change?)"
+        }
+        // The domain tests live in the same package as the code, so look for copies of specific main-class files, not the package.
+        val sample = File(appClassesDir, "com/sunloom/app/domain").walkTopDown().filter { it.extension == "class" }.take(5)
+            .map { it.relativeTo(appClassesDir).invariantSeparatorsPath }.toList()
+        check(sample.isNotEmpty()) { "mutationDomain: found no domain class files under $appClassesDir" }
+        val staleCopies = entries.drop(1).filter { entry ->
+            if (entry.isDirectory) sample.any { File(entry, it).exists() }
+            else entry.extension == "jar" && ZipFile(entry).use { zip -> sample.any { zip.getEntry(it) != null } }
+        }
+        check(staleCopies.isEmpty()) {
+            "mutationDomain: another classpath entry also holds the domain classes, so PIT could mutate a copy the tests do not load: $staleCopies"
+        }
+        file.writeText(entries.joinToString("\n") { it.absolutePath })
+        args(
+            "--reportDir", reportDir.get().asFile.absolutePath,
+            "--classPathFile", file.absolutePath,
+            "--sourceDirs", sourceDir.asFile.absolutePath,
+            "--mutableCodePaths", appClassesDir.absolutePath,
+            "--targetClasses", targetClasses.get(),
+            "--targetTests", targetTests.get(),
+            // Kotlin inserts a null check for every parameter; flipping those finds nothing about our code.
+            "--avoidCallsTo", "kotlin.jvm.internal",
+            "--mutators", "DEFAULTS",
+            "--outputFormats", "HTML,XML,CSV",
+            "--timestampedReports", "false",
+            "--threads", threads.get(),
+            "--jvmArgs", "-Xmx512m",
+            "--verbose", "false"
+        )
+    }
+}
+
 composeCompiler {
     includeSourceInformation.set(false)
 }
@@ -231,6 +301,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit)
+    pitest(libs.pitest.command.line)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.test.ext.junit)

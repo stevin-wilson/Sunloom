@@ -11,9 +11,17 @@ file is the part you cannot work out from the code.
 ./gradlew testGithubDebugUnitTest testPlayDebugUnitTest lintGithubDebug lintPlayDebug detekt   # what CI runs; run before a PR
 ./gradlew :app:minifyGithubReleaseWithR8 :app:minifyPlayReleaseWithR8                          # a bad keep rule fails here
 ./gradlew :app:coverageFloors      # CI's gate; local numbers are lower (see below)
+./gradlew :app:mutationDomain      # mutation report for the domain layer (minutes; a report to read, not a gate)
 ```
 
 Run one class with `--tests 'com.sunloom.app.domain.safety.SafetyGateTest'`.
+
+`mutationDomain` (PIT) changes the compiled domain classes one small way at a time and re-runs the domain tests; a
+change no test notices ("survived") is a missing or weak assertion. The report is
+`app/build/reports/pitest/domain/index.html`. Narrow it while working on one class:
+`-Psunloom.mutation.classes='com.sunloom.app.domain.safety.SafetyGate*' -Psunloom.mutation.tests='com.sunloom.app.domain.safety.*'`.
+Not every survivor is a gap (a mutation that changes no behavior is an "equivalent mutant"); read the line before
+writing a test, and never write one that only mirrors the code. CI does not run it.
 
 ## Rules that are easy to miss
 
