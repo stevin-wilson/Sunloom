@@ -56,6 +56,17 @@ class SafetyGateBoundsTest {
         assertEquals(sizeReason, reasonOf(gate.evaluatePayload(candidate(isUserLocal = false), jpeg(64), headerBounds = ordinary)))
     }
 
+    @Requirement("VII.4.l")
+    @Test
+    fun `a picture whose header does not state a readable size is refused, not waved through`() {
+        // A real signature and plenty of bytes, but nothing that says how big the picture is: the limits cannot be checked.
+        val verdict = gate.evaluatePayload(candidate(), jpeg(SafetyGate.MIN_PAYLOAD_BYTES))
+        assertEquals("UNREADABLE_IMAGE_HEADER", reasonOf(verdict))
+        assertEquals("L3", (verdict as SafetyVerdict.Rejected).failedLayer)
+        // The same bytes with the size supplied are judged on that size.
+        assertTrue(gate.evaluatePayload(candidate(), jpeg(SafetyGate.MIN_PAYLOAD_BYTES), headerBounds = ordinary) is SafetyVerdict.Approved)
+    }
+
     // --- Size of the picture ---
 
     private fun bounds(width: Int, height: Int) = ImageHeaderBounds(width, height, "image/jpeg")

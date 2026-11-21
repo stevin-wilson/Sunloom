@@ -64,25 +64,30 @@ class SafetyGateTest {
         )
     }
 
+    /** A JPEG header with a real frame (4000 x 3000), then filler to [size] and the end marker. */
     private fun validJpegBytes(size: Int = 65_536): ByteArray {
         val bytes = ByteArray(size) { 0x42 }
-        // JPEG Magic Bytes: FF D8 FF E0 ... FF D9
-        bytes[0] = 0xFF.toByte()
-        bytes[1] = 0xD8.toByte()
-        bytes[2] = 0xFF.toByte()
-        bytes[3] = 0xE0.toByte()
+        val head = byteArrayOf(
+            0xFF.toByte(), 0xD8.toByte(), // start of image
+            0xFF.toByte(), 0xE0.toByte(), 0x00, 0x04, 0x00, 0x00, // an APP0 segment with two bytes of data
+            0xFF.toByte(), 0xC0.toByte(), 0x00, 0x0B, 0x08, // frame header: length 11, 8-bit precision
+            (3000 shr 8).toByte(), (3000 and 0xFF).toByte(), (4000 shr 8).toByte(), (4000 and 0xFF).toByte(), 0x01 // height, width, one component
+        )
+        System.arraycopy(head, 0, bytes, 0, head.size)
         bytes[size - 2] = 0xFF.toByte()
         bytes[size - 1] = 0xD9.toByte()
         return bytes
     }
 
+    /** A PNG signature and IHDR chunk stating 3840 x 2160, then filler to [size]. */
     private fun validPngBytes(size: Int = 65_536): ByteArray {
         val bytes = ByteArray(size) { 0x11 }
-        // PNG Magic Bytes: 89 50 4E 47 0D 0A 1A 0A
-        val header = byteArrayOf(
-            0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
+        val head = byteArrayOf(
+            0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, // chunk length 13, "IHDR"
+            0x00, 0x00, 0x0F, 0x00, 0x00, 0x00, 0x08, 0x70 // width 3840, height 2160
         )
-        System.arraycopy(header, 0, bytes, 0, header.size)
+        System.arraycopy(head, 0, bytes, 0, head.size)
         return bytes
     }
 

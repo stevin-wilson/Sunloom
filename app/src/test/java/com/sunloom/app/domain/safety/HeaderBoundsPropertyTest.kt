@@ -182,6 +182,10 @@ class HeaderBoundsPropertyTest {
             }
             case.input = "${h}, damage kind $damage, ${tested.size} bytes: ${tested.take(32).joinToString(" ") { "%02x".format(it) }}"
             val bounds = SafetyGate.inspectImageHeaderBounds(tested)
+            val padded = tested + ByteArray(maxOf(0, SafetyGate.MIN_PAYLOAD_BYTES - tested.size))
+            if (SafetyGate.inspectImageHeaderBounds(padded) == null) {
+                assertTrue("a picture whose size could not be read must not be approved", gate.evaluatePayload(SafetyFixtures.candidate(), padded) is SafetyVerdict.Rejected)
+            }
             if (bounds != null) {
                 assertTrue("width ${bounds.width} must be positive", bounds.width >= 1)
                 assertTrue("height ${bounds.height} must be positive", bounds.height >= 1)

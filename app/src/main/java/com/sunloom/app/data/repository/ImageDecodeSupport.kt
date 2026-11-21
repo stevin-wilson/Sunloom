@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import androidx.core.graphics.scale
 import com.sunloom.app.domain.evaluator.GridAverager
+import com.sunloom.app.domain.safety.ImageHeaderBounds
 import java.io.File
 
 /**
@@ -58,6 +59,22 @@ internal fun applyExifOrientationIfNeeded(file: File, bitmap: Bitmap): Bitmap {
         }
         Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }.getOrDefault(bitmap)
+}
+
+/**
+ * The size the platform decoder reads from the header alone (no pixels are allocated), for a file the header parser could
+ * not size; null when the decoder cannot size it either. The payload gate checks it against the L3 limits like any other
+ * header size (Article VII §4 l).
+ */
+internal fun probeImageBounds(
+    bytes: ByteArray,
+    decoder: (ByteArray, BitmapFactory.Options) -> Bitmap? = { b, o -> BitmapFactory.decodeByteArray(b, 0, b.size, o) }
+): ImageHeaderBounds? = try {
+    val probe = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    decoder(bytes, probe)
+    if (probe.outWidth > 0 && probe.outHeight > 0) ImageHeaderBounds(probe.outWidth, probe.outHeight, probe.outMimeType) else null
+} catch (_: Exception) {
+    null
 }
 
 /** Why a decode did or did not produce a picture: a corrupt file is final, running out of memory is not. */

@@ -23,7 +23,27 @@ import java.util.Locale
  */
 object SafetyDenylist {
 
-    const val DENYLIST_VERSION = "2026.11.08-v9"
+    const val DENYLIST_VERSION = "2026.11.21-v10"
+
+    /**
+     * [terms] in their canonical stemmed form, plus the plural of any term whose plural the stemmer would not fold back
+     * to it. It leaves -is alone (so `iris` and `basis` survive), which strands the plurals of words ending in -i
+     * ("nazis", "bikinis"), and it turns -ies into -y, which strands those ending in -ie ("selfies" becomes "selfy").
+     * Without these, a plural slips past its own term.
+     */
+    private fun withUnstemmedPlurals(terms: List<String>): Set<String> = buildSet {
+        for (term in terms.map { normalizePhrase(it) }) {
+            add(term)
+            val words = term.split(' ')
+            val last = words.last()
+            val plural = when {
+                last.endsWith("i") -> last + "s"
+                last.endsWith("ie") -> last.dropLast(2) + "y"
+                else -> continue
+            }
+            add((words.dropLast(1) + plural).joinToString(" "))
+        }
+    }
 
     private val DIACRITICS_REGEX = Regex("\\p{M}+")
     private val NON_LETTER_DIGIT_REGEX = Regex("[^a-z0-9]+")
@@ -151,7 +171,7 @@ object SafetyDenylist {
         // Misleading System Prompts / Lock-Screen Spoofing (Article VII §2)
         "system error", "fake lock screen", "warning prompt", "security alert",
         "ransomware", "bluescreen", "kernel panic", "password prompt"
-    ).map { normalizePhrase(it) }.toSet()
+    ).let(::withUnstemmedPlurals)
 
     /**
      * Tier 2: Matched against title and structured category/tag/classification/department fields.
@@ -174,7 +194,7 @@ object SafetyDenylist {
         "logo", "corporate logo", "brand logo", "trademark logo", "emblem",
         "company emblem", "insignia", "mission patch", "patch", "coat of arms",
         "heraldry", "badge"
-    ).map { normalizePhrase(it) }.toSet()
+    ).let(::withUnstemmedPlurals)
 
     /**
      * L2c (Constitution v0.13): single-scene guard. Terms matched against the title and the

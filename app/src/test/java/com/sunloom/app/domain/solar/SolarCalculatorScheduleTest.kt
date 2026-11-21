@@ -71,20 +71,21 @@ class SolarCalculatorScheduleTest {
         assertEquals(november4.atTime(sfWindow(november4).sunriseTime).atZone(sanFrancisco), next)
     }
 
+    @Requirement("III.3")
     @Test
-    fun `a transition less than thirty seconds away is skipped so the same one never fires twice`() {
+    fun `a transition just ahead is still the next one, so a re-arm just before it cannot lose it`() {
         val sunset = november4.atTime(sfWindow(november4).sunsetTime).atZone(sanFrancisco)
         val tomorrow = november4.plusDays(1)
         val tomorrowsSunrise = tomorrow.atTime(sfWindow(tomorrow).sunriseTime).atZone(sanFrancisco)
 
-        // 20 s before sunset: too close, so the following transition is chosen.
-        assertEquals(tomorrowsSunrise, calculator.computeNextTransitionZonedTime(sunriseSunset, sunset.minusSeconds(20)))
-        // Exactly 30 s before: still not strictly after the guard.
-        assertEquals(tomorrowsSunrise, calculator.computeNextTransitionZonedTime(sunriseSunset, sunset.minusSeconds(30)))
-        // 31 s before: far enough, so sunset is still the next change.
-        assertEquals(sunset, calculator.computeNextTransitionZonedTime(sunriseSunset, sunset.minusSeconds(31)))
+        // However close it is, a transition ahead is the next change: it fires a minute or so later, after it has passed.
+        listOf(1L, 20L, 30L, 31L, 600L).forEach { secondsBefore ->
+            assertEquals("$secondsBefore s before", sunset, calculator.computeNextTransitionZonedTime(sunriseSunset, sunset.minusSeconds(secondsBefore)))
+        }
+        assertTrue("and the wait is never under a minute", calculator.computeNextTransitionDelayMs(sunriseSunset, sunset.minusSeconds(10))!! >= 60_000L)
         // Right at the transition: never returns the moment that is already here.
         assertEquals(tomorrowsSunrise, calculator.computeNextTransitionZonedTime(sunriseSunset, sunset))
+        assertEquals(tomorrowsSunrise, calculator.computeNextTransitionZonedTime(sunriseSunset, sunset.plusSeconds(1)))
     }
 
     @Test
