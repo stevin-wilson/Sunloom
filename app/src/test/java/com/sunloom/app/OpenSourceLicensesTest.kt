@@ -10,7 +10,7 @@ import org.junit.Test
  * out of the dependencies it packages, so the credit is a curated file, and this test fails when a dependency is added
  * without one.
  */
-@Requirement("XVIII.2")
+@Requirement("XVIII.2", "XII.1.e")
 class OpenSourceLicensesTest {
     private val credits = File("src/main/res/raw/open_source_licenses.txt")
     private val catalog = File("../gradle/libs.versions.toml")

@@ -29,7 +29,7 @@ import org.robolectric.annotation.Config
  * Article XII §1: first-run setup is a short walk with a visible sense of progress, in plain words, where a person who
  * wants none of the choices can finish from the first step (Hick's law, the goal gradient, progressive disclosure).
  */
-@Requirement("XII.1")
+@Requirement("XII.1", "XII.1.a", "XII.1.b")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w1280dp-h2400dp")
 class SetupStepperComposeTest {

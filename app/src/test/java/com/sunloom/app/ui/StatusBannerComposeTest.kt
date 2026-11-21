@@ -22,7 +22,7 @@ import org.robolectric.annotation.Config
  * A status message that does not fit its line must not be cut off for good: the person can open it and read all of it,
  * and a sync that failed can be tried again from the same place (Constitution Article XII §1).
  */
-@Requirement("XII.1")
+@Requirement("XII.1", "XII.1.g")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w420dp-h900dp")
 class StatusBannerComposeTest {

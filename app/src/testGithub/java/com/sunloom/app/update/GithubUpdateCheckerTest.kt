@@ -16,7 +16,7 @@ import org.robolectric.annotation.Config
  * Article XVIII §1: the GitHub build can ask GitHub whether a newer release exists - only when the person taps "Check for
  * updates", only to hosts in [UpdateHosts], and it only ever shows a link; it never downloads or installs anything.
  */
-@Requirement("XVIII.1")
+@Requirement("XVIII.1", "XVIII.1.c", "XVIII.1.e")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class GithubUpdateCheckerTest {

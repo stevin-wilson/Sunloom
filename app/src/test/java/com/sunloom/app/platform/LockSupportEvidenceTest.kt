@@ -9,7 +9,7 @@ import org.junit.Test
  * Article V §2: independent lock-screen support is only claimed from evidence. Setting the home and lock wallpapers
  * together proves nothing (the system may simply share one picture), so only a lock-only apply can show it.
  */
-@Requirement("V.2")
+@Requirement("V.2", "XVIII.1.i")
 class LockSupportEvidenceTest {
     @Test
     fun `a combined home and lock apply is no evidence either way`() {

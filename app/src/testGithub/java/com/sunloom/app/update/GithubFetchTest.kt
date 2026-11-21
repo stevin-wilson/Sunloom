@@ -17,7 +17,7 @@ import org.junit.Test
  * Article XVIII §1: the one request the GitHub build can make is short, to an allowed host only, sends nothing but a
  * User-Agent, follows no redirect, and reads a bounded answer.
  */
-@Requirement("XVIII.1")
+@Requirement("XVIII.1", "XVIII.1.b", "XVIII.1.c")
 class GithubFetchTest {
     private class FakeConnection(
         url: URL,

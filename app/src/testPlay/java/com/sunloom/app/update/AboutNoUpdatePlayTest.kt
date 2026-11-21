@@ -18,7 +18,7 @@ import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
 /** The Play build is updated by the store: it has no update button and no code that could ask GitHub. */
-@Requirement("XVIII.1")
+@Requirement("XVIII.1", "XVIII.1.b")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w1280dp-h2400dp")
 class AboutNoUpdatePlayTest {

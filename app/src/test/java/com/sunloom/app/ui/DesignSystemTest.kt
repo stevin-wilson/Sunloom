@@ -16,7 +16,7 @@ import org.junit.Test
  * container is readable, and corners and gaps come from a few named sizes instead of numbers repeated by hand
  * (Constitution Article XII §1).
  */
-@Requirement("XII.1")
+@Requirement("XII.1", "XII.1.i")
 class DesignSystemTest {
     /** Every colour role of a scheme, by name, read from its getters. */
     private fun roles(scheme: ColorScheme): Map<String, Color> =

@@ -28,7 +28,7 @@ import org.robolectric.annotation.Config
  * it is licensed under, what it is built from, and where the privacy policy and the code are - first on the screen,
  * not under a long log (Constitution Article XII §1).
  */
-@Requirement("XII.1")
+@Requirement("XII.1", "XII.1.e")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w1280dp-h2400dp")
 class AboutSectionTest {

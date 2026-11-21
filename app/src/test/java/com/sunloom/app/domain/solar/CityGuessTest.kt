@@ -12,7 +12,7 @@ import org.junit.Test
  * Article III / XII §1: sunrise and sunset need a place, and Sunloom never asks for the location. The device's time zone is a
  * good first guess at the city, so setup starts there instead of at San Francisco for everyone.
  */
-@Requirement("XII.1")
+@Requirement("XII.1", "XII.1.b")
 class CityGuessTest {
     private val summer = ZonedDateTime.of(2026, 7, 1, 12, 0, 0, 0, ZoneId.of("UTC")).toInstant()
     private fun guess(zone: String) = CityGuess.forZone(ZoneId.of(zone), summer)

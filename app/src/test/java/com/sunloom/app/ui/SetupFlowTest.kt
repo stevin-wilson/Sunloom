@@ -11,7 +11,7 @@ import org.junit.Test
  * Article XII §1: setup is a short walk, not a long form - a few steps, each with one decision group, a visible sense of
  * how far along it is, and a way back.
  */
-@Requirement("XII.1")
+@Requirement("XII.1", "XII.1.a")
 class SetupFlowTest {
     @Test
     fun `setup has four steps in a fixed order`() {
