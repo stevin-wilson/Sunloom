@@ -17,6 +17,10 @@ the release's version as its notes.
   a swimwear or selfie term). Pictures already in your reserve are checked again against the new list the next time the
   app runs, and any that now fail are removed.
 
+### Fixed
+- **Sunrise and sunset no longer stop working after damaged location settings.** A settings file holding an impossible
+  longitude or latitude made the schedule fail; such a value is now read as zero, and the schedule keeps running.
+
 ## [2.0.0-rc.3] - 2026-11-20
 
 The third release candidate. The second one was never published, so everything in it is included here (see below). Please

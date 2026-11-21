@@ -94,7 +94,12 @@ class SolarCalculator {
         utcOffsetHours: Double
     ): DaylightWindow {
         val dayOfYear = date.dayOfYear
-        val safeLat = latitude.coerceIn(-89.9, 89.9)
+        // Coordinates come back from storage as raw bits, so a damaged file can hold NaN or infinity. Those are read as 0
+        // (a plausible place) instead of throwing deep in the rounding; a longitude is the same every 360 degrees.
+        val safeLat = if (latitude.isFinite()) latitude.coerceIn(-89.9, 89.9) else 0.0
+        val safeLon = if (longitude.isFinite()) longitude.rem(360.0) else 0.0
+        // No time zone is more than 18 hours from UTC.
+        val safeOffsetHours = if (utcOffsetHours.isFinite()) utcOffsetHours.coerceIn(-18.0, 18.0) else 0.0
         val latRad = Math.toRadians(safeLat)
 
         // Fractional year gamma in radians
@@ -144,11 +149,11 @@ class SolarCalculator {
         val hourAngleDeg = Math.toDegrees(acos(rawCosHourAngle.coerceIn(-1.0, 1.0)))
 
         // UTC sunrise and sunset in minutes from midnight
-        val sunriseUtcMinutes = 720.0 - 4.0 * (longitude + hourAngleDeg) - eqTime
-        val sunsetUtcMinutes = 720.0 - 4.0 * (longitude - hourAngleDeg) - eqTime
+        val sunriseUtcMinutes = 720.0 - 4.0 * (safeLon + hourAngleDeg) - eqTime
+        val sunsetUtcMinutes = 720.0 - 4.0 * (safeLon - hourAngleDeg) - eqTime
 
-        val sunriseLocalMinutes = ((sunriseUtcMinutes + utcOffsetHours * 60.0) % 1440.0 + 1440.0) % 1440.0
-        val sunsetLocalMinutes = ((sunsetUtcMinutes + utcOffsetHours * 60.0) % 1440.0 + 1440.0) % 1440.0
+        val sunriseLocalMinutes = ((sunriseUtcMinutes + safeOffsetHours * 60.0) % 1440.0 + 1440.0) % 1440.0
+        val sunsetLocalMinutes = ((sunsetUtcMinutes + safeOffsetHours * 60.0) % 1440.0 + 1440.0) % 1440.0
 
         return DaylightWindow(
             sunriseTime = minutesToLocalTime(sunriseLocalMinutes),
