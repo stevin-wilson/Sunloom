@@ -274,7 +274,8 @@ internal class CandidateIngestor(
 
     /** Runs the payload gate and decodes the picture into the grids the evaluator reads; null means skip it. */
     private fun sample(candidate: CandidateAsset, payloadBytes: ByteArray, state: SyncState, run: SourceRun): Sampled? {
-        val headerBounds = SafetyGate.inspectImageHeaderBounds(payloadBytes)
+        // The parser reads the common layouts; for any other the platform decoder sizes the file, and the gate checks that size.
+        val headerBounds = SafetyGate.inspectImageHeaderBounds(payloadBytes) ?: probeImageBounds(payloadBytes)
         val payloadVerdict = safetyGate.evaluatePayload(
             candidate = candidate,
             bytes = payloadBytes,

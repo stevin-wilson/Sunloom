@@ -118,7 +118,7 @@ internal class Revalidator(
             }
         }
 
-        val headerBounds = SafetyGate.inspectImageHeaderBounds(bytes)
+        val headerBounds = SafetyGate.inspectImageHeaderBounds(bytes) ?: probeImageBounds(bytes)
         val approved = approvedPayload(record, candidate, bytes, headerBounds, isUserLocal, blocked) ?: return true
 
         val sampled = when (val sampling = sample(record, bytes, headerBounds, approved, isUserLocal, blocked)) {

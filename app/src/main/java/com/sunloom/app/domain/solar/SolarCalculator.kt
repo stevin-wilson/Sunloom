@@ -254,6 +254,10 @@ class SolarCalculator {
     /**
      * Computes the next scheduled transition timestamp strictly after [nowZoned] for
      * `SUNRISE_SUNSET` or `FIXED_CLOCK` modes.
+     *
+     * A transition only seconds ahead is still the next one: the wait is never under a minute
+     * ([computeNextTransitionDelayMs]), so the change runs just after the transition and takes the new look. Skipping it
+     * instead would leave a run made in those seconds with the old look until the following transition.
      */
     fun computeNextTransitionZonedTime(
         preferences: UserPreferences,
@@ -296,7 +300,7 @@ class SolarCalculator {
         }
 
         return candidateTimes
-            .filter { it.isAfter(nowZoned.plusSeconds(30)) }
+            .filter { it.isAfter(nowZoned) }
             .minOrNull()
     }
 

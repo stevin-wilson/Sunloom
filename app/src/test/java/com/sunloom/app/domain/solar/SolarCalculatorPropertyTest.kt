@@ -236,7 +236,7 @@ class SolarCalculatorPropertyTest {
             val m = case.moment(mode)
             val next = calc.computeNextTransitionZonedTime(m.prefs, m.now)
             assertNotNull("a change should be scheduled", next)
-            assertTrue("$next is not after ${m.now.plusSeconds(30)}", next!!.isAfter(m.now.plusSeconds(30)))
+            assertTrue("$next is not after ${m.now}", next!!.isAfter(m.now))
             assertTrue("$next is more than 27 hours after ${m.now}", Duration.between(m.now, next).toHours() < 27)
             val delay = calc.computeNextTransitionDelayMs(m.prefs, m.now)
             assertNotNull(delay)
@@ -270,10 +270,6 @@ class SolarCalculatorPropertyTest {
             if (mode == ScheduleMode.FIXED_CLOCK && m.prefs.fixedLightHour == m.prefs.fixedDarkHour) return@forAll // one look all day
             val next = calc.computeNextTransitionZonedTime(m.prefs, m.now)!!
             if (nearClockChange(m.now, next)) return@forAll // a local time can repeat or not exist
-            // A transition less than 30 seconds ahead is skipped on purpose (so one never fires twice), while the look is
-            // still judged at this moment: inside that short window the next change is the one after. It is a known edge
-            // (SolarCalculatorScheduleTest pins the skip), so it is left out here.
-            if (brightnessAt(m.prefs, m.now) != brightnessAt(m.prefs, m.now.plusSeconds(31))) return@forAll
             val before = next.minusMinutes(1)
             val after = next.plusMinutes(1)
             val nearMidnight = { t: ZonedDateTime -> t.toLocalTime().isBefore(LocalTime.of(0, 3)) || t.toLocalTime().isAfter(LocalTime.of(23, 56)) }
@@ -284,6 +280,15 @@ class SolarCalculatorPropertyTest {
                 assertEquals("the look changed before the next transition", brightnessAt(m.prefs, m.now), brightnessAt(m.prefs, before))
             }
             assertTrue("the look did not change at $next", brightnessAt(m.prefs, before) != brightnessAt(m.prefs, after))
+            // Armed in the last minute before it: the change still comes, a minute out, and finds the new look.
+            val secondsBefore = case.int(1, 59)
+            val armedAt = next.minusSeconds(secondsBefore.toLong())
+            if (armedAt.toLocalDate() == next.toLocalDate()) {
+                assertEquals("armed $secondsBefore s before $next", next, calc.computeNextTransitionZonedTime(m.prefs, armedAt))
+                val fires = armedAt.plus(Duration.ofMillis(calc.computeNextTransitionDelayMs(m.prefs, armedAt)!!))
+                assertTrue("the change fires at $fires, before $next", !fires.isBefore(next))
+                assertEquals("the look when it fires", brightnessAt(m.prefs, after), brightnessAt(m.prefs, fires))
+            }
         }
     }
 }

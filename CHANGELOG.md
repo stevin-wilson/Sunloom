@@ -16,10 +16,16 @@ the release's version as its notes.
 - **The safety screen now catches plural forms of some words** it missed (for example the plural of a hate-group name or of
   a swimwear or selfie term). Pictures already in your reserve are checked again against the new list the next time the
   app runs, and any that now fail are removed.
+- **Pictures whose size cannot be read are refused** before they are decoded. Sunloom reads the size from the file
+  header and, for an unusual layout, asks the system's decoder; a picture is refused only when neither can say how big it
+  is, and one the decoder sizes is held to the same limits as any other.
 
 ### Fixed
 - **Sunrise and sunset no longer stop working after damaged location settings.** A settings file holding an impossible
   longitude or latitude made the schedule fail; such a value is now read as zero, and the schedule keeps running.
+- **A sunrise or sunset change could be missed.** If the app was opened (or the schedule re-armed) in the 30 seconds before
+  sunrise or sunset, that change was skipped and the wallpaper kept its old look until the next one, up to a day later.
+  It is now scheduled a minute out instead.
 
 ## [2.0.0-rc.3] - 2026-11-20
 

@@ -332,30 +332,36 @@ class SafetyGate {
         }
 
         val effectiveBounds = headerBounds ?: inspectImageHeaderBounds(bytes)
-        if (effectiveBounds != null) {
-            if (effectiveBounds.width <= 0 || effectiveBounds.height <= 0) {
-                return SafetyVerdict.Rejected(
-                    reasonCode = "CORRUPT_BITMAP_HEADER",
-                    explanation = "Image header reported non-positive dimensions (${effectiveBounds.width}×${effectiveBounds.height}).",
-                    failedLayer = "L3"
-                )
-            }
-            val totalPixels = effectiveBounds.width.toLong() * effectiveBounds.height.toLong()
-            if (exceedsDecodeBounds(effectiveBounds)) {
-                return SafetyVerdict.Rejected(
-                    reasonCode = "IMAGE_DIMENSIONS_OUT_OF_BOUNDS",
-                    explanation = "Image dimensions (${effectiveBounds.width}×${effectiveBounds.height}, $totalPixels px) exceed safe decode bounds (${MAX_DIMENSION_PX}px / ${MAX_TOTAL_PIXELS}px).",
-                    failedLayer = "L3"
-                )
-            }
-            val mime = effectiveBounds.outMimeType?.lowercase(Locale.ROOT).orEmpty()
-            if (mime.isNotBlank() && mime != format.mimeType) {
-                return SafetyVerdict.Rejected(
-                    reasonCode = "MIME_MAGIC_MISMATCH",
-                    explanation = "Decoder MIME type '$mime' does not match magic-byte format '${format.mimeType}'.",
-                    failedLayer = "L3"
-                )
-            }
+        if (effectiveBounds == null) {
+            // L3 verifies the size from the header before anything is decoded; a header that cannot be sized cannot be verified.
+            return SafetyVerdict.Rejected(
+                reasonCode = "UNREADABLE_IMAGE_HEADER",
+                explanation = "The image header does not state a readable size, so the decode bounds cannot be verified.",
+                failedLayer = "L3"
+            )
+        }
+        if (effectiveBounds.width <= 0 || effectiveBounds.height <= 0) {
+            return SafetyVerdict.Rejected(
+                reasonCode = "CORRUPT_BITMAP_HEADER",
+                explanation = "Image header reported non-positive dimensions (${effectiveBounds.width}×${effectiveBounds.height}).",
+                failedLayer = "L3"
+            )
+        }
+        val totalPixels = effectiveBounds.width.toLong() * effectiveBounds.height.toLong()
+        if (exceedsDecodeBounds(effectiveBounds)) {
+            return SafetyVerdict.Rejected(
+                reasonCode = "IMAGE_DIMENSIONS_OUT_OF_BOUNDS",
+                explanation = "Image dimensions (${effectiveBounds.width}×${effectiveBounds.height}, $totalPixels px) exceed safe decode bounds (${MAX_DIMENSION_PX}px / ${MAX_TOTAL_PIXELS}px).",
+                failedLayer = "L3"
+            )
+        }
+        val mime = effectiveBounds.outMimeType?.lowercase(Locale.ROOT).orEmpty()
+        if (mime.isNotBlank() && mime != format.mimeType) {
+            return SafetyVerdict.Rejected(
+                reasonCode = "MIME_MAGIC_MISMATCH",
+                explanation = "Decoder MIME type '$mime' does not match magic-byte format '${format.mimeType}'.",
+                failedLayer = "L3"
+            )
         }
 
         val sha256 = sha256Hex(bytes)
