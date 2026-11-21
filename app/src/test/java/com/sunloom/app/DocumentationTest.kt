@@ -103,6 +103,14 @@ class DocumentationTest {
     }
 
     @Test
+    fun `the property-test helper is described where agents and contributors look, and it exists`() {
+        assertTrue("Property.kt is missing", File("src/test/java/com/sunloom/app/Property.kt").isFile)
+        listOf("CLAUDE.md", "CONTRIBUTING.md").forEach { doc ->
+            assertTrue("$doc does not name Property.forAll", text(doc).contains("Property.forAll"))
+        }
+    }
+
+    @Test
     fun `the README points to the guides and the licence`() {
         val readme = text("README.md")
         listOf("docs/USER_GUIDE.md", "docs/PRIVACY_POLICY.md", "CONTRIBUTING.md", "LICENSE").forEach {
