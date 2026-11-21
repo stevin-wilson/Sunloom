@@ -25,7 +25,7 @@ import org.robolectric.annotation.Config
  * Someone who switched automatic wallpapers off in setup must be able to switch them on again, and the Setup Guide
  * button must reopen setup rather than silently finishing it (Constitution Article XII §1).
  */
-@Requirement("XII.1")
+@Requirement("XII.1", "XII.1.d")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w1280dp-h2000dp")
 class AutomaticSwitchingComposeTest {

@@ -15,7 +15,7 @@ import org.robolectric.annotation.Config
  */
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
-@Requirement("XII.1")
+@Requirement("XII.1", "XII.1.f")
 class UiStringsTest {
 
     @Test

@@ -15,7 +15,7 @@ import org.junit.Test
  * "fails closed", "L2", "dHash", "Schedule A", "key-free" or "PPI floor". The engineering words stay in the technical
  * details of Diagnostics, where a bug report needs them (Constitution Article XII §1).
  */
-@Requirement("XII.1")
+@Requirement("XII.1", "XII.1.h")
 class PlainLanguageTest {
     private val jargon = listOf(
         "envelope", "fails closed", "fail-closed", "\\bschedule a\\b", "key-free", "dhash", "perceptual", "blocklist",

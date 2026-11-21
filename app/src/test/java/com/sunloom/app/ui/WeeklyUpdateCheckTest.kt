@@ -16,7 +16,7 @@ import org.junit.Test
  * they turn it on; never in the background (that would need a notification permission, which Sunloom never asks for).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-@Requirement("XVIII.1")
+@Requirement("XVIII.1", "XVIII.1.f")
 class WeeklyUpdateCheckTest {
     private val day = 24L * 60 * 60 * 1000
     private val now = 1_800_000_000_000L

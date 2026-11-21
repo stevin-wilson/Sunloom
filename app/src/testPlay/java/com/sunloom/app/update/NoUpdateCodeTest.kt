@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The play flavor must not contain any update-checker code or GitHub host list (Article XVIII §1). */
-@Requirement("XVI.1.e")
+@Requirement("XVI.1.e", "XVIII.1.b")
 class NoUpdateCodeTest {
     @Test
     fun updateHostsClassIsAbsent() {

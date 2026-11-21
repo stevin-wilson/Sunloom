@@ -21,7 +21,7 @@ import org.robolectric.annotation.Config
 
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
-@Requirement("XVIII.1")
+@Requirement("XVIII.1", "XVIII.1.h", "XVIII.1.i")
 class GoogleBookPlatformAdapterTest {
 
     private lateinit var context: Context

@@ -1,11 +1,13 @@
 package com.sunloom.app.update
 
+import com.sunloom.app.Requirement
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The github flavor may contact GitHub for the update check, and only GitHub, over HTTPS. */
+@Requirement("XVIII.1.b")
 class UpdateHostsTest {
     @Test
     fun allowsOnlyTheTwoGithubHosts() {

@@ -13,7 +13,7 @@ import org.junit.Test
 
 /** Article XVIII §1: the update check is a person's request; it shows a state while it runs and what it found. */
 @OptIn(ExperimentalCoroutinesApi::class)
-@Requirement("XVIII.1")
+@Requirement("XVIII.1", "XVIII.1.c")
 class UpdateCheckViewModelTest {
     private class QuietGateway : SunloomGateway {
         val state = SunloomUiState(preferences = UserPreferences(isSetupCompleted = true))

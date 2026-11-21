@@ -27,7 +27,7 @@ import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
 /** The GitHub build shows "Check for updates" in About, and reports what it found in plain words. */
-@Requirement("XVIII.1")
+@Requirement("XVIII.1", "XVIII.1.c")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w1280dp-h2400dp")
 class AboutUpdateGithubTest {
@@ -96,7 +96,7 @@ class AboutUpdateGithubTest {
 }
 
 /** The GitHub build offers the weekly update check once, on the last step of setup, and off by default. */
-@Requirement("XVIII.1")
+@Requirement("XVIII.1", "XVIII.1.f")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w1280dp-h2400dp")
 class SetupUpdateOptInGithubTest {

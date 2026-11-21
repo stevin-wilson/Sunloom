@@ -9,7 +9,7 @@ import org.junit.Test
  * Status messages are shown to the user, so they live in `strings.xml` where they can be translated, not in the
  * ViewModel or the gateway. This scan fails when a sentence-like literal appears in those two files.
  */
-@Requirement("XII.1")
+@Requirement("XII.1", "XII.1.f")
 class HardcodedMessageScanTest {
 
     /** Literals that are data, not UI text: a stored default label and a stored audit reason. */
