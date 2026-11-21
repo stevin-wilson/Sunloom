@@ -49,6 +49,14 @@ writing a test, and never write one that only mirrors the code. CI does not run 
   the same every time. Describe the input in `case.input`; a failure reports the case, the seed to replay it alone
   (`cases = 1, seed = ...`) and that input. There is no shrinking, so keep inputs small. Take the rule from the
   Constitution, not from the code, or the test only mirrors what the code does (see `CropGeometryPropertyTest`).
+- **A Stop hook runs the quick checks when you finish** (`.claude/settings.json` runs `scripts/stop_gate.py`). With
+  uncommitted changes it runs what they call for: `:app:testDomain` and `detekt` for domain or main code, the
+  documentation and Constitution-traceability tests for docs, tests or Constitution edits, the Python tests for
+  `scripts/`. If one fails it blocks you once and shows the failing test and its message: fix it. It remembers what it
+  already verified and never blocks on a timeout. `SUNLOOM_SKIP_STOP_GATE=1` skips it. It is a subset of CI (lint,
+  R8, the Play flavor, coverage floors and the emulator tests stay CI's job).
+- **CI warns when a Constitution section changes and no test in the same PR names it** (`scripts/check_spec_tests.py`,
+  warning only). Add or retag a test with `@Requirement`, or say in the PR why none is needed.
 - **The domain layer imports nothing from `android.*`** and its tests have no `@RunWith`; keep it that way.
 - Plans and working notes go in `.notes/` (gitignored), not in the repository.
 

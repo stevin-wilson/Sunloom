@@ -31,6 +31,10 @@ python3 -m unittest discover -s scripts -p 'test_*.py'                      # th
 - `./gradlew :app:mutationDomain` runs mutation testing (PIT) over the domain layer and writes
   `app/build/reports/pitest/domain/index.html`. It is a report, not a gate, and CI does not run it. A "survived" mutation
   is a change to the code that no test noticed; read it before deciding whether it is a missing test.
+- For Claude Code users, `.claude/settings.json` registers a Stop hook (`scripts/stop_gate.py`) that runs the quick checks
+  your uncommitted changes call for before the agent finishes, and blocks it once if they fail. It is a subset of what CI
+  runs; set `SUNLOOM_SKIP_STOP_GATE=1` to skip it. CI also warns (never fails) when a pull request changes a Constitution
+  section and no test in it names that section (`scripts/check_spec_tests.py`).
 - `./gradlew :app:testDomain` runs only the domain tests (`app/src/test/.../domain`, plain JVM, no Robolectric). Use it
   while working on the core; run the full command above before you open the PR.
 - `coverageFloors` compares each package's line coverage (and, for the domain packages, branch coverage) with

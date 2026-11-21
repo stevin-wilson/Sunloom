@@ -36,9 +36,17 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        with:
+          # A pull request is checked out as a merge commit; its first parent is the base, for the check below.
+          fetch-depth: 2
 
       - name: Release script tests
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
+      # Warning only: a Constitution section changed with no test in this pull request naming it (@Requirement).
+      - name: Constitution changes come with tests
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/check_spec_tests.py --base HEAD^1
 
       - uses: actions/setup-java@v6
         with:

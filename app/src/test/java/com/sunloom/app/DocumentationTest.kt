@@ -111,6 +111,24 @@ class DocumentationTest {
     }
 
     @Test
+    fun `the agent gates are wired up, tested and described`() {
+        // A Stop hook runs the quick checks before an agent finishes; CI warns when a Constitution section changes with no test naming it.
+        val settings = File(root, ".claude/settings.json")
+        assertTrue(".claude/settings.json is missing", settings.isFile)
+        val hooks = settings.readText()
+        assertTrue("no Stop hook running scripts/stop_gate.py", hooks.contains("\"Stop\"") && hooks.contains("scripts/stop_gate.py"))
+        listOf("scripts/stop_gate.py", "scripts/test_stop_gate.py", "scripts/check_spec_tests.py", "scripts/test_check_spec_tests.py").forEach {
+            assertTrue("$it is missing", File(root, it).isFile)
+        }
+        assertTrue("ci.yml does not run scripts/check_spec_tests.py", text(".github/workflows/ci.yml").contains("scripts/check_spec_tests.py"))
+        listOf("CLAUDE.md", "CONTRIBUTING.md").forEach { doc ->
+            assertTrue("$doc does not describe the stop gate", text(doc).contains("stop_gate.py"))
+            assertTrue("$doc does not describe the spec-test check", text(doc).contains("check_spec_tests.py"))
+        }
+        assertTrue("CLAUDE.md does not say how to skip the stop gate", text("CLAUDE.md").contains("SUNLOOM_SKIP_STOP_GATE"))
+    }
+
+    @Test
     fun `the README points to the guides and the licence`() {
         val readme = text("README.md")
         listOf("docs/USER_GUIDE.md", "docs/PRIVACY_POLICY.md", "CONTRIBUTING.md", "LICENSE").forEach {

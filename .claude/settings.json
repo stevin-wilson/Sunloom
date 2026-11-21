@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/stop_gate.py\"",
+            "timeout": 1000,
+            "statusMessage": "Running the quick checks (SUNLOOM_SKIP_STOP_GATE=1 skips them)..."
+          }
+        ]
+      }
+    ]
+  }
+}
