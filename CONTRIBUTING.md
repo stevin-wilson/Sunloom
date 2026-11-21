@@ -27,14 +27,15 @@ python3 -m unittest discover -s scripts -p 'test_*.py'                      # th
 
 - `./gradlew :app:testDomain` runs only the domain tests (`app/src/test/.../domain`, plain JVM, no Robolectric). Use it
   while working on the core; run the full command above before you open the PR.
-- `coverageFloors` compares each package's line coverage with `app/coverage-floors.csv`. It runs in CI only: on
-  arm64 machines the tests that need real SQLite or WorkManager are skipped, so local numbers sit lower. **Raise a
-  floor in the same PR that raises a package's coverage; never lower one to make CI pass.**
+- `coverageFloors` compares each package's line coverage (and, for the domain packages, branch coverage) with
+  `app/coverage-floors.csv`. Floors sit one point under what CI measures. It runs in CI only: on arm64 machines the tests
+  that need real SQLite or WorkManager are skipped, so local numbers sit lower and `platform.scheduler` fails there.
+  **Raise a floor in the same PR that raises a package's coverage; never lower one to make CI pass.**
 - Lint warnings are errors. Detekt has a baseline (`app/detekt-baseline.xml`); don't add to it. If you change a
   composable's signature its baseline entry changes: run `./gradlew detektBaseline` and check the diff only removes or
   renames entries.
-- `androidTest` (an emulator) is run by hand from GitHub Actions (*Emulator tests*); it checks what Robolectric
-  cannot: real SQLite, the real wallpaper service, on-device image decoding.
+- `androidTest` (an emulator) runs from GitHub Actions (*Emulator tests*) on every pull request, on `main`, on release
+  tags and on demand; it checks what Robolectric cannot: real SQLite, the real wallpaper service, on-device image decoding.
 
 ## How we work
 

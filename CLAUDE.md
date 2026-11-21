@@ -25,9 +25,10 @@ Run one class with `--tests 'com.sunloom.app.domain.safety.SafetyGateTest'`.
   workflow file (`workflowEvidence` in that test) or listed in `unverifiable` with the reason.
 - **Behavior change means amend the Constitution in the same PR**: version bump, a row in the amendment log, and a
   `**[v0.NN]**` tag on the changed sentence. Never renumber an article or section.
-- **Coverage floors only go up** (`app/coverage-floors.csv`). Raise a floor in the PR that raises the coverage.
-  The arm64 dev box skips the real-SQLite and WorkManager tests, so local coverage sits below CI's: CI is the
-  source of truth for those packages.
+- **Coverage floors only go up** (`app/coverage-floors.csv`, line coverage and, for domain packages, branch coverage).
+  Raise a floor in the PR that raises the coverage, one point under what CI measured. The arm64 dev box skips the
+  real-SQLite and WorkManager tests, so a local `:app:coverageFloors` fails for `platform.scheduler`; CI is the source
+  of truth. To get CI's real numbers, download the `reports` artifact of a CI run (`gh run download <id> -n reports`).
 - **Do not add to `app/detekt-baseline.xml`.** Changing a composable's signature changes its entry: run
   `./gradlew detektBaseline` and check the diff only removes or renames entries. Lint warnings are errors.
 - **Words belong in `strings.xml`** in plain language (`HardcodedMessageScanTest`, `PlainLanguageTest`).
