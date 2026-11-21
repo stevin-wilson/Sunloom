@@ -22,7 +22,7 @@ import org.robolectric.annotation.Config
  * WCAG 2.1.4: a shortcut made of one character key can be turned off, so speech-input and mistyped keys do not
  * change the wallpaper (Constitution Article XII §4).
  */
-@Requirement("XII.4")
+@Requirement("XII.4", "XII.4.q")
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w1280dp-h2400dp")

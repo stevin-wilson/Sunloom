@@ -2,6 +2,7 @@ package com.sunloom.app.ui
 
 import android.app.Application
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.Intent
 import android.net.Uri
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -75,5 +76,29 @@ class ShareIntentImportTest {
             ShareIntentImport.MAX_ITEMS_PER_INTENT,
             ShareIntentImport.extractImageUris(intent).size
         )
+    }
+
+    // --- Article XII §4(e): images dropped onto the window ---
+
+    private fun clip(mime: String, vararg uris: Uri): ClipData =
+        ClipData(ClipDescription("dropped", arrayOf(mime)), ClipData.Item(uris.first())).also { clip ->
+            uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) }
+        }
+
+    @Requirement("XII.4.e")
+    @Test
+    fun `a drop that carries images gives every picture it holds`() {
+        val dropped = ShareIntentImport.droppedImageUris(clip("image/jpeg", content("a.jpg"), content("b.jpg")))
+        assertEquals(listOf(content("a.jpg"), content("b.jpg")), dropped)
+    }
+
+    @Requirement("XII.4.e")
+    @Test
+    fun `a drop that is not an image, or holds nothing, gives nothing`() {
+        assertTrue(ShareIntentImport.droppedImageUris(clip("text/plain", content("a.txt"))).isEmpty())
+        assertTrue(ShareIntentImport.droppedImageUris(clip("application/pdf", content("a.pdf"))).isEmpty())
+        assertTrue(ShareIntentImport.droppedImageUris(null).isEmpty())
+        val textOnly = ClipData(ClipDescription("dropped", arrayOf("image/png")), ClipData.Item("just words"))
+        assertTrue("an image type with no uri has nothing to import", ShareIntentImport.droppedImageUris(textOnly).isEmpty())
     }
 }

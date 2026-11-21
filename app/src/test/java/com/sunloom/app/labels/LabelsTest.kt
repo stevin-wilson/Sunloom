@@ -23,7 +23,7 @@ import org.robolectric.annotation.Config
  * Every choice has a label in strings.xml, and the English there is the English the domain model has always shown, so
  * moving the words out of the code changed nothing for the person reading them (Constitution Article XII §1).
  */
-@Requirement("XII.1")
+@Requirement("XII.1", "XII.4.v")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class LabelsTest {

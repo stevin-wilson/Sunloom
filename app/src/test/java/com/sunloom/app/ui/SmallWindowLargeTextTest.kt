@@ -26,7 +26,7 @@ import org.robolectric.annotation.Config
  * not fit (Constitution Article XII §4). Robolectric measures text only roughly, so the exact fit is also on the
  * manual QA list and covered by screenshots.
  */
-@Requirement("XII.4")
+@Requirement("XII.4", "XII.4.u")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w400dp-h900dp")
 class SmallWindowLargeTextTest {

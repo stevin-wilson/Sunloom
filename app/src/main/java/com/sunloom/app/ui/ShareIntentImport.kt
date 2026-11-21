@@ -50,6 +50,18 @@ internal object ShareIntentImport {
             .take(MAX_ITEMS_PER_INTENT)
     }
 
+    /**
+     * The URIs a drag-and-drop carries, or none: the clip's own description must say it carries an image type (so nothing
+     * is asked of another process on the main thread) and at least one item must have a URI. Each item is checked again
+     * off the main thread before it is imported.
+     */
+    fun droppedImageUris(clip: ClipData?): List<Uri> {
+        if (clip == null) return emptyList()
+        val carriesImages = (0 until clip.description.mimeTypeCount).any { clip.description.getMimeType(it).startsWith("image/") }
+        if (!carriesImages) return emptyList()
+        return (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
+    }
+
     private fun addClipUris(clip: ClipData, into: MutableSet<Uri>) {
         for (i in 0 until clip.itemCount) {
             clip.getItemAt(i).uri?.let(into::add)

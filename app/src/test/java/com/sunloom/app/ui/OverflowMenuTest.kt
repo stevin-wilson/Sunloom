@@ -17,7 +17,7 @@ import org.robolectric.annotation.Config
  * Right-click is not the only way in: a visible "More" button on the current wallpaper offers Save as, Copy attribution
  * and About this image to someone using touch, a keyboard or a screen reader (Constitution Article XII §4).
  */
-@Requirement("XII.4")
+@Requirement("XII.4", "XII.4.r")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w1280dp-h2000dp")
 class OverflowMenuTest {

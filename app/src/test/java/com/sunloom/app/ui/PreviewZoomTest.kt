@@ -3,10 +3,12 @@ package com.sunloom.app.ui
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.IntSize
+import com.sunloom.app.Requirement
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@Requirement("XII.4.m")
 class PreviewZoomTest {
 
     private val size = IntSize(800, 500)

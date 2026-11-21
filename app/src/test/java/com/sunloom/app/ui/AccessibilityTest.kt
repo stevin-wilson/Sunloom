@@ -100,6 +100,7 @@ class AccessibilityTest {
         }
     }
 
+    @Requirement("XII.4.d")
     @Test
     fun `every actionable control on every tab keeps a 48dp hit area`() {
         val failures = mutableListOf<String>()
@@ -113,6 +114,7 @@ class AccessibilityTest {
         assertTrue("Hit areas under 48dp (Fitts / Article XII sec 4): $failures", failures.isEmpty())
     }
 
+    @Requirement("XII.4.d")
     @Test
     fun `the hit area check flags a control clipped by a scroll viewport`() {
         composeTestRule.setContent {
@@ -125,6 +127,7 @@ class AccessibilityTest {
         assertTrue("the clipped control must be reported", smallHitAreas().size == 1)
     }
 
+    @Requirement("XII.4.g")
     @Test
     fun `every clickable control on every tab has an accessible name`() {
         val failures = mutableListOf<String>()
@@ -137,6 +140,7 @@ class AccessibilityTest {
         assertTrue("Unnamed controls (icon-only without contentDescription): $failures", failures.isEmpty())
     }
 
+    @Requirement("XII.4.g")
     @Test
     fun `every tab marks each of its section titles as a heading`() {
         // Minimum headings per tab = the section titles that tab renders today (Sources: sources + categories;
@@ -157,6 +161,7 @@ class AccessibilityTest {
         assertTrue("Tabs with too few heading() nodes: $short", short.isEmpty())
     }
 
+    @Requirement("XII.4.f")
     @Test
     fun `status changes are announced through a live region`() {
         showTab(DesktopNavTab.TODAY_CANVAS)

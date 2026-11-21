@@ -20,6 +20,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.sunloom.app.Requirement
 import com.sunloom.app.domain.model.ScheduleMode
 import com.sunloom.app.domain.model.UserPreferences
 import org.junit.Assert.assertEquals
@@ -114,6 +115,7 @@ class DesktopGapsTest {
         assertTrue(messages.single().contains("browser", ignoreCase = true))
     }
 
+    @Requirement("XII.4.m")
     @Test
     fun `keyboard zooms the focused preview in out and resets`() {
         val zoom = mutableStateOf(ZoomState())
