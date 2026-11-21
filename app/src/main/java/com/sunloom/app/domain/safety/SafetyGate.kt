@@ -474,12 +474,19 @@ class SafetyGate {
             ImageFormat.UNSUPPORTED -> null
         }
 
-        /** PNG IHDR chunk starts at byte 8: length(4), 'IHDR'(4), width(4 BE), height(4 BE) */
+        /**
+         * PNG IHDR chunk starts at byte 8: length(4), 'IHDR'(4), width(4 BE), height(4 BE).
+         * The four bytes are read as an unsigned number: a side of 2^31 or more is not a valid PNG, but it is certainly
+         * past the L3 limit, so it is reported (as the largest Int, a stand-in: the explanation shows that number, not the
+         * declared one) for the limit check to refuse, not read as a negative number and mistaken for a header with no size.
+         */
         private fun pngBounds(bytes: ByteArray): ImageHeaderBounds? {
             if (bytes.size < 24 || !bytes.hasAsciiAt(12, "IHDR")) return null
-            val w = readInt32Be(bytes, 16)
-            val h = readInt32Be(bytes, 20)
-            return if (w > 0 && h > 0) ImageHeaderBounds(w, h, ImageFormat.PNG.mimeType) else null
+            val w = readUInt32Be(bytes, 16)
+            val h = readUInt32Be(bytes, 20)
+            if (w == 0L || h == 0L) return null
+            val widest = Int.MAX_VALUE.toLong()
+            return ImageHeaderBounds(w.coerceAtMost(widest).toInt(), h.coerceAtMost(widest).toInt(), ImageFormat.PNG.mimeType)
         }
 
         /** Extended `VP8X` WebP: 24-bit width-1 at byte 24 and height-1 at byte 27, little-endian. */
@@ -540,11 +547,11 @@ class SafetyGate {
         private fun readUInt16Be(bytes: ByteArray, offset: Int): Int =
             ((bytes[offset].toInt() and 0xFF) shl 8) or (bytes[offset + 1].toInt() and 0xFF)
 
-        private fun readInt32Be(bytes: ByteArray, offset: Int): Int {
-            return ((bytes[offset].toInt() and 0xFF) shl 24) or
-                ((bytes[offset + 1].toInt() and 0xFF) shl 16) or
-                ((bytes[offset + 2].toInt() and 0xFF) shl 8) or
-                (bytes[offset + 3].toInt() and 0xFF)
+        private fun readUInt32Be(bytes: ByteArray, offset: Int): Long {
+            return ((bytes[offset].toLong() and 0xFF) shl 24) or
+                ((bytes[offset + 1].toLong() and 0xFF) shl 16) or
+                ((bytes[offset + 2].toLong() and 0xFF) shl 8) or
+                (bytes[offset + 3].toLong() and 0xFF)
         }
 
         private val JPEG_MAGIC = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())
