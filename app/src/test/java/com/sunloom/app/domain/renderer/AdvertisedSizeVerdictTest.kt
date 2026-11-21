@@ -9,7 +9,7 @@ import org.junit.Test
  * Article X §4: synthetic candidates (the shapes and sizes museums and photo archives actually offer) run through the
  * pre-download decision for common displays, so a change in what each display accepts or turns away is visible.
  */
-@Requirement("X.4")
+@Requirement("X.4", "X.4.l")
 class AdvertisedSizeVerdictTest {
 
     private fun display(w: Int, h: Int, dpi: Int) = DisplayProfile(0, "${w}x$h", w, h, densityDpi = dpi)

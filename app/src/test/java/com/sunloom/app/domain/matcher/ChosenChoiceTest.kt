@@ -16,7 +16,7 @@ import org.junit.Test
  * Article III §1 (v0.59): what one change run does about the chosen picture, in one place the worker calls. It joins
  * the slot, the usability check and the period-start rule, and says when the side may be remembered as handled.
  */
-@Requirement("III.1")
+@Requirement("III.1", "III.1.g")
 class ChosenChoiceTest {
     private val light = BrightnessClass.LIGHT
     private val dark = BrightnessClass.DARK

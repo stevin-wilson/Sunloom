@@ -15,6 +15,7 @@ import org.junit.Test
 @Requirement("X.1")
 class RefreshSchedulePolicyTest {
 
+    @Requirement("X.1.a", "X.1.f")
     @Test
     fun `automatic mode schedules both wallpaper changes and fetching`() {
         val plan = RefreshSchedulePolicy.plan(autoEnabled = true, isPaused = false, isManualMode = false)
@@ -22,6 +23,7 @@ class RefreshSchedulePolicyTest {
         assertTrue(plan.scheduleRefresh)
     }
 
+    @Requirement("X.1.f")
     @Test
     fun `manual mode and switched-off automation still fetch in the background`() {
         val manual = RefreshSchedulePolicy.plan(autoEnabled = true, isPaused = false, isManualMode = true)
@@ -33,6 +35,7 @@ class RefreshSchedulePolicyTest {
         assertTrue(off.scheduleRefresh)
     }
 
+    @Requirement("X.1.f")
     @Test
     fun `pausing automation stops both`() {
         val plan = RefreshSchedulePolicy.plan(autoEnabled = true, isPaused = true, isManualMode = false)
@@ -40,12 +43,14 @@ class RefreshSchedulePolicyTest {
         assertFalse(plan.scheduleRefresh)
     }
 
+    @Requirement("X.1.f")
     @Test
     fun `the refresh interval is frequent but respects the WorkManager minimum`() {
         assertEquals(3L, RefreshSchedulePolicy.REFRESH_INTERVAL_HOURS)
         assertTrue(RefreshSchedulePolicy.REFRESH_INTERVAL_HOURS * 60 >= 15)
     }
 
+    @Requirement("X.4.e")
     @Test
     fun `a background top up runs a few rounds at most`() {
         assertTrue(RefreshSchedulePolicy.MAX_BACKGROUND_ROUNDS in 2..5)
@@ -64,6 +69,7 @@ class RefreshSchedulePolicyTest {
         assertTrue(RefreshSchedulePolicy.shouldRearmAfterChange(null))
     }
 
+    @Requirement("X.1.b")
     @Test
     fun `follow-OS mode polls every 15 minutes, other modes keep the long fallback`() {
         assertEquals(15L * 60_000L, RefreshSchedulePolicy.fallbackChangeDelayMs(ScheduleMode.FOLLOW_OS_THEME))
@@ -71,6 +77,7 @@ class RefreshSchedulePolicyTest {
         assertEquals(6L * 3_600_000L, RefreshSchedulePolicy.fallbackChangeDelayMs(null))
     }
 
+    @Requirement("X.1.b")
     @Test
     fun `a follow-OS poll changes nothing while the wallpaper already suits the theme`() {
         assertTrue(RefreshSchedulePolicy.isRedundantFollowOsChange(ScheduleMode.FOLLOW_OS_THEME, currentSuitsTarget = true))

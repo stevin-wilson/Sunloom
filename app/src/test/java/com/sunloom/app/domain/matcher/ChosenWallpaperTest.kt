@@ -19,7 +19,7 @@ import org.junit.Test
  * Article III §1 (v0.59): a person may choose one picture for the daytime and one for the evening. A chosen picture is
  * used when it can be shown at all, whatever its size or brightness class says, and is left alone when it cannot.
  */
-@Requirement("III.1")
+@Requirement("III.1", "III.1.f")
 class ChosenWallpaperTest {
     private fun record(
         id: String,

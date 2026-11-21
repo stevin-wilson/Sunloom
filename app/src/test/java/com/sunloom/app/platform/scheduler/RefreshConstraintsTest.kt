@@ -30,6 +30,14 @@ class RefreshConstraintsTest {
         assertTrue("downloading into a nearly full disk only makes things worse", constraints.requiresStorageNotLow())
     }
 
+    @Requirement("X.1.a")
+    @Test
+    fun `changing the wallpaper needs no network, so it works offline and in airplane mode`() {
+        val constraints = SunloomWallpaperScheduler(context).buildChangeConstraints()
+
+        assertEquals(NetworkType.NOT_REQUIRED, constraints.requiredNetworkType)
+    }
+
     @Test
     fun `network and battery needs are unchanged`() {
         val scheduler = SunloomWallpaperScheduler(context)

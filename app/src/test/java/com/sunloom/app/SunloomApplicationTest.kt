@@ -16,7 +16,7 @@ import org.robolectric.annotation.Config
  * Article X §1: in Follow-OS mode a change of the system theme is acted on at once while the app is running - and only
  * then: not for other schedules, not while paused, and not for configuration changes that leave the theme as it was.
  */
-@Requirement("X.1")
+@Requirement("X.1", "X.1.d")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = SunloomApplication::class)
 class SunloomApplicationTest {

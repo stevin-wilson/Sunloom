@@ -36,6 +36,7 @@ class LocalLibraryRepositoryTest {
         repository = LocalLibraryRepository(context)
     }
 
+    @Requirement("IX.1.a")
     @Test
     fun `ensureSeedReserveLoaded populates every bundled CC0 seed with the brightness it was designed for`() {
         val loaded = repository.ensureSeedReserveLoaded(display)
@@ -52,6 +53,7 @@ class LocalLibraryRepositoryTest {
         }
     }
 
+    @Requirement("IX.1.b")
     @Test
     fun `botanical and aerial categories each have an offline Light and Dark seed`() {
         val loaded = repository.ensureSeedReserveLoaded(display)
@@ -318,6 +320,7 @@ class LocalLibraryRepositoryTest {
         assertNotNull(customRepo.getWallpaperById("artic-fallback-test"))
     }
 
+    @Requirement("X.4.d")
     @Test
     fun `selectAdaptersForSync caps batch to 3 sources, prioritizes dark photography on deficit, and rotates cursor`() {
         // NASA is opt-in; this test is about how the dark-capable sources are chosen once it is on.

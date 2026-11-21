@@ -43,6 +43,7 @@ class StorageHygieneTest {
 
     // --- orphan files ---
 
+    @Requirement("X.3.e")
     @Test
     fun `an old file no row points to is removed and a referenced one is kept`() {
         val kept = file("kept.jpg", 5 * hour)
@@ -55,6 +56,7 @@ class StorageHygieneTest {
         assertFalse(orphan.exists())
     }
 
+    @Requirement("X.3.e")
     @Test
     fun `a file is kept when it is the cropped file of a row`() {
         val cropped = file("crop.jpg", 5 * hour)
@@ -64,6 +66,7 @@ class StorageHygieneTest {
         assertTrue(cropped.exists())
     }
 
+    @Requirement("X.3.e")
     @Test
     fun `a recent unreferenced file is kept because its row may be about to be written`() {
         val fresh = file("fresh.jpg", 10 * 60 * 1000)
@@ -73,6 +76,7 @@ class StorageHygieneTest {
         assertTrue(fresh.exists())
     }
 
+    @Requirement("X.3.e")
     @Test
     fun `nothing is swept while the library has no rows at all`() {
         // An empty library next to a full folder looks like a lost database, not a folder of orphans.
@@ -82,6 +86,7 @@ class StorageHygieneTest {
         assertTrue(stray.exists())
     }
 
+    @Requirement("X.3.e")
     @Test
     fun `subfolders are left alone`() {
         rows += testWallpaper("a", localFilePath = file("kept.jpg", 5 * hour).absolutePath, fileSizeBytes = 100)
@@ -101,6 +106,7 @@ class StorageHygieneTest {
             lastApplied = lastAppliedDaysAgo?.let { now - it * day } ?: 0L
         )
 
+    @Requirement("X.3.f")
     @Test
     fun `an evicted picture nobody kept and nobody has seen for ninety days is dropped`() {
         rows += gone("old", ageDays = 120)
@@ -112,6 +118,7 @@ class StorageHygieneTest {
         assertEquals(listOf("recent"), rows.map { it.id })
     }
 
+    @Requirement("X.3.f")
     @Test
     fun `a picture shown recently is not dropped even if it was fetched long ago`() {
         rows += gone("seen", ageDays = 400, lastAppliedDaysAgo = 10)
@@ -119,6 +126,7 @@ class StorageHygieneTest {
         assertEquals(0, hygiene().compactStaleRows(now, activeIds = emptySet()))
     }
 
+    @Requirement("X.3.f")
     @Test
     fun `kept, baseline, personal, seed, rejected and active rows are never dropped`() {
         rows += gone("kept", 400, favorite = true)
@@ -132,6 +140,7 @@ class StorageHygieneTest {
         assertTrue(deleted.isEmpty())
     }
 
+    @Requirement("X.3.f")
     @Test
     fun `a row that still has its file is never dropped`() {
         val present = file("present.jpg", 5 * hour)
@@ -142,6 +151,7 @@ class StorageHygieneTest {
 
     // --- real disk usage ---
 
+    @Requirement("X.3.d")
     @Test
     fun `disk bytes counts the files that exist, each once`() {
         val shared = file("same.jpg", hour, bytes = 300)

@@ -30,7 +30,7 @@ import org.robolectric.annotation.Config
  * Article X §1: Follow-OS mode polls every 15 minutes, so a poll that finds nothing to do must cost next to nothing -
  * no library reads, no display probing - and must not undo a choice the person just made (the system default).
  */
-@Requirement("X.1")
+@Requirement("X.1", "X.1.c")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class FollowOsPollTest {
@@ -154,6 +154,7 @@ class FollowOsPollTest {
         assertEquals(0, store.reads)
     }
 
+    @Requirement("X.1.e")
     @Test
     fun `an interval that is due makes a poll look even though the theme and wallpaper are unchanged`() {
         setCurrent("w1")
@@ -163,6 +164,7 @@ class FollowOsPollTest {
         assertTrue(pollReached())
     }
 
+    @Requirement("X.1.e")
     @Test
     fun `a due interval changes a wallpaper that already suits the theme`() {
         val file = File(context.cacheDir, "suits_interval.jpg").apply { writeBytes(ByteArray(10)) }
@@ -173,6 +175,7 @@ class FollowOsPollTest {
         assertTrue("it goes on to pick another instead of leaving it alone", pollReached())
     }
 
+    @Requirement("X.1.e")
     @Test
     fun `a poll that goes on restarts the countdown, so a failed attempt is not retried every minute`() {
         setCurrent("w1")
@@ -185,6 +188,7 @@ class FollowOsPollTest {
         assertTrue((repo.getChangeCountdownStartMs() ?: 0L) >= before)
     }
 
+    @Requirement("X.1.e")
     @Test
     fun `a countdown left in the future by a clock step is repaired, so the interval still works`() {
         setCurrent("w1")

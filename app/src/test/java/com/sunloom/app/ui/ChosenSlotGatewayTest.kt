@@ -29,7 +29,7 @@ import org.robolectric.annotation.Config
  * current period's slot, and otherwise keeps it for when that period starts. Clearing a slot changes nothing on screen.
  * The test device is in light mode and follows the system theme, so the daytime is the current period.
  */
-@Requirement("III.1")
+@Requirement("III.1", "III.1.f", "III.1.g")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class ChosenSlotGatewayTest {

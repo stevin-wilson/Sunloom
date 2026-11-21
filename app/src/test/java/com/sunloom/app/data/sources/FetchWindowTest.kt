@@ -95,6 +95,7 @@ class FetchWindowTest {
     }
 
     /** The Met retired /v1/search on 2026-10-01 (HTTP 410); /v1.1/search is paginated by offset and limit. */
+    @Requirement("X.4.h")
     @Test
     fun `Met uses the paginated v1_1 search and moves through queries and windows with the cursor`() = runTest {
         val urls = mutableListOf<String>()
@@ -116,6 +117,7 @@ class FetchWindowTest {
         assertTrue("query/window pairs should differ: $windows", windows.size == 4)
     }
 
+    @Requirement("X.4.h")
     @Test
     fun `Met examines every id of a window before moving to the next one`() = runTest {
         val looked = mutableListOf<Pair<String, Int>>() // (search window, object id)
@@ -140,6 +142,7 @@ class FetchWindowTest {
         assertTrue("window not fully covered before moving on: $inFirst", inFirst.size == 12)
     }
 
+    @Requirement("X.4.h")
     @Test
     fun `Met falls back to the first window when a deep window is empty`() = runTest {
         val urls = mutableListOf<String>()
@@ -160,6 +163,7 @@ class FetchWindowTest {
     }
 
     /** Many NASA records (ISS photos) carry no keywords; the safety gate rejects those, so asking for more and keeping tagged ones wastes nothing. */
+    @Requirement("X.4.h")
     @Test
     fun `NASA searches a wider page and keeps only records that carry keywords`() = runTest {
         val urls = mutableListOf<String>()

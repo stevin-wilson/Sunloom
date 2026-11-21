@@ -16,7 +16,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 
 /** Article X §4: Diagnostics words what each source holds and how its last sync went. */
-@Requirement("X.4")
+@Requirement("X.4", "X.4.k")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class DiagnosticsSummaryTest {

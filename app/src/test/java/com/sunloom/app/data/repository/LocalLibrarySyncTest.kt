@@ -213,12 +213,14 @@ class LocalLibrarySyncTest {
         assertEquals("a second pass has nothing left to heal", 0, repo.healMissingFiles())
     }
 
+    @Requirement("X.3.a")
     @Test
     fun `default reserve cap is one gibibyte`() {
         assertEquals(1024L * 1024L * 1024L, UserPreferences().maxCacheBytes)
         assertEquals(1024L * 1024L * 1024L, LocalLibraryRepository(context).loadPreferences().maxCacheBytes)
     }
 
+    @Requirement("X.3.a")
     @Test
     fun `the legacy 250 MB default is raised to 1 GB exactly once`() {
         rawPrefs.edit().putLong("max_cache_bytes", 250L * 1024L * 1024L).remove("cache_default_migrated_v1").commit()
@@ -231,12 +233,14 @@ class LocalLibrarySyncTest {
         assertEquals(250L * 1024L * 1024L, repo.loadPreferences().maxCacheBytes)
     }
 
+    @Requirement("X.3.a")
     @Test
     fun `an explicit non-default cap survives the migration`() {
         rawPrefs.edit().putLong("max_cache_bytes", 500L * 1024L * 1024L).remove("cache_default_migrated_v1").commit()
         assertEquals(500L * 1024L * 1024L, LocalLibraryRepository(context).loadPreferences().maxCacheBytes)
     }
 
+    @Requirement("X.4.i", "X.4.k")
     @Test
     fun `a source whose requests all fail is reported as failed and its fetch cursor does not advance`() = kotlinx.coroutines.test.runTest {
         rawPrefs.edit().putInt("fetch_cursor_artic_cc0", 12).commit()
@@ -272,6 +276,7 @@ class LocalLibrarySyncTest {
         assertNotNull(repo.getWallpaperById("after-crash"))
     }
 
+    @Requirement("X.4.i")
     @Test
     fun `each source advances its own cursor and keeps going past 48`() = kotlinx.coroutines.test.runTest {
         rawPrefs.edit().putInt("fetch_cursor_artic_cc0", 48).putInt("fetch_cursor_cma_cc0", 100).commit()
@@ -291,6 +296,7 @@ class LocalLibrarySyncTest {
         assertEquals(0, repo.lastSyncFailedSources)
     }
 
+    @Requirement("X.4.i")
     @Test
     fun `a source starts at a random point of its catalog and then walks forward`() = kotlinx.coroutines.test.runTest {
         fun firstOffsetsWith(seed: Int): List<Int> {
@@ -327,6 +333,7 @@ class LocalLibrarySyncTest {
         assertNotNull(remaining.firstOrNull { it == "hard-1" })
     }
 
+    @Requirement("X.4.k")
     @Test
     fun `diagnostics show what the last sync fetched, added and rejected per source`() = kotlinx.coroutines.test.runTest {
         val repo = repo(FixedAdapter("artic_cc0", listOf(candidate("sum-1"), candidate("sum-2"))))
@@ -341,6 +348,7 @@ class LocalLibrarySyncTest {
         assertTrue(second, second.contains("fetched 2") && second.contains("added 0") && second.contains("already had 2"))
     }
 
+    @Requirement("X.4.k")
     @Test
     fun `the sync summary reports HTTP errors for a failing source`() = kotlinx.coroutines.test.runTest {
         val failingClient = object : HttpClient {
@@ -355,7 +363,7 @@ class LocalLibrarySyncTest {
         assertTrue(summary, summary.contains("HTTP errors 1"))
     }
 
-    @Requirement("VII.4.m", "VII.4.n")
+    @Requirement("VII.4.m", "VII.4.n", "X.4.m")
     @Test
     fun `a second id carrying the same picture is rejected as a near duplicate of the library`() = kotlinx.coroutines.test.runTest {
         val repo = repo(
@@ -571,6 +579,7 @@ class LocalLibrarySyncTest {
         assertTrue("the permanent blocklist already refuses it", repo.getPermanentBlockedAssetIds().contains("r-1"))
     }
 
+    @Requirement("X.4.n")
     @Test
     fun `no more than three unseen images from one creator are kept`() = kotlinx.coroutines.test.runTest {
         val monet = (1..5).map { candidate("monet-$it", creator = "Claude Monet") }
@@ -582,6 +591,7 @@ class LocalLibrarySyncTest {
         assertEquals(1, repo.refreshOnlineCatalog(display))
     }
 
+    @Requirement("X.4.n")
     @Test
     fun `the creator cap does not apply to institutional NASA imagery`() = kotlinx.coroutines.test.runTest {
         val nasa = (1..5).map {
@@ -593,6 +603,7 @@ class LocalLibrarySyncTest {
         assertEquals("rejections=${repo.getAllRejections()}", 5, added)
     }
 
+    @Requirement("X.4.l")
     @Test
     fun `a candidate whose advertised size cannot fill the display is skipped before downloading`() = kotlinx.coroutines.test.runTest {
         downloads = 0
@@ -832,6 +843,7 @@ class LocalLibrarySyncTest {
         assertTrue("and counted at least the images (${repo.lastSyncBytesDownloaded} of $servedBytes)", repo.lastSyncBytesDownloaded >= servedBytes)
     }
 
+    @Requirement("X.4.j")
     @Test
     fun `the background refresh stays off a metered network, a hotspot included`() = kotlinx.coroutines.test.runTest {
         val rounds = mutableListOf<Int>()
@@ -927,6 +939,7 @@ class LocalLibrarySyncTest {
         assertEquals("third consecutive failure moves on to the next page", 66, rawPrefs.getInt("fetch_cursor_artic_cc0", -1))
     }
 
+    @Requirement("X.4.l")
     @Test
     fun `a picture a display crop would mostly discard is skipped before downloading`() = kotlinx.coroutines.test.runTest {
         downloads = 0

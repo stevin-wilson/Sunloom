@@ -21,7 +21,7 @@ import org.robolectric.annotation.Config
  * Article III §1 / IX §2 (v0.59): a picture chosen for the daytime or evening is treated like a Kept one. The cache
  * limit does not evict it and the daily clean-up does not drop its row, so a slot does not quietly empty itself.
  */
-@Requirement("III.1")
+@Requirement("III.1", "III.1.j")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class ChosenProtectionTest {

@@ -49,6 +49,7 @@ class HttpClientHardeningTest {
         assertEquals(2, requested.size)
     }
 
+    @Requirement("X.3.h")
     @Test
     fun `a body that keeps dripping past the deadline is abandoned`() {
         var now = 0L
@@ -96,6 +97,7 @@ class HttpClientHardeningTest {
         assertEquals(body.toList(), got.toList())
     }
 
+    @Requirement("X.3.h")
     @Test
     fun `cancelling a download that is waiting on the network disconnects it at once`() {
         val readStarted = java.util.concurrent.CountDownLatch(1)

@@ -10,7 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Article IX §1: the offline seeds are rendered for the connected display set; which target is a pure decision. */
-@Requirement("IX.1")
+@Requirement("IX.1", "IX.1.a")
 class SeedReserveTest {
     private val laptop = DisplayProfile(0, "Built-in", 2560, 1600, isPrimary = true, densityDpi = 220)
     private val monitor = DisplayProfile(1, "Monitor", 3840, 2160, densityDpi = 160)

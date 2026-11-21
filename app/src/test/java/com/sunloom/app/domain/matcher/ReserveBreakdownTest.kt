@@ -20,7 +20,7 @@ import org.junit.Test
  * Article X §4 (v0.14): Diagnostics shows, per source, what the reserve holds and why candidates were skipped,
  * so a source that never contributes is visible instead of silently absent.
  */
-@Requirement("X.4")
+@Requirement("X.4", "X.4.k")
 class ReserveBreakdownTest {
 
     private var n = 0

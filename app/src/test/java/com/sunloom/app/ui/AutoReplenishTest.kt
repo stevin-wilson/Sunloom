@@ -115,6 +115,7 @@ class AutoReplenishTest {
         assertEquals(0, healthy.refreshCalls)
     }
 
+    @Requirement("X.4.e")
     @Test
     fun `a fetch keeps going in rounds while images arrive and the target is not met`() {
         val gateway = CountingGateway(stateWith(unseenCount = 0)) { 5 } // 5 Light + 5 Dark per round
@@ -122,6 +123,7 @@ class AutoReplenishTest {
         assertEquals("0 -> 5 -> 10 -> 15 reaches 12 after three rounds", 3, gateway.refreshCalls)
     }
 
+    @Requirement("X.4.e")
     @Test
     fun `rounds stop as soon as one adds nothing`() {
         val gateway = CountingGateway(stateWith(unseenCount = 0)) { round -> if (round == 1) 4 else 0 }
@@ -129,6 +131,7 @@ class AutoReplenishTest {
         assertEquals(2, gateway.refreshCalls)
     }
 
+    @Requirement("X.4.e")
     @Test
     fun `rounds are capped so a slow trickle cannot loop for long`() {
         val gateway = CountingGateway(stateWith(unseenCount = 0)) { 1 }
@@ -136,6 +139,7 @@ class AutoReplenishTest {
         assertEquals(MainViewModel.MAX_TOP_UP_ROUNDS, gateway.refreshCalls)
     }
 
+    @Requirement("X.4.j")
     @Test
     fun `launch does not fetch over a metered network on unmetered-only setups`() {
         val gateway = CountingGateway(stateWith(unseenCount = 0, wifiOnly = true)).apply { unmetered = false }
@@ -143,6 +147,7 @@ class AutoReplenishTest {
         assertEquals(0, gateway.refreshCalls)
     }
 
+    @Requirement("X.4.j")
     @Test
     fun `launch does fetch on an unmetered network even on unmetered-only setups`() {
         // The default is unmetered-only, so a fresh install must still fill its reserve at home.
@@ -151,6 +156,7 @@ class AutoReplenishTest {
         assertTrue(gateway.refreshCalls >= 1)
     }
 
+    @Requirement("X.4.j")
     @Test
     fun `launch over a metered network is allowed when the person allows it, unless Data Saver is on`() {
         val allowed = CountingGateway(stateWith(unseenCount = 0, wifiOnly = false)).apply { unmetered = false }
@@ -169,6 +175,7 @@ class AutoReplenishTest {
         assertEquals(0, gateway.refreshCalls)
     }
 
+    @Requirement("X.4.f")
     @Test
     fun `no automatic fetch when the cache is nearly full`() {
         // 2 images of 4096 bytes against a 8 KB cap.
@@ -199,6 +206,7 @@ class AutoReplenishTest {
         assertEquals(0, metered.refreshCalls)
     }
 
+    @Requirement("X.4.g")
     @Test
     fun `after a fetch that added images the next automatic fetch waits ten minutes`() = kotlinx.coroutines.test.runTest {
         val gateway = CountingGateway(stateWith(unseenCount = 0)) { round -> if (round == 1) 1 else 0 }
@@ -212,6 +220,7 @@ class AutoReplenishTest {
         assertEquals(afterLaunch + 1, gateway.refreshCalls)
     }
 
+    @Requirement("X.4.g")
     @Test
     fun `after a fetch that found nothing the next automatic fetch waits an hour`() = kotlinx.coroutines.test.runTest {
         val gateway = CountingGateway(stateWith(unseenCount = 0))
@@ -227,6 +236,7 @@ class AutoReplenishTest {
         assertEquals(2, gateway.refreshCalls)
     }
 
+    @Requirement("X.4.j")
     @Test
     fun `Next does not fetch over a metered network on unmetered-only setups`() = kotlinx.coroutines.test.runTest {
         val gateway = CountingGateway(stateWith(unseenCount = 0, setupCompleted = false, wifiOnly = true)).apply { unmetered = false }
@@ -234,6 +244,7 @@ class AutoReplenishTest {
         assertEquals(0, gateway.refreshCalls)
     }
 
+    @Requirement("X.4.g")
     @Test
     fun `the Refresh button fetches even on an unmetered-only setup and keeps going while below the target`() {
         val gateway = CountingGateway(stateWith(unseenCount = 0, wifiOnly = true)) { 5 }.apply { unmetered = false }
@@ -244,6 +255,7 @@ class AutoReplenishTest {
         assertEquals(3, gateway.refreshCalls)
     }
 
+    @Requirement("X.4.j")
     @Test
     fun `the first Refresh on a metered network warns instead of fetching, and the next one goes ahead`() {
         val gateway = CountingGateway(stateWith(unseenCount = 0, wifiOnly = true)) { 5 }.apply { unmetered = false }
@@ -259,6 +271,7 @@ class AutoReplenishTest {
         assertTrue("the second tap is the person's decision", gateway.refreshCalls >= 1)
     }
 
+    @Requirement("X.4.j")
     @Test
     fun `the warning comes back the next time the network is metered`() {
         val gateway = CountingGateway(stateWith(unseenCount = 0, wifiOnly = true)) { 5 }.apply { unmetered = false }
@@ -277,6 +290,7 @@ class AutoReplenishTest {
         assertEquals("metered again: it warns again", afterUnmetered, gateway.refreshCalls)
     }
 
+    @Requirement("X.4.j")
     @Test
     fun `a person who allows metered networks is still warned once, since the data is theirs`() {
         val gateway = CountingGateway(stateWith(unseenCount = 0, wifiOnly = false)) { 5 }.apply { unmetered = false }

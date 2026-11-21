@@ -46,6 +46,7 @@ class ReserveBufferTest {
 
     private val all = SafeCategory.entries.toSet()
 
+    @Requirement("X.4.e")
     @Test
     fun `neutral images count towards both modes and only usable unseen online images count`() {
         val rows = listOf(
@@ -67,6 +68,7 @@ class ReserveBufferTest {
         assertEquals(1, ReserveBuffer.unseenFor(rows, BrightnessClass.LIGHT, setOf(SafeCategory.LANDSCAPES_NATURE)))
     }
 
+    @Requirement("X.4.e")
     @Test
     fun `a top up is needed until both modes reach the target`() {
         val target = ReserveBuffer.TARGET_UNSEEN_PER_MODE
@@ -81,17 +83,20 @@ class ReserveBufferTest {
         assertFalse(ReserveBuffer.needsTopUp(oneShort + row(BrightnessClass.NEUTRAL), all, bytesUsed = 1L, maxBytes = Long.MAX_VALUE))
     }
 
+    @Requirement("X.4.f")
     @Test
     fun `no top up when the cache is nearly full because new images would only evict old ones`() {
         assertFalse(ReserveBuffer.needsTopUp(emptyList(), all, bytesUsed = 950, maxBytes = 1000))
         assertTrue(ReserveBuffer.needsTopUp(emptyList(), all, bytesUsed = 850, maxBytes = 1000))
     }
 
+    @Requirement("X.4.e")
     @Test
     fun `the target is a real buffer and not the former three`() {
         assertTrue(ReserveBuffer.TARGET_UNSEEN_PER_MODE >= 10)
     }
 
+    @Requirement("X.4.f")
     @Test
     fun `fetching stops once enough unseen images are waiting even if one mode stays short`() {
         // Dark images are rare: plenty of unseen Light, no Dark. Without a ceiling this would fetch until the cache is full.

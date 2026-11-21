@@ -19,7 +19,7 @@ import org.robolectric.annotation.Config
  * (Doze, app-standby buckets). The inexact alarm set just after the transition wakes the app so the change still
  * happens about on time. It needs no permission (Article XVIII §2).
  */
-@Requirement("X.1")
+@Requirement("X.1", "X.1.a")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class ChangeAlarmTest {

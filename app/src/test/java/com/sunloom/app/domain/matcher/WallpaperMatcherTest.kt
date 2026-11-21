@@ -1,5 +1,6 @@
 package com.sunloom.app.domain.matcher
 
+import com.sunloom.app.Requirement
 import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.CropRect
 import com.sunloom.app.domain.model.DisplayPolicy
@@ -167,6 +168,7 @@ class WallpaperMatcherTest {
         assertEquals("valid-record", selected!!.id)
     }
 
+    @Requirement("XI.2.a")
     @Test
     fun `selectNextWallpaper falls back to seed_reserve only when no non-seed wallpapers are eligible`() {
         val seedLight1 = sampleRecord("seed-light-1", BrightnessClass.LIGHT).let {
@@ -187,6 +189,7 @@ class WallpaperMatcherTest {
         assertEquals("seed-light-2", selected!!.id)
     }
 
+    @Requirement("XI.2.a")
     @Test
     fun `an exact-brightness offline seed beats an online picture of the opposite brightness`() {
         // At night with only Light online pictures, showing a Light one breaks "Light and Dark describe the image".
@@ -202,6 +205,7 @@ class WallpaperMatcherTest {
         assertEquals("seed-dark", selected?.id)
     }
 
+    @Requirement("XI.2.a")
     @Test
     fun `an online picture that fits still beats a seed that fits`() {
         val onlineDark = sampleRecord("online-dark", BrightnessClass.DARK)
@@ -216,6 +220,7 @@ class WallpaperMatcherTest {
         assertEquals("online-dark", selected?.id)
     }
 
+    @Requirement("XI.2.b", "XI.2.f")
     @Test
     fun `selectNextWallpaper interleaves sources instead of repeating active source when unseen items tie`() {
         val cmaCurrent = sampleRecord("cma-1", BrightnessClass.LIGHT, SafeCategory.SCENIC_FINE_ART).let {
@@ -259,6 +264,7 @@ class WallpaperMatcherTest {
         assertEquals(listOf("wiki-enabled"), eligible.map { it.id })
     }
 
+    @Requirement("XI.2.a")
     @Test
     fun `selectNextWallpaper prioritizes fine art and other non-seed sources over seed_reserve even when fine art is NEUTRAL`() {
         val seedLight = sampleRecord("seed-light-1", BrightnessClass.LIGHT, appliedCount = 0).let {

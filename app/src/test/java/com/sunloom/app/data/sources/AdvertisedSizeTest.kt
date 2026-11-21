@@ -11,7 +11,7 @@ import org.junit.Test
  * before downloading. That only works if the adapters pass on the size their catalog states for the rendition
  * they will actually download; Cleveland and SMK state it, so they must.
  */
-@Requirement("X.4")
+@Requirement("X.4", "X.4.l")
 class AdvertisedSizeTest {
 
     private class FakeHttp(private val body: String) : HttpClient {

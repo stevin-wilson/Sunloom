@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Article X §3: the cache limit is about bytes on disk, not the sizes a row once recorded. */
-@Requirement("X.3")
+@Requirement("X.3", "X.3.d")
 class BoundedCacheDiskUsageTest {
     private val mb = 1024L * 1024L
     private val manager = BoundedCacheManager(minProtectedPerBrightness = 0)

@@ -27,7 +27,7 @@ import org.robolectric.annotation.Config
  * Article III §1 / XII (v0.58): "Change every" adds changes inside each daytime or evening period. It is one row of
  * choices in the Schedule, off by default, and when it cannot work it says why instead of disappearing.
  */
-@Requirement("XII.1")
+@Requirement("XII.1", "III.1.b")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w1280dp-h2000dp")
 class ChangeEveryComposeTest {
