@@ -1,10 +1,12 @@
 package com.sunloom.app.domain.safety
 
+import com.sunloom.app.Requirement
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 /** Records are the real NASA metadata of items reported or reviewed as thumbnails (2026-11-08). */
+@Requirement("VII.4.h")
 class NasaRecordPolicyTest {
 
     private fun verdict(id: String, title: String, description: String, keywords: List<String>) =

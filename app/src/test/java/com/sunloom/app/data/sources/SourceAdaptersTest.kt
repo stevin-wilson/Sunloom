@@ -266,6 +266,7 @@ class SourceAdaptersTest {
         assertTrue(allSeeds.all { it.provenance.originalWidth == 2560 && it.provenance.originalHeight == 1600 })
     }
 
+    @Requirement("VII.4.c")
     @Test
     fun `testZeroInjectedTagsOnWikimediaNasaArticAndMet`() {
         val wiki = WikimediaFeaturedSourceAdapter()
@@ -332,6 +333,7 @@ class SourceAdaptersTest {
         assertTrue(articItems.first().rawCategoriesAndTags.isEmpty())
     }
 
+    @Requirement("VII.4.b")
     @Test
     fun `testWikimediaMachineLicenseAllowlistRejectsCc10AndRestrictionsAndUnknownAuthor`() {
         val wiki = WikimediaFeaturedSourceAdapter()

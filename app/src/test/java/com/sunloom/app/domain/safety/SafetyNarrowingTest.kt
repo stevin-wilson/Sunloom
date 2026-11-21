@@ -17,7 +17,7 @@ import org.junit.Test
  * Article VII (v0.14): harmless wording must not permanently ban a good image ("naked eye" astronomy,
  * Bikini Atoll, blood moon), while real prohibited content is still rejected exactly as before.
  */
-@Requirement("VII.4")
+@Requirement("VII.4", "VII.4.i", "VII.4.j")
 class SafetyNarrowingTest {
 
     private fun find(title: String, description: String = "", tags: List<String> = emptyList()) =

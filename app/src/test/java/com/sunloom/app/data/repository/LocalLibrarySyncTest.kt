@@ -186,6 +186,7 @@ class LocalLibrarySyncTest {
         assertTrue(repo.getWallpaperById("evicted-1")!!.fileSizeBytes > 0L)
     }
 
+    @Requirement("VII.4.n")
     @Test
     fun `a rejected row is never downloaded again`() = kotlinx.coroutines.test.runTest {
         val repo = repo(FixedAdapter("artic_cc0", listOf(candidate("nope-1"))))
@@ -354,6 +355,7 @@ class LocalLibrarySyncTest {
         assertTrue(summary, summary.contains("HTTP errors 1"))
     }
 
+    @Requirement("VII.4.m", "VII.4.n")
     @Test
     fun `a second id carrying the same picture is rejected as a near duplicate of the library`() = kotlinx.coroutines.test.runTest {
         val repo = repo(

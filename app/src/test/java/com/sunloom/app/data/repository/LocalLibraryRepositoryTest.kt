@@ -98,6 +98,7 @@ class LocalLibraryRepositoryTest {
         assertEquals("seed-light-alpine-mist", repository.getPreviousWallpaperId())
     }
 
+    @Requirement("VII.4.n")
     @Test
     fun `rejectWallpaperForever marks item rejected and logs rejection reason without retaining file`() {
         repository.ensureSeedReserveLoaded(display)

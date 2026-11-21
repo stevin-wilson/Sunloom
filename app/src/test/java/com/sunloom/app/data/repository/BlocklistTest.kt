@@ -7,7 +7,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /** Article VII §4 L5: what the person or the gate has refused for good is remembered by id, checksum and perceptual hash. */
-@Requirement("VII.4")
+@Requirement("VII.4", "VII.4.k", "VII.4.n")
 class BlocklistTest {
     private val store = InMemoryLibraryStore(File(System.getProperty("java.io.tmpdir"), "blocklist_test_${System.nanoTime()}"))
     private val blocklist = Blocklist(store)

@@ -1,5 +1,6 @@
 package com.sunloom.app.domain.safety
 
+import com.sunloom.app.Requirement
 import org.junit.Assert.assertEquals
 import org.junit.Assert.fail
 import org.junit.Test
@@ -11,6 +12,7 @@ import java.io.File
  * expected text is recorded in `src/test/resources/golden/image_header_bounds.txt`; delete that file and run once to
  * record it again after an intended change.
  */
+@Requirement("VII.4.l")
 class ImageHeaderBoundsGoldenTest {
 
     private fun ascii(s: String) = s.toByteArray(Charsets.ISO_8859_1)

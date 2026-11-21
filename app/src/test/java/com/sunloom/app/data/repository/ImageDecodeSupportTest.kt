@@ -12,7 +12,7 @@ import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
 /** Article VII §4 L3/L4: a picture is never decoded at full size, even when its header could not be parsed. */
-@Requirement("VII.4")
+@Requirement("VII.4", "VII.4.m")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class ImageDecodeSupportTest {
