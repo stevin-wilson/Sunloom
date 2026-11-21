@@ -35,12 +35,21 @@ class LibraryDiversityGuardTest {
 
     private val informative = "5a3c96e1b2d47f08"
 
+    @Requirement("X.4.m")
     @Test
     fun `identical informative hashes are duplicates and small differences too`() {
         val guard = LibraryDiversityGuard(listOf(row("a", "x", informative)))
         assertTrue(guard.isNearDuplicate(informative))
         assertTrue(guard.isNearDuplicate("5a3c96e1b2d47f0b")) // 2 bits apart
         assertFalse(guard.isNearDuplicate("a5c3691e4d2b80f7")) // inverted
+    }
+
+    @Requirement("X.4.m")
+    @Test
+    fun `a picture six bits away is a near duplicate and one seven bits away is not`() {
+        val guard = LibraryDiversityGuard(listOf(row("a", "x", informative)))
+        assertTrue("six bits", guard.isNearDuplicate("5a3c96e1b2d47f37")) // the last byte 0x08 with its low six bits flipped
+        assertFalse("seven bits", guard.isNearDuplicate("5a3c96e1b2d47f77")) // and one more
     }
 
     @Test
@@ -51,6 +60,7 @@ class LibraryDiversityGuardTest {
         assertFalse(guard.isNearDuplicate("0000000000000007")) // almost empty hash
     }
 
+    @Requirement("X.4.n")
     @Test
     fun `creator cap counts only unseen images and normalises the name`() {
         val rows = listOf(
@@ -64,6 +74,7 @@ class LibraryDiversityGuardTest {
         assertTrue(guard.creatorCapReached("met_museum_cc0", "claude monet"))
     }
 
+    @Requirement("X.4.n")
     @Test
     fun `institutional or unknown creators are never capped`() {
         val guard = LibraryDiversityGuard(emptyList())
@@ -75,6 +86,7 @@ class LibraryDiversityGuardTest {
         assertFalse(guard.creatorCapReached("met_museum_cc0", ""))
     }
 
+    @Requirement("X.4.n")
     @Test
     fun `the synthetic Wikimedia public domain creator is not a real creator`() {
         val guard = LibraryDiversityGuard(emptyList())

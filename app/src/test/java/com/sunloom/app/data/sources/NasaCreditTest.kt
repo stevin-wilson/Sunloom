@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Schedule A (NASA): public domain only when no third-party credit is named. Credits are matched as whole words. */
-@Requirement("VI.5")
+@Requirement("VI.5", "VI.4.d")
 class NasaCreditTest {
     private val nasa = NasaLibrarySourceAdapter()
 

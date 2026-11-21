@@ -34,7 +34,7 @@ import org.robolectric.annotation.Config
  * Article III §1 (v0.59): the change run applies a chosen Daytime or Evening picture when its period starts, leaves it
  * alone inside the period, and falls back to the usual choice when it cannot be shown.
  */
-@Requirement("III.1")
+@Requirement("III.1", "III.1.g")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class ChosenWorkerTest {
@@ -152,6 +152,7 @@ class ChosenWorkerTest {
         assertNotEquals(light().id, repo.getCurrentWallpaperId())
     }
 
+    @Requirement("III.1.i")
     @Test
     fun `a chosen picture whose file is gone gives way to the usual choice`() {
         // A fetched picture (a bundled seed is re-rendered on every run, so its file never stays missing).
@@ -173,6 +174,7 @@ class ChosenWorkerTest {
         assertEquals(BrightnessClass.LIGHT, repo.getLastTargetSeen())
     }
 
+    @Requirement("III.1.i")
     @Test
     fun `a rejected chosen picture is not applied`() {
         val pick = light()
@@ -185,6 +187,7 @@ class ChosenWorkerTest {
         assertNotEquals(pick.id, repo.getCurrentWallpaperId())
     }
 
+    @Requirement("III.1.i")
     @Test
     fun `when the chosen picture cannot be put on screen another is used for this period`() {
         val pick = dark()
@@ -246,6 +249,7 @@ class ChosenWorkerTest {
         assertEquals(BrightnessClass.LIGHT, repo.getLastTargetSeen())
     }
 
+    @Requirement("IX.1.f")
     @Test
     fun `a change run waits until first-run setup is finished`() {
         repo.savePreferences(repo.loadPreferences().copy(isSetupCompleted = false))

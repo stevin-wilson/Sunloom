@@ -41,17 +41,20 @@ class CandidateIngestorTest {
         safetyClassification = SafetyClassification.SAFE, safetyClassificationSource = "s", sha256Checksum = ""
     )
 
+    @Requirement("X.4.l")
     @Test
     fun `a larger advertised size is worth fetching again`() {
         assertTrue(CandidateIngestor.offersLargerRendition(candidate(3000, 2000), provenance(1500, 1000)))
     }
 
+    @Requirement("X.4.l")
     @Test
     fun `the same or a smaller size is not`() {
         assertFalse(CandidateIngestor.offersLargerRendition(candidate(1500, 1000), provenance(1500, 1000)))
         assertFalse(CandidateIngestor.offersLargerRendition(candidate(800, 600), provenance(1500, 1000)))
     }
 
+    @Requirement("X.4.l")
     @Test
     fun `a source that advertises no size offers nothing larger`() {
         assertFalse(CandidateIngestor.offersLargerRendition(candidate(0, 0), provenance(1500, 1000)))
@@ -99,6 +102,7 @@ class CandidateIngestorTest {
     private fun ingestor(host: IngestHost) =
         CandidateIngestor(SafetyGate(), ImageEvaluator(), EnvelopePlanner(), tmp, tmp, host)
 
+    @Requirement("X.4.c")
     @Test
     fun `a rate limit stops the source and is recorded as its failure`() = runTest {
         val host = RecordingHost()
@@ -108,6 +112,7 @@ class CandidateIngestorTest {
         assertEquals(1, host.sourceFailures.size)
     }
 
+    @Requirement("X.4.a")
     @Test
     fun `running out of request budget stops the source without blaming it`() = runTest {
         val host = RecordingHost()

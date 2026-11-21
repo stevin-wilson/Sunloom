@@ -10,7 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Article X §1: the decisions behind a cheap Follow-OS poll, as plain rules. */
-@Requirement("X.1")
+@Requirement("X.1", "X.1.c")
 class RefreshSchedulePolicyFollowOsTest {
     private val follow = ScheduleMode.FOLLOW_OS_THEME
 
@@ -42,6 +42,7 @@ class RefreshSchedulePolicyFollowOsTest {
         assertTrue(RefreshSchedulePolicy.usesBackstopAlarm(ScheduleMode.FIXED_CLOCK))
     }
 
+    @Requirement("X.1.d")
     @Test
     fun `a theme change is reacted to at once, but only in follow-OS mode and only after a first reading`() {
         assertTrue(RefreshSchedulePolicy.shouldReactToThemeChange(follow, previousNight = false, nowNight = true))

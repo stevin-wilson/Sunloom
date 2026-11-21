@@ -13,7 +13,7 @@ import org.junit.Test
  * one array of that size and are handed over as it is; a plain growing stream followed by a copy held the payload twice
  * (up to 70 MB for a 35 MB picture).
  */
-@Requirement("X.3")
+@Requirement("X.3", "X.3.g")
 class DownloadBufferTest {
     private fun fill(buffer: DownloadBuffer, bytes: ByteArray, chunk: Int = 7) {
         var offset = 0

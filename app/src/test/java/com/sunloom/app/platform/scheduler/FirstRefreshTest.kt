@@ -30,7 +30,7 @@ import org.robolectric.annotation.Config
  * Article X §1 and §2: finishing setup queues one catalog refresh that runs as soon as the network rules allow, so a
  * person who set up offline gets their pictures when they go online, without waiting for the next three-hour run.
  */
-@Requirement("X.1")
+@Requirement("X.1", "X.1.g")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class FirstRefreshTest {

@@ -1,6 +1,7 @@
 package com.sunloom.app.data.sources
 
 import com.sunloom.app.Requirement
+import com.sunloom.app.domain.model.CandidateAsset
 import com.sunloom.app.domain.model.LicenseType
 import com.sunloom.app.domain.model.SafeCategory
 import com.sunloom.app.domain.model.SafetyClassification
@@ -15,6 +16,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SourceAdaptersTest {
+
+    /** Article VI §4(e): an asset has a stable identifier and a canonical public page, over https. */
+    private fun assertStableIdentity(asset: CandidateAsset) {
+        assertTrue("an id", asset.id.isNotBlank() && asset.provenance.assetId.isNotBlank())
+        val page = asset.provenance.originalPageUrl
+        val url = runCatching { java.net.URI(page) }.getOrNull()
+        assertTrue(
+            "`$page` should be an https page with a host and a path",
+            url != null && url.scheme == "https" && !url.host.isNullOrEmpty() && url.path.length > 1 && page.none { it.isWhitespace() }
+        )
+    }
+
 
     private class FakeHttpClient(private val cannedResponses: Map<String, String>) : HttpClient {
         override suspend fun getText(url: String): String {
@@ -90,6 +103,7 @@ class SourceAdaptersTest {
         assertTrue("Expected single-scene botanical Approved, got $blossomVerdict", blossomVerdict is SafetyVerdict.Approved)
     }
 
+    @Requirement("VI.4.c", "VI.4.d", "VI.4.e")
     @Test
     fun `WikimediaFeaturedSourceAdapter parses Featured Picture JSON and preserves creator and license provenance`() = runTest {
         val sampleWikiJson = """
@@ -124,6 +138,7 @@ class SourceAdaptersTest {
 
         assertEquals(1, candidates.size)
         val asset = candidates.first()
+        assertStableIdentity(asset)
         assertEquals("Dolomites Autumn Sunrise", asset.title)
         assertEquals("Marco Alpinist", asset.provenance.creatorName)
         assertEquals("https://commons.wikimedia.org/wiki/User:Marco", asset.provenance.creatorPageUrl)
@@ -133,6 +148,7 @@ class SourceAdaptersTest {
         assertEquals(4200, asset.provenance.originalWidth)
     }
 
+    @Requirement("VI.4.c", "VI.4.e")
     @Test
     fun `NasaLibrarySourceAdapter parses NASA public domain space imagery`() = runTest {
         val sampleNasaJson = """
@@ -167,6 +183,7 @@ class SourceAdaptersTest {
 
         assertEquals(1, candidates.size)
         val asset = candidates.first()
+        assertStableIdentity(asset)
         assertEquals("Carina Nebula Cosmic Cliffs", asset.title)
         assertEquals(LicenseType.PUBLIC_DOMAIN, asset.provenance.licenseType)
         assertTrue(asset.downloadUrl.endsWith("~orig.jpg"))
@@ -174,6 +191,7 @@ class SourceAdaptersTest {
         assertEquals(0, asset.provenance.originalHeight)
     }
 
+    @Requirement("VI.4.c", "VI.4.e")
     @Test
     fun `ArtInstituteCc0SourceAdapter imports CC0 landscapes and filters out figurative sculpture items`() = runTest {
         val sampleArticJson = """
@@ -207,10 +225,12 @@ class SourceAdaptersTest {
         val candidates = adapter.fetchCandidates(setOf(SafeCategory.SCENIC_FINE_ART), limit = 4)
 
         assertEquals(1, candidates.size)
+        assertStableIdentity(candidates.first())
         assertEquals("Mount Sainte-Victoire", candidates.first().title)
         assertEquals(LicenseType.CC0, candidates.first().provenance.licenseType)
     }
 
+    @Requirement("VI.4.c", "VI.4.e")
     @Test
     fun `MetMuseumCc0SourceAdapter parses public domain CC0 landscapes and rejects non-public-domain objects`() = runTest {
         val searchJson = """{"total": 2, "objectIDs": [436535, 999999]}"""
@@ -249,6 +269,7 @@ class SourceAdaptersTest {
         val candidates = adapter.fetchCandidates(setOf(SafeCategory.SCENIC_FINE_ART), limit = 4)
 
         assertEquals(1, candidates.size)
+        assertStableIdentity(candidates.first())
         assertEquals("Wheat Field with Cypresses", candidates.first().title)
         assertEquals(LicenseType.CC0, candidates.first().provenance.licenseType)
         assertEquals("https://images.metmuseum.org/CRDImages/ep/original/DT1567.jpg", candidates.first().downloadUrl)
@@ -333,7 +354,7 @@ class SourceAdaptersTest {
         assertTrue(articItems.first().rawCategoriesAndTags.isEmpty())
     }
 
-    @Requirement("VII.4.b")
+    @Requirement("VII.4.b", "VI.4.c", "VI.4.d")
     @Test
     fun `testWikimediaMachineLicenseAllowlistRejectsCc10AndRestrictionsAndUnknownAuthor`() {
         val wiki = WikimediaFeaturedSourceAdapter()
@@ -406,6 +427,7 @@ class SourceAdaptersTest {
         assertEquals("", parsedUnknown.first().provenance.creatorName)
     }
 
+    @Requirement("VI.4.c")
     @Test
     fun `testArticFailsClosedWhenIsPublicDomainMissingOrFalseAndRequests1686Rendition`() {
         val artic = ArtInstituteCc0SourceAdapter()
@@ -628,6 +650,7 @@ class SourceAdaptersTest {
         assertTrue(rejectedHttp)
     }
 
+    @Requirement("VI.4.c", "VI.4.e")
     @Test
     fun `ClevelandMuseumCc0SourceAdapter parses CC0 print JPEG, sets web fallback, skips tif, and blocks non-CC0 or sculpture`() = runTest {
         assertTrue("cma_cc0 must be admitted in SourceRegistry", SourceRegistry.isSourceAdmitted("cma_cc0"))
@@ -677,6 +700,7 @@ class SourceAdaptersTest {
         val candidates = adapter.fetchCandidates(setOf(SafeCategory.SCENIC_FINE_ART), limit = 4)
         assertEquals(1, candidates.size)
         val cole = candidates.first()
+        assertStableIdentity(cole)
         assertEquals("cma-93014", cole.id)
         assertEquals(LicenseType.CC0, cole.provenance.licenseType)
         assertEquals("https://openaccess-cdn.clevelandart.org/1335.1917/1335.1917_print.jpg", cole.downloadUrl)
@@ -687,6 +711,7 @@ class SourceAdaptersTest {
         assertTrue("Expected Thomas Cole CMA landscape to pass SafetyGate, got $gateVerdict", gateVerdict is com.sunloom.app.domain.model.SafetyVerdict.Approved)
     }
 
+    @Requirement("VI.4.c", "VI.4.e")
     @Test
     fun `SmkOpenSourceAdapter parses English titles, PDM 1_0 and CC0 rights, builds bounded IIIF URLs, and rejects non-PD`() = runTest {
         assertTrue("smk_open must be admitted in SourceRegistry", SourceRegistry.isSourceAdmitted("smk_open"))
@@ -727,6 +752,7 @@ class SourceAdaptersTest {
         val candidates = adapter.fetchCandidates(setOf(SafeCategory.SCENIC_FINE_ART), limit = 4)
         assertEquals(1, candidates.size)
         val kobke = candidates.first()
+        assertStableIdentity(kobke)
         assertEquals("A Coastal Landscape at Sunset", kobke.title)
         assertEquals(LicenseType.PUBLIC_DOMAIN, kobke.provenance.licenseType)
         assertEquals("https://iip.smk.dk/iiif/jp2/kms1234.tif.jp2/full/!2560,2560/0/default.jpg", kobke.downloadUrl)
@@ -735,6 +761,7 @@ class SourceAdaptersTest {
         assertTrue("Expected SMK coastal landscape to pass SafetyGate, got $gateVerdict", gateVerdict is com.sunloom.app.domain.model.SafetyVerdict.Approved)
     }
 
+    @Requirement("X.4.a", "X.4.b")
     @Test
     fun `ArtInstituteCc0SourceAdapter declares 843px IIIF fallback URL and BudgetedSourceHttpClient enforces cap and spacing`() = runTest {
         val artic = ArtInstituteCc0SourceAdapter()
@@ -786,6 +813,7 @@ class SourceAdaptersTest {
         assertTrue("Expected 3rd request to throw SourceBudgetExceededException", budgetExceeded)
     }
 
+    @Requirement("VI.4.c")
     @Test
     fun `CmaAndSmkAdaptersEnforceStrictLicenseEdgeCasesZeroSyntheticTagsAndConditionalEtagCaching`() = runTest {
         val cma = ClevelandMuseumCc0SourceAdapter()
@@ -866,6 +894,7 @@ class SourceAdaptersTest {
         assertEquals("\"etag-v1\"", seenIfNoneMatch)
     }
 
+    @Requirement("X.4.a")
     @Test
     fun `All online SourceAdapters rethrow CancellationException and leave HTTP budget headroom for downloads`() = runTest {
         val cancellingClient = object : HttpClient {
@@ -927,6 +956,7 @@ class SourceAdaptersTest {
         )
     }
 
+    @Requirement("X.4.a", "X.4.c")
     @Test
     fun `SourceAdapterUtils fetchTextOrNull and raster URL helpers handle budget, rate-limit, cancellation, and host rules`() = runTest {
         var budgetFlag = false
@@ -1059,6 +1089,7 @@ class SourceAdaptersTest {
         assertTrue(uwqhdWiki.fallbackDownloadUrls.isNotEmpty())
     }
 
+    @Requirement("X.4.c")
     @Test
     fun `DefaultHttpsClient parseRetryAfterSeconds supports both integer delta-seconds and RFC-1123 HTTP-date`() {
         val nowMs = 1_762_280_000_000L

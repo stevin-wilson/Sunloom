@@ -12,7 +12,7 @@ import org.junit.Test
  * Article III §1 (v0.59): a chosen picture is applied when its period starts, not enforced all through it. Inside a
  * period nothing replaces it (the "Change every" interval leaves that side alone), and the other side keeps changing.
  */
-@Requirement("III.1")
+@Requirement("III.1", "III.1.g")
 class ChosenPeriodRuleTest {
     private val light = BrightnessClass.LIGHT
     private val dark = BrightnessClass.DARK

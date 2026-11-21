@@ -33,6 +33,7 @@ class SourceHealthStoreTest {
         store = SourceHealthStore(prefs, kotlin.random.Random(7))
     }
 
+    @Requirement("X.4.c")
     @Test
     fun `three failures in a row start a backoff and a success clears it`() {
         val now = 1_000_000L
@@ -62,6 +63,7 @@ class SourceHealthStoreTest {
         assertFalse(store.isInBackoff("met_cc0", now + 61L * 60_000L))
     }
 
+    @Requirement("X.4.c")
     @Test
     fun `a rate limit backs off at least fifteen minutes whatever the server asked`() {
         val now = 5_000L
@@ -102,6 +104,7 @@ class SourceHealthStoreTest {
         assertEquals(SourceHealthState.REVOKED, store.stateFor("a", admitted = false, now = 0L))
     }
 
+    @Requirement("X.4.i")
     @Test
     fun `the cursor starts at a random point, then advances by a step and keeps its own value per source`() {
         val first = store.fetchCursor("wikimedia_featured")
@@ -111,6 +114,7 @@ class SourceHealthStoreTest {
         assertTrue(store.fetchCursor("smk_open") in 0 until 600)
     }
 
+    @Requirement("X.4.i")
     @Test
     fun `a page that keeps failing is skipped after three failures`() {
         val cursor = store.fetchCursor("cma_cc0")
@@ -122,6 +126,7 @@ class SourceHealthStoreTest {
         assertEquals(cursor + 6, store.fetchCursor("cma_cc0"))
     }
 
+    @Requirement("X.4.k")
     @Test
     fun `the sync summary is stored per source for Diagnostics`() {
         store.recordSyncSummary("artic_cc0", fetched = 8, alreadyHad = 2, added = 3, httpErrors = 1)

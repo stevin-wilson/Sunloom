@@ -1,5 +1,6 @@
 package com.sunloom.app.data.cache
 
+import com.sunloom.app.Requirement
 import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.CropRect
 import com.sunloom.app.domain.model.ImageEvaluationResult
@@ -71,6 +72,7 @@ class BoundedCacheManagerTest {
         )
     }
 
+    @Requirement("IX.1.c")
     @Test
     fun `eviction keeps one light and one dark seed per category beyond the global top three`() {
         fun seed(id: String, category: SafeCategory, brightness: BrightnessClass, retrievedAt: Long): WallpaperRecord {
@@ -154,6 +156,7 @@ class BoundedCacheManagerTest {
 
     private fun protectedLightTrio() = (1..3).map { record("keep-$it", sizeMb = 1, retrievedAt = 900_000L + it) }
 
+    @Requirement("X.3.c")
     @Test
     fun `evicts already shown wallpapers before never shown ones`() {
         val unseen = record("unseen", sizeMb = 10, retrievedAt = 10L)
@@ -168,6 +171,7 @@ class BoundedCacheManagerTest {
         assertEquals(listOf("seen"), report.evictedIds)
     }
 
+    @Requirement("X.3.c")
     @Test
     fun `among shown wallpapers the least recently applied goes first`() {
         val older = record("older", sizeMb = 10, appliedCount = 1, lastApplied = 100L)
@@ -182,6 +186,7 @@ class BoundedCacheManagerTest {
         assertEquals(listOf("older"), report.evictedIds)
     }
 
+    @Requirement("X.3.c")
     @Test
     fun `never shown wallpapers are evicted oldest retrieved first once nothing shown remains`() {
         val oldest = record("oldest", sizeMb = 10, retrievedAt = 10L)
@@ -196,6 +201,7 @@ class BoundedCacheManagerTest {
         assertEquals(listOf("oldest"), report.evictedIds)
     }
 
+    @Requirement("X.3.b")
     @Test
     fun `a user-provided photo is never evicted, because it cannot be fetched again`() {
         val mine = record("mine", sizeMb = 10, retrievedAt = 1L).let {
@@ -216,6 +222,7 @@ class BoundedCacheManagerTest {
             it.copy(isRejected = rejected, provenance = it.provenance.copy(sourceId = "user_local"))
         }
 
+    @Requirement("X.3.b")
     @Test
     fun `imported photos over the cache limit are flagged, because they are never evicted`() {
         val limit = 20L * 1024L * 1024L

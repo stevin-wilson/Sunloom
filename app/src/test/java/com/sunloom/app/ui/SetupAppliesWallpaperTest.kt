@@ -29,7 +29,7 @@ import org.robolectric.annotation.Config
  * at once, whatever the schedule; it does not wait for the first scheduled change, and it never says it did when the
  * system refused.
  */
-@Requirement("IX.1")
+@Requirement("IX.1", "IX.1.f")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class SetupAppliesWallpaperTest {

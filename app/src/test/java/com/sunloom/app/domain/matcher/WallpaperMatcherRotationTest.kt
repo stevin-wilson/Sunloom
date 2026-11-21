@@ -120,6 +120,7 @@ class WallpaperMatcherRotationTest {
         return shown
     }
 
+    @Requirement("XI.2.c")
     @Test
     fun `two light plus two neutral does not ping-pong between the light pair`() {
         val pool = listOf(
@@ -137,6 +138,7 @@ class WallpaperMatcherRotationTest {
         }
     }
 
+    @Requirement("XI.2.e")
     @Test
     fun `every image is shown once before any repeats`() {
         val pool = (1..10).map { record("L$it", BrightnessClass.LIGHT) }
@@ -144,6 +146,7 @@ class WallpaperMatcherRotationTest {
         assertEquals(10, shown.toSet().size)
     }
 
+    @Requirement("XI.2.c")
     @Test
     fun `order differs between seeds`() {
         val pool = (1..10).map { record("L$it", BrightnessClass.LIGHT) }
@@ -151,6 +154,7 @@ class WallpaperMatcherRotationTest {
         assertTrue("expected varied orders, got ${orders.size}", orders.size > 1)
     }
 
+    @Requirement("XI.2.b")
     @Test
     fun `never immediately repeats the current wallpaper when alternatives exist`() {
         val pool = (1..3).map { record("L$it", BrightnessClass.LIGHT) }
@@ -158,6 +162,7 @@ class WallpaperMatcherRotationTest {
         assertTrue(shown.zipWithNext().none { (a, b) -> a == b })
     }
 
+    @Requirement("XI.2.b", "XI.2.e")
     @Test
     fun `an unseen newcomer beats heavily shown images`() {
         val worn = (1..5).map { record("W$it", BrightnessClass.LIGHT, appliedCount = 9, lastApplied = 100L + it) }
@@ -168,6 +173,7 @@ class WallpaperMatcherRotationTest {
         }
     }
 
+    @Requirement("XI.2.e")
     @Test
     fun `least recently applied half is preferred once everything has been seen`() {
         val pool = (1..6).map { record("L$it", BrightnessClass.LIGHT, appliedCount = 1, lastApplied = it * 100L) }
@@ -177,6 +183,7 @@ class WallpaperMatcherRotationTest {
         }
     }
 
+    @Requirement("XI.2.b", "XI.2.f")
     @Test
     fun `source interleave is a hard preference over the active source`() {
         val current = record("cma-1", BrightnessClass.LIGHT, sourceId = "cma_cc0")
@@ -196,6 +203,7 @@ class WallpaperMatcherRotationTest {
         }
     }
 
+    @Requirement("XI.2.b", "XI.2.g")
     @Test
     fun `favourites are preferred gently but never exclusively`() {
         val pool = listOf(
@@ -211,6 +219,7 @@ class WallpaperMatcherRotationTest {
         assertTrue("non-favourites must still appear (share $favShare)", favShare < 0.85)
     }
 
+    @Requirement("XI.2.h")
     @Test
     fun `deterministic selection is stable across calls`() {
         val pool = (1..8).map { record("L$it", BrightnessClass.LIGHT) }
@@ -239,6 +248,7 @@ class WallpaperMatcherRotationTest {
         assertEquals(6, verifierCalls)
     }
 
+    @Requirement("XI.2.d")
     @Test
     fun `recent window covers the last applied images even when callers pass only current and previous`() {
         // 6 images; L1..L4 were applied most recently, L5/L6 were applied long ago.
@@ -259,6 +269,7 @@ class WallpaperMatcherRotationTest {
         }
     }
 
+    @Requirement("XI.2.g")
     @Test
     fun `consecutive wallpapers rarely share a category when alternatives exist`() {
         val pool = (1..6).map { record("A$it", BrightnessClass.LIGHT, category = SafeCategory.LANDSCAPES_NATURE) } +
@@ -277,6 +288,7 @@ class WallpaperMatcherRotationTest {
         assertTrue("same-category share $share should be well below a coin flip", share < 0.4)
     }
 
+    @Requirement("XI.2.g")
     @Test
     fun `a picture that looks like the last one shown is deprioritised`() {
         val shownHash = "5a3c96e1b2d47f08"
@@ -294,6 +306,7 @@ class WallpaperMatcherRotationTest {
         assertTrue("lookalike must still be possible", picks.contains("lookalike"))
     }
 
+    @Requirement("XI.2.g")
     @Test
     fun `taste from kept and disliked images shifts weights gently and never excludes`() {
         val pool = listOf(
@@ -312,6 +325,7 @@ class WallpaperMatcherRotationTest {
         assertTrue(picks.contains("disliked"))
     }
 
+    @Requirement("XI.2.g")
     @Test
     fun `the same dominant hue as the last wallpaper is mildly deprioritised`() {
         val pool = listOf(

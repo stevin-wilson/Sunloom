@@ -21,7 +21,7 @@ import org.junit.Test
  * middle of the Balanced band, so a mid-tone daytime photograph is not served as a dark-mode wallpaper
  * while a genuinely dark image is merely repeated, and the reserve does not count it as stock for that mode.
  */
-@Requirement("XI.2", "X.4")
+@Requirement("XI.2", "X.4", "XI.2.c")
 class NeutralFitTest {
 
     private val matcher = WallpaperMatcher(fileExistsVerifier = { it.fileSizeBytes > 0L })
@@ -122,6 +122,7 @@ class NeutralFitTest {
 
     // ---- Reserve counting ----
 
+    @Requirement("X.4.e")
     @Test
     fun `unseen counts include a Balanced image only for the mode it fits`() {
         val pool = listOf(

@@ -22,7 +22,7 @@ import org.robolectric.annotation.Config
  * chosen, so choosing 3 hours at 6 pm does not fire a minute later and a flip or a Next press restarts the wait.
  * It is derived state: kept out of the preferences file that Auto Backup restores.
  */
-@Requirement("X.1")
+@Requirement("X.1", "III.1.c", "X.1.e")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class ChangeCountdownTest {

@@ -24,7 +24,7 @@ import java.io.File
  * small for the display. It skips only the resolution-quality checks and falls back to a blurred frame fill; nothing
  * else that refuses a picture (rejected, unsafe, unknown size) is skipped.
  */
-@Requirement("III.1")
+@Requirement("III.1", "III.1.h")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class ChosenApplyTest {

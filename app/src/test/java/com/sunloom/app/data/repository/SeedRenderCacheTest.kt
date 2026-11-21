@@ -64,6 +64,7 @@ class SeedRenderCacheTest {
 
     private fun geometryDirs() = cacheDir.listFiles { f -> f.isDirectory }.orEmpty()
 
+    @Requirement("IX.1.a")
     @Test
     fun `the first load renders every seed and keeps the renders`() {
         load(reserve(), laptop)
@@ -73,6 +74,7 @@ class SeedRenderCacheTest {
         assertEquals(seedCount, geometryDirs().single().listFiles()!!.size)
     }
 
+    @Requirement("IX.1.d")
     @Test
     fun `going back to a size used a moment ago renders nothing`() {
         val r = reserve()
@@ -100,6 +102,7 @@ class SeedRenderCacheTest {
         assertEquals(first, again)
     }
 
+    @Requirement("IX.1.d")
     @Test
     fun `only the two most recent sizes are kept`() {
         val r = reserve()
@@ -139,6 +142,7 @@ class SeedRenderCacheTest {
         assertFalse(cacheDir.exists())
     }
 
+    @Requirement("IX.1.e")
     @Test
     fun `renders kept by an older version of the app are not reused`() {
         // A release that changes a seed or the renderer must not be shown last release's pictures.
@@ -151,6 +155,7 @@ class SeedRenderCacheTest {
         assertEquals(seedCount, records.size)
     }
 
+    @Requirement("IX.1.e")
     @Test
     fun `kept renders are filed under the current version`() {
         load(reserve(), laptop)

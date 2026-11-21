@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Article X §4: the tally behind the opt-in live coverage probe, tested offline on synthetic sizes. */
-@Requirement("X.4")
+@Requirement("X.4", "X.4.k")
 class YieldTallyTest {
 
     private val ultrawide = DisplayProfile(0, "3440x1440", 3440, 1440, densityDpi = 149)

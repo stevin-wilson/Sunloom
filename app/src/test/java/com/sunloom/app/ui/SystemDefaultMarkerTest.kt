@@ -15,7 +15,7 @@ import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
 /** Putting the system default back is remembered, so a Follow-OS poll does not cover it up (Article X §1). */
-@Requirement("X.1")
+@Requirement("X.1", "X.1.c")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class SystemDefaultMarkerTest {

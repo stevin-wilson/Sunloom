@@ -28,7 +28,7 @@ import org.robolectric.annotation.Config
  * chosen picture when there is one, and the background change that follows the same flip finds nothing left to do.
  * The test device is in light mode, so the flip under test is dark to light.
  */
-@Requirement("III.1")
+@Requirement("III.1", "III.1.g", "X.1.d")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class ThemeFlipGatewayTest {

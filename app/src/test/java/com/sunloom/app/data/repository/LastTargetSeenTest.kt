@@ -20,7 +20,7 @@ import org.robolectric.annotation.Config
  * or evening) it last handled. It is derived state: kept in the file Auto Backup does not restore, because a side
  * remembered on another device says nothing about what is on this one's screen.
  */
-@Requirement("III.1")
+@Requirement("III.1", "III.1.g")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class LastTargetSeenTest {

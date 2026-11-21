@@ -49,12 +49,14 @@ class SolarCalculatorScheduleTest {
 
     // --- The next transition in sunrise-and-sunset mode ---
 
+    @Requirement("III.1.a")
     @Test
     fun `at midday the next change is that day's sunset`() {
         val next = calculator.computeNextTransitionZonedTime(sunriseSunset, sf(november4, 12))
         assertEquals(november4.atTime(sfWindow(november4).sunsetTime).atZone(sanFrancisco), next)
     }
 
+    @Requirement("III.1.a")
     @Test
     fun `after sunset the next change is tomorrow's sunrise`() {
         val next = calculator.computeNextTransitionZonedTime(sunriseSunset, sf(november4, 21))
@@ -62,6 +64,7 @@ class SolarCalculatorScheduleTest {
         assertEquals(tomorrow.atTime(sfWindow(tomorrow).sunriseTime).atZone(sanFrancisco), next)
     }
 
+    @Requirement("III.1.a")
     @Test
     fun `before sunrise the next change is that morning's sunrise`() {
         val next = calculator.computeNextTransitionZonedTime(sunriseSunset, sf(november4, 3))
@@ -140,6 +143,7 @@ class SolarCalculatorScheduleTest {
 
     // --- Modes with no schedule of their own ---
 
+    @Requirement("III.1.a")
     @Test
     fun `there is no next change when automation is off, paused, or the look follows the system`() {
         val now = sf(november4, 12)
@@ -149,6 +153,7 @@ class SolarCalculatorScheduleTest {
         assertNull(calculator.computeNextTransitionZonedTime(sunriseSunset.copy(scheduleMode = ScheduleMode.MANUAL_ONLY), now))
     }
 
+    @Requirement("III.1.a")
     @Test
     fun `following the system or manual mode takes the look from the system theme`() {
         listOf(ScheduleMode.FOLLOW_OS_THEME, ScheduleMode.MANUAL_ONLY).forEach { mode ->
@@ -177,6 +182,7 @@ class SolarCalculatorScheduleTest {
 
     // --- A window that starts and ends at the same moment ---
 
+    @Requirement("III.1.a")
     @Test
     fun `a window with equal start and end covers the whole day`() {
         val noon = LocalTime.NOON
@@ -185,6 +191,7 @@ class SolarCalculatorScheduleTest {
         }
     }
 
+    @Requirement("III.1.a")
     @Test
     fun `a window includes its start, excludes its end, and wraps past midnight`() {
         val seven = LocalTime.of(7, 0)

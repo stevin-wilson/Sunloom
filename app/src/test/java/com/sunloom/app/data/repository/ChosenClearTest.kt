@@ -17,7 +17,7 @@ import org.robolectric.annotation.Config
  * Article II / III §1 (v0.59): disliking or removing a picture refuses it for good, and a refused picture cannot be a
  * chosen one. Its slot goes back to Automatic; the other slot is not touched.
  */
-@Requirement("III.1")
+@Requirement("III.1", "III.1.i")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class ChosenClearTest {

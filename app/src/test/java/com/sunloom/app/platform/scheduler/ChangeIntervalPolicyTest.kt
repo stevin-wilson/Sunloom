@@ -11,7 +11,7 @@ import org.junit.Test
  * The next look is the earlier of the next light/dark transition and the moment the interval after the last change
  * runs out. Off (0 hours) leaves today's behaviour untouched.
  */
-@Requirement("X.1")
+@Requirement("X.1", "III.1.b", "X.1.e")
 class ChangeIntervalPolicyTest {
     private val hour = 3_600_000L
     private val now = 1_000_000_000_000L
@@ -38,10 +38,22 @@ class ChangeIntervalPolicyTest {
         assertEquals(hour, RefreshSchedulePolicy.nextChangeDelayMs(hour, 6, now, now))
     }
 
+    @Requirement("III.1.e")
     @Test
     fun `an interval already overdue is due in one minute, not at once`() {
         val delay = RefreshSchedulePolicy.nextChangeDelayMs(5 * hour, 3, now - 10 * hour, now)
         assertEquals(RefreshSchedulePolicy.MIN_CHANGE_DELAY_MS, delay)
+    }
+
+    @Requirement("III.1.e")
+    @Test
+    fun `after a long sleep one change is due and the wait then starts over, so there is no burst`() {
+        // The phone slept for 20 hours with a 3-hour interval: eight changes were missed, but only one is made.
+        val first = RefreshSchedulePolicy.nextChangeDelayMs(null, 3, now - 20 * hour, now)
+        assertEquals("one change, soon", RefreshSchedulePolicy.MIN_CHANGE_DELAY_MS, first)
+        // That change restarts the countdown, so the next one is a whole interval away rather than due again.
+        val changedAt = now + first!!
+        assertEquals("a full interval after the change", 3 * hour, RefreshSchedulePolicy.nextChangeDelayMs(null, 3, changedAt, changedAt))
     }
 
     @Test
@@ -75,6 +87,7 @@ class ChangeIntervalPolicyTest {
         assertTrue(UserPreferences.CHANGE_EVERY_CHOICES_HOURS.first() == 0)
     }
 
+    @Requirement("III.1.d")
     @Test
     fun `the interval only applies when automation runs and the mode changes by itself`() {
         assertTrue(RefreshSchedulePolicy.intervalApplies(3, scheduleChanges = true))
@@ -84,6 +97,7 @@ class ChangeIntervalPolicyTest {
 
     // --- when the interval is due, and what the delay is ---
 
+    @Requirement("III.1.c")
     @Test
     fun `the interval is due once the wait since the countdown started has passed`() {
         assertEquals(false, RefreshSchedulePolicy.isIntervalDue(3, true, now - 2 * hour, now))
@@ -91,6 +105,7 @@ class ChangeIntervalPolicyTest {
         assertEquals(true, RefreshSchedulePolicy.isIntervalDue(3, true, now - 9 * hour, now))
     }
 
+    @Requirement("III.1.d")
     @Test
     fun `the interval is never due when off, when changes are not scheduled, or before a countdown exists`() {
         assertEquals(false, RefreshSchedulePolicy.isIntervalDue(0, true, now - 9 * hour, now))

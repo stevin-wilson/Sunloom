@@ -13,7 +13,7 @@ import org.junit.Test
  * Article X §1 (v0.58): the delay the scheduler arms is the schedule's own wait, brought forward to meet the
  * "Change every" interval. This is the decision behind `syncPeriodicSchedule`, without WorkManager.
  */
-@Requirement("X.1")
+@Requirement("X.1", "X.1.a", "X.1.e")
 class ArmedDelayTest {
     private val solar = SolarCalculator()
     private val hour = 3_600_000L
@@ -48,6 +48,7 @@ class ArmedDelayTest {
         assertEquals(hour, delay)
     }
 
+    @Requirement("X.1.b")
     @Test
     fun `follow OS keeps looking every fifteen minutes`() {
         val delay = SunloomWallpaperScheduler.armedDelayMs(solar, prefs(ScheduleMode.FOLLOW_OS_THEME, 3), noon, nowMs)
@@ -59,6 +60,7 @@ class ArmedDelayTest {
         assertEquals(6 * hour, SunloomWallpaperScheduler.armedDelayMs(solar, null, noon, null))
     }
 
+    @Requirement("III.1.d")
     @Test
     fun `manual mode ignores the interval`() {
         // Manual mode never reaches arming in production; the rule must still not invent a short wait for it.
@@ -66,6 +68,7 @@ class ArmedDelayTest {
         assertEquals(6 * hour, delay)
     }
 
+    @Requirement("III.1.d")
     @Test
     fun `a paused or switched-off schedule ignores the interval`() {
         val countdown = nowMs - 9 * hour // an overdue wait that would otherwise shorten the delay

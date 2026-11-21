@@ -24,7 +24,7 @@ import org.robolectric.annotation.Config
  * Article X §1: Follow-OS looks every 15 minutes, so it has no backstop alarm; the other modes keep theirs. Needs the
  * real WorkManager, so it runs where Robolectric's native SQLite exists (CI).
  */
-@Requirement("X.1")
+@Requirement("X.1", "X.1.c")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class FollowOsAlarmTest {
