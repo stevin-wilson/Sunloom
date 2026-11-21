@@ -24,7 +24,7 @@ import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
 /** In a 400 dp window with the system font at 200 percent every control still has a name and a 48 dp hit area. */
-@Requirement("XII.4")
+@Requirement("XII.4", "XVI.1.h")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w400dp-h4000dp")
 class AccessibilityNarrowLargeTextTest {

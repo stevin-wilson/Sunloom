@@ -38,7 +38,7 @@ import org.robolectric.annotation.Config
 @RunWith(AndroidJUnit4::class)
 // Tall window so scrollable panes are fully on screen and every control has real touch bounds.
 @Config(sdk = [34], application = Application::class, qualifiers = "w1280dp-h4000dp")
-@Requirement("XII.4")
+@Requirement("XII.4", "XVI.1.b", "XVI.1.h")
 class AccessibilityTest {
 
     @get:Rule

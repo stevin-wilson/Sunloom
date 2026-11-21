@@ -13,6 +13,7 @@ import org.w3c.dom.Element
  * Checks the source manifest against the Constitution's platform obligations, so a casual edit cannot
  * lock the window size, add a dangerous permission or open a second window.
  */
+@Requirement("XVI.1.b")
 class ManifestConformanceTest {
 
     private val androidNs = "http://schemas.android.com/apk/res/android"

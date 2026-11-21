@@ -41,6 +41,9 @@ python3 -m unittest discover -s scripts -p 'test_*.py'                      # th
 1. **Write the failing test first.** Then the smallest change that passes it. Then tidy.
 2. **Name the rule.** Every test class that guards a Constitution rule carries `@Requirement("XII.1")` (article and
    section). `ConstitutionTraceabilityTest` fails if a rule has no test or a test names a rule that does not exist.
+   Some long sections are split into lettered clauses (`XVI.1.a`); tag a test with the clause it proves, e.g.
+   `@Requirement("XII.4", "XVI.1.h")`. Each clause needs its own named test (naming only `XVI.1` no longer covers the
+   clauses), or evidence in a workflow file, or a stated reason in `ConstitutionTraceabilityTest`.
 3. **Amend the Constitution in the same PR** when behavior changes: add a row to the amendment log, bump the version,
    tag the changed sentence `**[v0.NN]**`. Keep the `## Article X:` headings and section numbers unchanged.
 4. **Words go in `strings.xml`.** No sentence-like literal in `ui/` (`HardcodedMessageScanTest`); names of choices are

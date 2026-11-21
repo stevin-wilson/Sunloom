@@ -26,7 +26,7 @@ import java.io.ByteArrayOutputStream
  * The real activity starts, and a picture shared to Sunloom ends up in the person's library through the same
  * checks as any other import (Constitution Article VI §10, XVIII §2).
  */
-@Requirement("XVIII.2")
+@Requirement("XVIII.2", "XVI.1.i")
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class)
 class MainActivityLaunchTest {

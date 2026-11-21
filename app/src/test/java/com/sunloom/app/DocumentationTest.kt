@@ -10,7 +10,7 @@ import org.junit.Test
  * Someone who finds Sunloom on GitHub reads the documents before the code. They must exist, link to each other without
  * dead ends, and not disagree with the app about what it contacts or asks for (Constitution Article XVI).
  */
-@Requirement("XVI.1")
+@Requirement("XVI.1.j")
 class DocumentationTest {
     private val root: File = File("..").canonicalFile
 
