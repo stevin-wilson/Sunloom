@@ -90,6 +90,19 @@ class DocumentationTest {
     }
 
     @Test
+    fun `the mutation task is registered, reported only, and described where agents and contributors look`() {
+        assertTrue("the build does not register mutationDomain", File("build.gradle.kts").readText().contains("\"mutationDomain\""))
+        listOf("CLAUDE.md", "CONTRIBUTING.md").forEach { doc ->
+            assertTrue("$doc does not name mutationDomain", text(doc).contains("mutationDomain"))
+        }
+        // It is a report for people to read, not a gate: CI must not run it until its scores are stable.
+        val workflows = File(root, ".github/workflows").listFiles().orEmpty().filter { it.extension == "yml" }
+        assertTrue("no workflows found", workflows.isNotEmpty())
+        val gated = workflows.filter { wf -> wf.readLines().any { !it.trimStart().startsWith("#") && it.contains("mutationDomain") } }.map { it.name }
+        assertTrue("mutationDomain is a report, not a gate, so no workflow runs it yet: $gated. To make it a gate, change this assertion on purpose.", gated.isEmpty())
+    }
+
+    @Test
     fun `the README points to the guides and the licence`() {
         val readme = text("README.md")
         listOf("docs/USER_GUIDE.md", "docs/PRIVACY_POLICY.md", "CONTRIBUTING.md", "LICENSE").forEach {

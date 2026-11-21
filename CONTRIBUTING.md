@@ -25,6 +25,9 @@ changing `targetSdk`.
 python3 -m unittest discover -s scripts -p 'test_*.py'                      # the release script
 ```
 
+- `./gradlew :app:mutationDomain` runs mutation testing (PIT) over the domain layer and writes
+  `app/build/reports/pitest/domain/index.html`. It is a report, not a gate, and CI does not run it. A "survived" mutation
+  is a change to the code that no test noticed; read it before deciding whether it is a missing test.
 - `./gradlew :app:testDomain` runs only the domain tests (`app/src/test/.../domain`, plain JVM, no Robolectric). Use it
   while working on the core; run the full command above before you open the PR.
 - `coverageFloors` compares each package's line coverage (and, for the domain packages, branch coverage) with
