@@ -177,6 +177,19 @@ detekt {
     parallel = true
 }
 
+// Fast loop for the platform-independent core (Article XIII): `./gradlew :app:testDomain` runs only the tests under
+// com.sunloom.app.domain, which are plain JVM tests (no Robolectric). The filter is applied only when this task was asked
+// for by name, so `testGithubDebugUnitTest` and CI still run everything.
+val domainOnly = gradle.startParameter.taskNames.any { it == "testDomain" || it.endsWith(":testDomain") }
+tasks.register("testDomain") {
+    group = "verification"
+    description = "Runs only the domain-layer unit tests (GitHub flavor): the quick loop while working on the core."
+    dependsOn("testGithubDebugUnitTest")
+}
+if (domainOnly) {
+    tasks.withType<Test>().configureEach { filter.includeTestsMatching("com.sunloom.app.domain.*") }
+}
+
 composeCompiler {
     includeSourceInformation.set(false)
 }

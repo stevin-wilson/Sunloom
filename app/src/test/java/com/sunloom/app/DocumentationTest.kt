@@ -17,7 +17,7 @@ class DocumentationTest {
     private fun text(path: String): String = File(root, path).also { assertTrue("$path is missing", it.isFile) }.readText()
 
     private val required = listOf(
-        "README.md", "LICENSE", "NOTICE", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md",
+        "README.md", "LICENSE", "NOTICE", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md", "CLAUDE.md", "AGENTS.md",
         "docs/USER_GUIDE.md", "docs/ARCHITECTURE.md", "docs/RELEASING.md", "docs/PRIVACY_POLICY.md",
         ".github/ISSUE_TEMPLATE/bug_report.yml", ".github/ISSUE_TEMPLATE/feature_request.yml",
         ".github/ISSUE_TEMPLATE/config.yml", ".github/ISSUE_TEMPLATE/image_report.yml", ".github/pull_request_template.md"
@@ -32,7 +32,7 @@ class DocumentationTest {
     @Test
     fun `links between documents resolve`() {
         val link = Regex("\\]\\(((?!https?://|mailto:|#)[^)\\s#]+)(#[^)]*)?\\)")
-        val broken = listOf("README.md", "CONTRIBUTING.md", "SECURITY.md", "docs/USER_GUIDE.md", "docs/ARCHITECTURE.md", "docs/RELEASING.md")
+        val broken = listOf("README.md", "CONTRIBUTING.md", "SECURITY.md", "CLAUDE.md", "AGENTS.md", "docs/USER_GUIDE.md", "docs/ARCHITECTURE.md", "docs/RELEASING.md")
             .flatMap { doc ->
                 val dir = File(root, doc).parentFile
                 link.findAll(text(doc)).map { it.groupValues[1] }.filterNot { File(dir, it).exists() }.map { "$doc -> $it" }.toList()
@@ -72,6 +72,21 @@ class DocumentationTest {
         val changelog = text("CHANGELOG.md")
         assertTrue(changelog.contains("## [Unreleased]"))
         assertTrue(changelog.contains("Keep a Changelog"))
+    }
+
+    @Test
+    fun `the agent guide points to the rules, maps every article, and names the fast domain task the build defines`() {
+        val guide = text("CLAUDE.md")
+        listOf("CONTRIBUTING.md", "CONSTITUTION.md").forEach { assertTrue("CLAUDE.md does not link $it", guide.contains("]($it)")) }
+        assertTrue("AGENTS.md must point to CLAUDE.md", text("AGENTS.md").contains("CLAUDE.md"))
+        val articles = Regex("(?m)^## Article ([IVX]+):").findAll(text("CONSTITUTION.md")).map { it.groupValues[1] }.toList()
+        assertTrue(articles.isNotEmpty())
+        val unmapped = articles.filterNot { Regex("Article $it\\b").containsMatchIn(guide) }
+        assertTrue("articles missing from the map in CLAUDE.md: $unmapped", unmapped.isEmpty())
+        // The commands in the guide must exist: the task is registered in the build and the contributor guide knows it too.
+        assertTrue("CLAUDE.md does not name testDomain", guide.contains("testDomain"))
+        assertTrue("CONTRIBUTING.md does not name testDomain", text("CONTRIBUTING.md").contains("testDomain"))
+        assertTrue("the build does not register testDomain", File("build.gradle.kts").readText().contains("\"testDomain\""))
     }
 
     @Test

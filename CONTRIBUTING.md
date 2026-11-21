@@ -25,6 +25,8 @@ changing `targetSdk`.
 python3 -m unittest discover -s scripts -p 'test_*.py'                      # the release script
 ```
 
+- `./gradlew :app:testDomain` runs only the domain tests (`app/src/test/.../domain`, plain JVM, no Robolectric). Use it
+  while working on the core; run the full command above before you open the PR.
 - `coverageFloors` compares each package's line coverage with `app/coverage-floors.csv`. It runs in CI only: on
   arm64 machines the tests that need real SQLite or WorkManager are skipped, so local numbers sit lower. **Raise a
   floor in the same PR that raises a package's coverage; never lower one to make CI pass.**
