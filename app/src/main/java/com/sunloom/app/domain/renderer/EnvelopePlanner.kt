@@ -43,14 +43,17 @@ class EnvelopePlanner(
         policy: DisplayPolicy = DisplayPolicy.SAME_ON_ALL_DISPLAYS,
         allowBlurredFrameFill: Boolean = false
     ): EnvelopePlan? {
+        // coerceIn clamps a subject position that is out of range but lets NaN through to be stored in a crop: read it as the centre.
+        val fx = if (focalX.isNaN()) 0.5 else focalX
+        val fy = if (focalY.isNaN()) 0.5 else focalY
         val plan = planCore(
-            sourceWidth, sourceHeight, focalX, focalY, connectedDisplays, policy, allowBlurredFrameFill
+            sourceWidth, sourceHeight, fx, fy, connectedDisplays, policy, allowBlurredFrameFill
         ) ?: return null
         val validDisplays = connectedDisplays.filter { it.widthPx > 0 && it.heightPx > 0 }
         // A single display or the sharpest-only policy has no shared envelope to describe: keep its own wording.
         val sharedEnvelope = policy != DisplayPolicy.OPTIMIZE_PRIMARY_SHARPEST && validDisplays.size > 1
         if (!sharedEnvelope) return plan
-        return annotate(plan, sourceWidth, sourceHeight, focalX, focalY, anchorOf(validDisplays))
+        return annotate(plan, sourceWidth, sourceHeight, fx, fy, anchorOf(validDisplays))
     }
 
     /**

@@ -143,8 +143,9 @@ class CropRenderer {
             cropHeight = (srcW / safeAspect).roundToInt().coerceIn(1, srcH)
         }
 
-        val safeFocalX = focalX.coerceIn(0.0, 1.0)
-        val safeFocalY = focalY.coerceIn(0.0, 1.0)
+        // coerceIn clamps out-of-range values but passes NaN through, and rounding NaN throws: read it as the centre.
+        val safeFocalX = if (focalX.isNaN()) 0.5 else focalX.coerceIn(0.0, 1.0)
+        val safeFocalY = if (focalY.isNaN()) 0.5 else focalY.coerceIn(0.0, 1.0)
         val desiredCenterX = safeFocalX * srcW
         val desiredCenterY = safeFocalY * srcH
         val left = (desiredCenterX - cropWidth * 0.5).roundToInt().coerceIn(0, (srcW - cropWidth).coerceAtLeast(0))
@@ -502,7 +503,10 @@ class CropRenderer {
             val pixels = w.toLong() * h.toLong()
             if (pixels <= maxPixels.toLong()) return w to h
             val scale = kotlin.math.sqrt(maxPixels.toDouble() / pixels.toDouble())
-            return (w * scale).roundToInt().coerceAtLeast(1) to (h * scale).roundToInt().coerceAtLeast(1)
+            val rounded = (w * scale).roundToInt().coerceAtLeast(1) to (h * scale).roundToInt().coerceAtLeast(1)
+            if (rounded.first.toLong() * rounded.second <= maxPixels.toLong()) return rounded
+            // Rounding both sides can push the product a little over the cap; truncating cannot.
+            return (w * scale).toInt().coerceAtLeast(1) to (h * scale).toInt().coerceAtLeast(1)
         }
 
         const val MID_PPI_COVERAGE_FLOOR = 0.80

@@ -44,6 +44,11 @@ writing a test, and never write one that only mirrors the code. CI does not run 
   (`DocumentationTest` checks).
 - **Two flavors.** Only `src/github/` may contain update-check code (`NoUpdateCodeTest`). Do not change `targetSdk`
   or remove `abiFilters` without asking.
+- **Rules that must hold for every input are properties.** `Property.forAll("name") { case -> ... }`
+  (`app/src/test/java/com/sunloom/app/Property.kt`) runs a check against many random inputs from a fixed seed, so a run is
+  the same every time. Describe the input in `case.input`; a failure reports the case, the seed to replay it alone
+  (`cases = 1, seed = ...`) and that input. There is no shrinking, so keep inputs small. Take the rule from the
+  Constitution, not from the code, or the test only mirrors what the code does (see `CropGeometryPropertyTest`).
 - **The domain layer imports nothing from `android.*`** and its tests have no `@RunWith`; keep it that way.
 - Plans and working notes go in `.notes/` (gitignored), not in the repository.
 

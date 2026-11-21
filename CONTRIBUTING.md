@@ -25,6 +25,9 @@ changing `targetSdk`.
 python3 -m unittest discover -s scripts -p 'test_*.py'                      # the release script
 ```
 
+- A rule that must hold for every input (a crop lies inside the picture, nothing is stretched) is a *property*: use
+  `Property.forAll` (`app/src/test/java/com/sunloom/app/Property.kt`), which tries many random inputs from a fixed seed and
+  reports the seed and input of a failure so it can be replayed. State the rule from the Constitution, not from the code.
 - `./gradlew :app:mutationDomain` runs mutation testing (PIT) over the domain layer and writes
   `app/build/reports/pitest/domain/index.html`. It is a report, not a gate, and CI does not run it. A "survived" mutation
   is a change to the code that no test noticed; read it before deciding whether it is a missing test.
