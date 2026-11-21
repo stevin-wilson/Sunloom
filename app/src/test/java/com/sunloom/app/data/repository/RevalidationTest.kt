@@ -59,6 +59,7 @@ class RevalidationTest {
         )
     }
 
+    @Requirement("VII.4.i")
     @Test
     fun `a picture already judged under the current gate version is not looked at again`() {
         val seeds = repository.ensureSeedReserveLoaded(display)
@@ -68,6 +69,7 @@ class RevalidationTest {
         seeds.forEach { assertEquals(before[it.id], repository.getWallpaperById(it.id)!!.decisionExplanation) }
     }
 
+    @Requirement("VII.4.i")
     @Test
     fun `a stale seed that still passes is stamped with the current gate version and kept`() {
         val base = seed()
@@ -120,6 +122,38 @@ class RevalidationTest {
         assertTrue("refused for good", "junk-bytes" in repository.getPermanentBlockedAssetIds())
         assertNotNull(repository.getAllRejections().firstOrNull { it.assetId == "junk-bytes" && it.isPermanent })
         assertTrue("the checksum of what it was is blocklisted too", repository.getPermanentBlockedSha256s().isNotEmpty())
+    }
+
+    @Requirement("VII.4.m", "VII.4.n")
+    @Test
+    fun `a picture refused for good also blocks a lookalike with different bytes, at the rendition check`() {
+        val base = seed()
+        // Let the seed pass once, so its perceptual hash is recorded, and keep a copy of its bytes.
+        repository.upsertWallpaper(base.copy(provenance = base.provenance.copy(safetyGateVersion = staleVersion)))
+        assertEquals(0, repository.revalidateGateVersionIfNeeded(display))
+        val judged = repository.getWallpaperById(base.id)!!
+        val hash = judged.provenance.perceptualHash
+        assertTrue("the picture has a perceptual hash to remember", hash.isNotBlank())
+        val bytes = File(judged.localFilePath).readBytes()
+
+        // Reject forever (L5): the hash is persisted, along with the id and checksum.
+        repository.rejectWallpaperForever(base.id)
+        assertTrue("the perceptual hash is blocklisted", hash in repository.getPermanentBlockedPerceptualHashes())
+
+        // The same picture under another id with other bytes (trailing bytes change the checksum, not the pixels).
+        val lookalike = File(repository.wallpaperDir, "lookalike.jpg").apply { writeBytes(bytes + byteArrayOf(0, 0, 0, 0)) }
+        assertTrue("the bytes differ, so the checksum cannot be what catches it", SafetyGate.sha256Hex(bytes) != SafetyGate.sha256Hex(lookalike.readBytes()))
+        // A newly fetched record has no checksum or hash on file yet, so only judging the bytes can reveal the likeness.
+        val fresh = stale("lookalike", lookalike, base = base)
+        repository.upsertWallpaper(fresh.copy(provenance = fresh.provenance.copy(sha256Checksum = "", perceptualHash = "")))
+
+        assertEquals(1, repository.revalidateGateVersionIfNeeded(display))
+
+        val evicted = repository.getWallpaperById("lookalike")!!
+        assertTrue(evicted.isRejected)
+        assertTrue("it fails at the rendition layer: ${evicted.provenance.gateLayerOutcomes}", evicted.provenance.gateLayerOutcomes.contains("L4:FAIL(BLOCKLISTED_PERCEPTUAL_HASH)"))
+        assertTrue("and is refused for good", "lookalike" in repository.getPermanentBlockedAssetIds())
+        assertNotNull(repository.getAllRejections().firstOrNull { it.assetId == "lookalike" && it.reasonCode == "BLOCKLISTED_PERCEPTUAL_HASH" && it.isPermanent })
     }
 
     @Test

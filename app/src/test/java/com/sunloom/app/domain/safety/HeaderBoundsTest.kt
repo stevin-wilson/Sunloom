@@ -9,7 +9,7 @@ import org.junit.Test
  * Article VII §4 L3: the size limits are read from the file header before decoding. A format the parser cannot size
  * would skip them (and the downsampling that follows), so every WebP flavour and every JPEG frame type must report.
  */
-@Requirement("VII.4")
+@Requirement("VII.4", "VII.4.l")
 class HeaderBoundsTest {
 
     private fun riff(chunk: String, payload: ByteArray): ByteArray {

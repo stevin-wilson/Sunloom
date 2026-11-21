@@ -93,6 +93,7 @@ class SafetyGateTest {
         assertTrue("Expected Approved verdict but got $verdict", verdict is SafetyVerdict.Approved)
     }
 
+    @Requirement("VII.4.c")
     @Test
     fun `evaluateMetadata fails closed when safety classification is MISSING or UNCERTAIN or NSFW`() {
         for (unsafeStatus in listOf(
@@ -108,6 +109,7 @@ class SafetyGateTest {
         }
     }
 
+    @Requirement("VII.4.e")
     @Test
     fun `evaluateMetadata rejects NSFW, nudity, figurative, violent, political, and spoofing terms`() {
         val prohibitedSamples = listOf(
@@ -126,6 +128,7 @@ class SafetyGateTest {
         }
     }
 
+    @Requirement("VII.4.i")
     @Test
     fun `evaluateMetadata rejects internet candidate when tags are empty or lack safe visual domain`() {
         val untagged = validCandidate(tags = emptyList())
@@ -151,6 +154,7 @@ class SafetyGateTest {
         assertEquals("INSECURE_TRANSPORT", (verdict as SafetyVerdict.Rejected).reasonCode)
     }
 
+    @Requirement("VII.4.b")
     @Test
     fun `evaluateMetadata rejects restricted or unknown licenses`() {
         val restricted = validCandidate(licenseType = LicenseType.UNKNOWN_OR_RESTRICTED)
@@ -159,6 +163,7 @@ class SafetyGateTest {
         assertEquals("INCOMPATIBLE_LICENSE", (verdict as SafetyVerdict.Rejected).reasonCode)
     }
 
+    @Requirement("VII.4.l")
     @Test
     fun `evaluatePayload verifies magic bytes and computes SHA-256 checksum for valid JPEG and PNG`() {
         val candidate = validCandidate()
@@ -173,6 +178,7 @@ class SafetyGateTest {
         assertEquals(ImageFormat.PNG, (pngVerdict as SafetyVerdict.Approved).detectedFormat)
     }
 
+    @Requirement("VII.4.l")
     @Test
     fun `evaluatePayload rejects executable ELF, HTML error page, and tiny or oversized payloads`() {
         val candidate = validCandidate()
@@ -215,6 +221,7 @@ class SafetyGateTest {
         }
     }
 
+    @Requirement("VII.4.b", "VII.4.k")
     @Test
     fun `Schedule B - enforces creator attribution on CC BY-SA and perceptual dHash blocklisting across sources`() {
         val missingCreatorCc = validCandidate(licenseType = LicenseType.CC_BY_SA, creatorName = "")
@@ -247,6 +254,7 @@ class SafetyGateTest {
         assertEquals("BLOCKLISTED_PERCEPTUAL_HASH", (blockVerdict as SafetyVerdict.Rejected).reasonCode)
     }
 
+    @Requirement("VII.4.d")
     @Test
     fun `testUnicodeNormalizationCatchesAccentedAndCyrillicLookalikes`() {
         // Accented "nüde" and Cyrillic lookalike "n\u0430ked" ('а' is Cyrillic U+0430)
@@ -261,6 +269,7 @@ class SafetyGateTest {
         assertEquals("PROHIBITED_CONTENT_TERM", (verdictCyrillic as SafetyVerdict.Rejected).reasonCode)
     }
 
+    @Requirement("VII.4.d")
     @Test
     fun `testStemmingCatchesPluralProhibitedTerms`() {
         val plurals = listOf(
@@ -277,6 +286,7 @@ class SafetyGateTest {
         }
     }
 
+    @Requirement("VII.4.f")
     @Test
     fun `testTier2AllowsBenignDescriptionAndLandmarksWhileRejectingPeopleTags`() {
         // Benign NASA ISS description mentioning "astronaut" while title & tags are pure Earth/Space
@@ -310,6 +320,7 @@ class SafetyGateTest {
         assertEquals("PROHIBITED_CONTENT_TERM", (verdictCrew as SafetyVerdict.Rejected).reasonCode)
     }
 
+    @Requirement("VII.4.b")
     @Test
     fun `testSourceRegistryRejectsUnadmittedSourceAndDisabledSource`() {
         val unadmitted = validCandidate(sourceId = "random_scraper")
@@ -326,6 +337,7 @@ class SafetyGateTest {
         assertEquals("DISABLED_SOURCE", (verdictDisabled as SafetyVerdict.Rejected).reasonCode)
     }
 
+    @Requirement("VII.4.i")
     @Test
     fun `testSafeDomainDoesNotMatchFeaturedAlone`() {
         // "featured" or "featured pictures" alone without a real safe domain stem must be rejected
@@ -339,6 +351,7 @@ class SafetyGateTest {
         assertEquals("UNRECOGNIZED_SAFE_DOMAIN", (verdict as SafetyVerdict.Rejected).reasonCode)
     }
 
+    @Requirement("VII.4.l")
     @Test
     fun `testEvaluatePayloadEnforcesDimensionBoundsAndMimeMatch`() {
         val candidate = validCandidate()
@@ -363,6 +376,7 @@ class SafetyGateTest {
         assertEquals("MIME_MAGIC_MISMATCH", (mimeMismatchVerdict as SafetyVerdict.Rejected).reasonCode)
     }
 
+    @Requirement("VII.4.k", "VII.4.l")
     @Test
     fun `testSha256BlocklistEnforcement`() {
         val candidate = validCandidate()
@@ -378,6 +392,7 @@ class SafetyGateTest {
         assertEquals("BLOCKLISTED_SHA256", (verdict as SafetyVerdict.Rejected).reasonCode)
     }
 
+    @Requirement("VII.4.d", "VII.4.e")
     @Test
     fun `Schedule B - folds Nordic ligatures and blocks untranslated Danish and Dutch portrait or nude titles`() {
         val nordicHardNegatives = listOf(
@@ -395,6 +410,7 @@ class SafetyGateTest {
         }
     }
 
+    @Requirement("VII.4.c")
     @Test
     fun `evaluateMetadata rejects SAFE classification when safetyClassificationSource is blank`() {
         val base = validCandidate()
@@ -406,6 +422,7 @@ class SafetyGateTest {
         assertEquals("UNVERIFIED_OR_UNSAFE_CLASSIFICATION", (verdict as SafetyVerdict.Rejected).reasonCode)
     }
 
+    @Requirement("VII.4.a")
     @Test
     fun `GateTrace builds structured per-layer outcomes for approved user-exempt and failed stages`() {
         assertEquals(
@@ -438,7 +455,7 @@ class SafetyGateTest {
         assertEquals(label, "L2", rejected.failedLayer)
     }
 
-    @Requirement("VII.4")
+    @Requirement("VII.4", "VII.4.g")
     @Test
     fun `testNectarineFruitDevelopmentMontageIsRejectedAtL2`() {
         val nectarine = validCandidate(
@@ -451,7 +468,7 @@ class SafetyGateTest {
         assertCompositeRejected(safetyGate.evaluateMetadata(nectarine), "Nectarine montage")
     }
 
-    @Requirement("VII.4")
+    @Requirement("VII.4", "VII.4.g")
     @Test
     fun `testMontageCollageAndGridArrayCategoriesAreRejected`() {
         val cases = mapOf(
@@ -472,7 +489,7 @@ class SafetyGateTest {
         }
     }
 
-    @Requirement("VII.4")
+    @Requirement("VII.4", "VII.4.g")
     @Test
     fun `testMontageOrCollageInTitleIsRejected`() {
         val candidate = validCandidate(
@@ -482,7 +499,7 @@ class SafetyGateTest {
         assertCompositeRejected(safetyGate.evaluateMetadata(candidate), "collage title")
     }
 
-    @Requirement("VII.4")
+    @Requirement("VII.4", "VII.4.g")
     @Test
     fun `testLabelledFigurePlateDescriptionIsRejected`() {
         val plate = validCandidate(
@@ -502,7 +519,7 @@ class SafetyGateTest {
         assertCompositeRejected(safetyGate.evaluateMetadata(labelledOnly), "(a)/(b) panel labels")
     }
 
-    @Requirement("VII.4")
+    @Requirement("VII.4", "VII.4.g")
     @Test
     fun `testSingleSceneImagesWithSimilarWordsStillPass`() {
         val controls = mapOf(
@@ -546,7 +563,7 @@ class SafetyGateTest {
         }
     }
 
-    @Requirement("VII.4")
+    @Requirement("VII.4", "VII.4.g")
     @Test
     fun `testCompositeScreenChangesTheCompositeGateVersion`() {
         // Cached records carry the old gate version; a new denylist version forces revalidation (Schedule B §6).
@@ -596,6 +613,7 @@ class SafetyGateTest {
         )
     }
 
+    @Requirement("VII.4.h")
     @Test
     fun `NASA press briefings and media days are rejected even though their keywords look like scenery`() {
         val briefing = nasaCandidate(
@@ -621,6 +639,7 @@ class SafetyGateTest {
         }
     }
 
+    @Requirement("VII.4.h")
     @Test
     fun `NASA data maps and illustrations are rejected as not photographic`() {
         val titledMap = nasaCandidate(
@@ -647,6 +666,7 @@ class SafetyGateTest {
         assertEquals("NON_PHOTOGRAPHIC_CONTENT", (mapVerdict as SafetyVerdict.Rejected).reasonCode)
     }
 
+    @Requirement("VII.4.h")
     @Test
     fun `NASA scenic photographs and ISS astronaut-taken descriptions still pass`() {
         val iss = nasaCandidate(
@@ -666,6 +686,7 @@ class SafetyGateTest {
         }
     }
 
+    @Requirement("VII.4.h")
     @Test
     fun `NASA computer-modelled illustration PIA21074 is rejected`() {
         val candidate = nasaCandidate(
@@ -680,6 +701,7 @@ class SafetyGateTest {
         assertTrue("Expected Rejected, got $verdict", verdict is SafetyVerdict.Rejected)
     }
 
+    @Requirement("VII.4.h")
     @Test
     fun `NASA relief and radar products and records outside the admitted families are rejected`() {
         val relief = nasaCandidate(
@@ -697,6 +719,7 @@ class SafetyGateTest {
         }
     }
 
+    @Requirement("VII.4.h")
     @Test
     fun `computer modeling alone marks a NASA record as a rendering`() {
         val verdict = safetyGate.evaluateMetadata(
@@ -705,6 +728,7 @@ class SafetyGateTest {
         assertEquals("NON_PHOTOGRAPHIC_CONTENT", (verdict as SafetyVerdict.Rejected).reasonCode)
     }
 
+    @Requirement("VII.4.h")
     @Test
     fun `map and illustration wording does not reject other sources or panorama captions`() {
         val panorama = validCandidate(

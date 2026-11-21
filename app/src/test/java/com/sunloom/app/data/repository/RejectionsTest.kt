@@ -26,6 +26,7 @@ class RejectionsTest {
         assertEquals("BLOCKLISTED_PERCEPTUAL_HASH", r.reasonCode)
     }
 
+    @Requirement("VII.4.i")
     @Test
     fun `a display-scoped rejection carries the display signature and is not permanent`() {
         val r = Rejections.displayScoped("a2", "smk_open", "NEAR_DUPLICATE_OF_LIBRARY", "looks like one we have", "3440x1440@149", nowMs = 7L)
@@ -34,6 +35,7 @@ class RejectionsTest {
         assertEquals(7L, r.timestampEpochMs)
     }
 
+    @Requirement("VII.4.i")
     @Test
     fun `a display-scoped rejection without a signature is refused because it would never match`() {
         try {

@@ -1,5 +1,6 @@
 package com.sunloom.app.domain.evaluator
 
+import com.sunloom.app.Requirement
 import com.sunloom.app.domain.model.BrightnessClass
 import com.sunloom.app.domain.model.DisplayProfile
 import org.junit.Assert.assertEquals
@@ -9,6 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
+@Requirement("VII.4.m")
 class ImageEvaluatorTest {
 
     private lateinit var evaluator: ImageEvaluator
