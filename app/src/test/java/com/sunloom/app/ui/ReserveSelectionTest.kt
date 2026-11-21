@@ -1,10 +1,12 @@
 package com.sunloom.app.ui
 
 import androidx.compose.ui.input.key.Key
+import com.sunloom.app.Requirement
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
+@Requirement("XII.4.l")
 class ReserveSelectionTest {
 
     private val order = listOf("a", "b", "c", "d", "e", "f")

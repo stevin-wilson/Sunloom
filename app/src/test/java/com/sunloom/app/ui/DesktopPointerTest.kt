@@ -2,11 +2,20 @@ package com.sunloom.app.ui
 
 import android.app.Application
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.rightClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -20,6 +29,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
+@Requirement("XII.4.c")
+@OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w1280dp-h800dp")
 class DesktopPointerTest {
@@ -91,6 +102,48 @@ class DesktopPointerTest {
         composeTestRule.onNodeWithTag("ctx_apply_$firstId").performClick()
         composeTestRule.waitForIdle()
         assertEquals(firstId, applied)
+    }
+
+    @Requirement("XII.4.c")
+    @Test
+    fun `double click on a reserve card applies it`() {
+        composeTestRule.onNodeWithTag("reserve_card_$firstId").performScrollTo().performMouseInput { doubleClick() }
+        composeTestRule.waitForIdle()
+        assertEquals(firstId, applied)
+    }
+
+    @Requirement("XII.4.c")
+    @Test
+    fun `a single click on a reserve card does not apply it`() {
+        composeTestRule.onNodeWithTag("reserve_card_$firstId").performScrollTo().performMouseInput { click() }
+        composeTestRule.waitForIdle()
+        assertNull("one click leaves the wallpaper alone", applied)
+    }
+
+    @Requirement("XII.4.c")
+    @Test
+    fun `a double tap on a touch screen applies it too`() {
+        composeTestRule.onNodeWithTag("reserve_card_$firstId").performScrollTo().performTouchInput { doubleClick() }
+        composeTestRule.waitForIdle()
+        assertEquals(firstId, applied)
+    }
+
+    @Requirement("XII.4.b")
+    @Test
+    fun `closing a dialog gives the workspace its focus back, so single keys work without a click`() {
+        // Focus is on the card, as it is after the person has used it; the dialog takes it away and must return it to the workspace.
+        composeTestRule.onNodeWithTag("reserve_card_$firstId").performScrollTo().requestFocus()
+        composeTestRule.onNodeWithTag("reserve_card_$firstId").assertIsFocused()
+        rightClickCard()
+        composeTestRule.onNodeWithTag("ctx_about_$firstId").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("wallpaper_about_close").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("wallpaper_about_dialog").assertDoesNotExist()
+
+        composeTestRule.onNodeWithTag("workspace_root").assertIsFocused()
+        composeTestRule.onNodeWithTag("workspace_root").performKeyInput { pressKey(Key.N) }
+        assertEquals("N is Next again without a click", 1, nextCount)
     }
 
     @Test

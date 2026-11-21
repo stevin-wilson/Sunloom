@@ -3,8 +3,12 @@ package com.sunloom.app.ui
 import android.app.Application
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.sunloom.app.domain.model.ScheduleMode
@@ -84,6 +88,27 @@ class DesktopLayoutTest {
         composeTestRule.onNodeWithTag("workspace_nav_bar").assertDoesNotExist()
         composeTestRule.onNodeWithText("Reserve").assertDoesNotExist()
         composeTestRule.onNodeWithTag("today_side_by_side").assertDoesNotExist()
+    }
+
+    @Test
+    @Config(qualifiers = "w700dp-h800dp")
+    @Requirement("XII.4.s")
+    fun `an icon only item shows its name while the pointer rests on it`() {
+        setApp(activeState())
+        composeTestRule.onNodeWithText("Reserve").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("nav_RESERVE_AND_HISTORY").performMouseInput { moveTo(center) }
+        composeTestRule.waitUntil(5_000) { composeTestRule.onAllNodesWithText("Reserve").fetchSemanticsNodes().isNotEmpty() }
+        composeTestRule.onNodeWithTag("nav_RESERVE_AND_HISTORY").performMouseInput { exit() }
+    }
+
+    @Test
+    @Config(qualifiers = "w700dp-h800dp")
+    @Requirement("XII.4.s")
+    fun `an icon only item shows its name on a long press`() {
+        setApp(activeState())
+        composeTestRule.onNodeWithText("Reserve").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("nav_RESERVE_AND_HISTORY").performTouchInput { longClick() }
+        composeTestRule.waitUntil(5_000) { composeTestRule.onAllNodesWithText("Reserve").fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

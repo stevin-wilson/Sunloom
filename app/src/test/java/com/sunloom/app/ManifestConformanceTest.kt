@@ -42,7 +42,7 @@ class ManifestConformanceTest {
     }
 
     @Test
-    @Requirement("XII.4")
+    @Requirement("XII.4", "XII.4.a")
     fun `main activity is resizable and declares a free-form window size`() {
         val activity = mainActivity()
         assertEquals("true", activity.attr("resizeableActivity"))
@@ -103,6 +103,7 @@ class ManifestConformanceTest {
         assertFalse(application.attr("networkSecurityConfig").isBlank())
     }
 
+    @Requirement("XII.4.j")
     @Test
     fun `back gestures use the system back callback so predictive back works`() {
         val application = manifest.getElementsByTagName("application").item(0) as Element

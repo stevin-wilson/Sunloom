@@ -4,12 +4,15 @@ import android.app.Application
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.sunloom.app.domain.model.ScheduleMode
@@ -37,6 +40,7 @@ class DesktopInputTest {
         var keep = 0
         var reject = 0
         var fullscreen = 0
+        val tabs = mutableListOf<DesktopNavTab>()
     }
 
     private fun setApp(state: SunloomUiState, counters: Counters, isFullscreen: Boolean = false) {
@@ -44,7 +48,7 @@ class DesktopInputTest {
             SunloomApp(
                 uiState = state,
                 onCompleteSetup = {},
-                onSelectTab = {},
+                onSelectTab = { counters.tabs += it },
                 onNextWallpaper = { counters.next++ },
                 onPreviousWallpaper = { counters.previous++ },
                 onToggleKeep = { counters.keep++ },
@@ -76,6 +80,7 @@ class DesktopInputTest {
         )
     )
 
+    @Requirement("XII.4.b")
     @Test
     fun `plain N P K keys fire accelerators when the workspace root has focus`() {
         val counters = Counters()
@@ -93,6 +98,7 @@ class DesktopInputTest {
         assertEquals(1, counters.keep)
     }
 
+    @Requirement("XII.4.b")
     @Test
     fun `accelerators do not fire while a coordinate text field is focused`() {
         val counters = Counters()
@@ -112,6 +118,60 @@ class DesktopInputTest {
         assertEquals(0, counters.keep)
     }
 
+    @Requirement("XII.4.b")
+    @Test
+    fun `Ctrl and a digit switch the tab, even while typing in a field, and a bare digit does not`() {
+        val counters = Counters()
+        setApp(activeState(DesktopNavTab.DISPLAYS_AND_SCHEDULE), counters)
+        composeTestRule.onNodeWithText("Custom coordinates").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("custom_lat_input").performScrollTo().performClick()
+
+        composeTestRule.onNodeWithTag("custom_lat_input").performKeyInput { pressKey(Key.Two) }
+        assertEquals("a digit alone is for the field", emptyList<DesktopNavTab>(), counters.tabs)
+
+        composeTestRule.onNodeWithTag("custom_lat_input").performKeyInput {
+            keyDown(Key.CtrlLeft)
+            pressKey(Key.Two)
+            pressKey(Key.Five)
+            keyUp(Key.CtrlLeft)
+        }
+        assertEquals(listOf(DesktopNavTab.RESERVE_AND_HISTORY, DesktopNavTab.SAFETY_AND_DECISION_LOG), counters.tabs)
+    }
+
+    @Requirement("XII.4.i")
+    @Test
+    fun `Escape leaves a text field and gives the workspace its focus and single keys back`() {
+        val counters = Counters()
+        setApp(activeState(DesktopNavTab.DISPLAYS_AND_SCHEDULE), counters)
+        composeTestRule.onNodeWithText("Custom coordinates").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("custom_lat_input").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("custom_lat_input").assertIsFocused()
+
+        composeTestRule.onNodeWithTag("custom_lat_input").performKeyInput { pressKey(Key.Escape) }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("custom_lat_input").assertIsNotFocused()
+        composeTestRule.onNodeWithTag("workspace_root").assertIsFocused()
+
+        composeTestRule.onNodeWithTag("workspace_root").performKeyInput { pressKey(Key.N) }
+        assertEquals("N is Next again", 1, counters.next)
+    }
+
+    @Requirement("XII.4.i")
+    @Test
+    fun `Escape leaves a focused button too, and the workspace takes the focus`() {
+        val counters = Counters()
+        setApp(activeState(), counters)
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("next_wallpaper_button").requestFocus()
+        composeTestRule.onNodeWithTag("next_wallpaper_button").assertIsFocused()
+
+        composeTestRule.onNodeWithTag("next_wallpaper_button").performKeyInput { pressKey(Key.Escape) }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("next_wallpaper_button").assertIsNotFocused()
+        composeTestRule.onNodeWithTag("workspace_root").assertIsFocused()
+    }
+
+    @Requirement("XII.4.b")
     @Test
     fun `Ctrl chords are not hijacked by accelerators`() {
         val counters = Counters()
@@ -150,6 +210,7 @@ class DesktopInputTest {
         composeTestRule.onNodeWithTag("confirm_reject_dialog_button").assertDoesNotExist()
     }
 
+    @Requirement("XII.4.n")
     @Test
     fun `F11 toggles fullscreen and the toolbar button does too`() {
         val counters = Counters()
@@ -163,6 +224,7 @@ class DesktopInputTest {
         assertEquals(2, counters.fullscreen)
     }
 
+    @Requirement("XII.4.i", "XII.4.n")
     @Test
     fun `Escape exits fullscreen while fullscreen`() {
         val counters = Counters()
@@ -172,6 +234,7 @@ class DesktopInputTest {
         assertEquals(1, counters.fullscreen)
     }
 
+    @Requirement("XII.4.i")
     @Test
     fun `Escape does nothing while windowed`() {
         val windowed = Counters()
@@ -181,6 +244,7 @@ class DesktopInputTest {
         assertEquals(0, windowed.fullscreen)
     }
 
+    @Requirement("XII.4.h", "XII.4.p")
     @Test
     fun `focus ring colours meet 3 to 1 non-text contrast on their surfaces`() {
         val white = Color(0xFFFFFFFF)
@@ -200,6 +264,7 @@ class DesktopInputTest {
         assertEquals("Pause", shortcutTooltipText("Pause", " "))
     }
 
+    @Requirement("XII.4.b")
     @Test
     fun `ctrl digit shortcuts map to tabs in order and ignore other keys`() {
         assertEquals(DesktopNavTab.TODAY_CANVAS, tabForCtrlShortcut(Key.One))
@@ -213,6 +278,7 @@ class DesktopInputTest {
 }
 
 /** Article XII §4: Back steps out of a section to Home before it leaves the app, like Esc steps out of a context. */
+@Requirement("XII.4.j")
 class BackNavigationTest {
 
     @Test

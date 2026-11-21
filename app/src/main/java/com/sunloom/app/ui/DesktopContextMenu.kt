@@ -55,10 +55,13 @@ import com.sunloom.app.domain.model.WallpaperRecord
 
 /**
  * Calls [onOpen] (with the pointer position inside this element) on a mouse/trackpad secondary
- * click or a touch long-press. Does not consume events from child controls. [onOpen] is captured
- * once, so it should only write to remembered state (as [ContextMenuHost] does).
+ * click or a touch long-press, and [onDoubleTap] (when given) on a double click or double tap. Both callbacks
+ * are captured once, so they should only write to remembered state (as [ContextMenuHost] does).
+ *
+ * The long-press and the double tap share one tap detector on purpose: a detector takes the press for itself, so a
+ * second one on the same element never sees it and its callbacks would never run.
  */
-fun Modifier.secondaryClickMenu(onOpen: (Offset) -> Unit): Modifier = this
+fun Modifier.secondaryClickMenu(onDoubleTap: (() -> Unit)? = null, onOpen: (Offset) -> Unit): Modifier = this
     .pointerInput(Unit) {
         awaitPointerEventScope {
             while (true) {
@@ -70,7 +73,7 @@ fun Modifier.secondaryClickMenu(onOpen: (Offset) -> Unit): Modifier = this
         }
     }
     .pointerInput(Unit) {
-        detectTapGestures(onLongPress = { onOpen(it) })
+        detectTapGestures(onDoubleTap = onDoubleTap?.let { tap -> { _: Offset -> tap() } }, onLongPress = { onOpen(it) })
     }
 
 /**
@@ -114,11 +117,8 @@ fun ContextMenuHost(
                 }
             }
             .focusable()
-            .pointerInput(Unit) {
-                // Double-click (or double-tap) applies; single clicks stay free for the inner controls.
-                detectTapGestures(onDoubleTap = { activate.value?.invoke() })
-            }
-            .secondaryClickMenu { position ->
+            // Double-click (or double-tap) applies; single clicks stay free for the inner controls.
+            .secondaryClickMenu(onDoubleTap = { activate.value?.invoke() }) { position ->
                 anchor = position
                 expanded = true
             }

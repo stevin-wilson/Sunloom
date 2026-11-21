@@ -71,6 +71,7 @@ class DesignSystemTest {
         assertTrue(weak.joinToString("\n"), weak.isEmpty())
     }
 
+    @Requirement("XII.4.p")
     @Test
     fun `coloured text is readable on every surface it is drawn on`() {
         val texts = listOf("primary", "secondary", "tertiary", "error", "onSurfaceVariant")
@@ -87,6 +88,7 @@ class DesignSystemTest {
         assertTrue(weak.joinToString("\n"), weak.isEmpty())
     }
 
+    @Requirement("XII.4.p")
     @Test
     fun `borders and outlines can be seen against the surface`() {
         val weak = schemes.flatMap { (name, triple) ->

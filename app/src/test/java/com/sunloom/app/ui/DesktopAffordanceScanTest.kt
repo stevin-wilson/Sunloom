@@ -1,5 +1,6 @@
 package com.sunloom.app.ui
 
+import com.sunloom.app.Requirement
 import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -9,6 +10,7 @@ import org.junit.Test
  * show a keyboard focus ring and a hand cursor. This source scan fails when a new bare Material control
  * ships without `desktopControl()`, so the guarantee does not rely on reviewers remembering it.
  */
+@Requirement("XII.4.h")
 class DesktopAffordanceScanTest {
 
     private val controlCall = Regex(

@@ -227,12 +227,8 @@ class MainActivity : ComponentActivity() {
 
     /** Imports images dropped from the Files app or another window (each becomes a reserve item). */
     private fun importDroppedImages(dragEvent: DragEvent): Boolean {
-        val clip = dragEvent.clipData ?: return false
-        // The clip's own description says what it carries without asking another process; each item is checked off the
-        // main thread by the view model before it is imported.
-        val carriesImages = (0 until clip.description.mimeTypeCount).any { clip.description.getMimeType(it).startsWith("image/") }
-        val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
-        if (!carriesImages || uris.isEmpty()) return false
+        val uris = ShareIntentImport.droppedImageUris(dragEvent.clipData)
+        if (uris.isEmpty()) return false
         // Cross-app content URIs are only readable while this grant is held; release it as soon as the
         // batch finishes so grants never accumulate for the life of the window.
         val grant = requestDragAndDropPermissions(dragEvent)

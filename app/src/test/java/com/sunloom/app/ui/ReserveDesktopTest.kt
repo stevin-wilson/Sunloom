@@ -19,6 +19,7 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.sunloom.app.Requirement
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -29,6 +30,7 @@ import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
 /** Reserve desktop behaviour: list/grid toggle, Ctrl/Shift multi-select, batch actions, arrow keys, Ctrl+Z. */
+@Requirement("XII.4.l")
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w1280dp-h800dp")
@@ -137,6 +139,7 @@ class ReserveDesktopTest {
         composeTestRule.onNodeWithTag("reserve_selection_bar").assertDoesNotExist()
     }
 
+    @Requirement("XII.4.t")
     @Test
     fun `a screen reader can select and unselect a card with a custom action`() {
         content(reserveState())
@@ -157,6 +160,7 @@ class ReserveDesktopTest {
         composeTestRule.onNodeWithTag("reserve_selection_bar").assertDoesNotExist()
     }
 
+    @Requirement("XII.4.i")
     @Test
     fun `clear button and Escape both drop the selection`() {
         content(reserveState())
@@ -212,6 +216,7 @@ class ReserveDesktopTest {
         composeTestRule.onNodeWithTag("reserve_selection_bar").assertDoesNotExist()
     }
 
+    @Requirement("XII.4.k")
     @Test
     fun `ctrl z undoes a pending dislike from the keyboard`() {
         val pending = PendingDiscard(1L, "x", "Alpine", DiscardKind.DISLIKE, wasCurrent = false)
