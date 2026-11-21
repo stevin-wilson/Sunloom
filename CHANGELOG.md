@@ -12,6 +12,11 @@ the release's version as its notes.
   can review it and block it in a later release. The form never contains the picture or anything about your device, and
   it is not offered for photos you added yourself.
 
+### Changed
+- **The safety screen now catches plural forms of some words** it missed (for example the plural of a hate-group name or of
+  a swimwear or selfie term). Pictures already in your reserve are checked again against the new list the next time the
+  app runs, and any that now fail are removed.
+
 ## [2.0.0-rc.3] - 2026-11-20
 
 The third release candidate. The second one was never published, so everything in it is included here (see below). Please
