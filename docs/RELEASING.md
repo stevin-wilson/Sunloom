@@ -81,6 +81,18 @@ People report pictures from the app (*Dislike and report…*, *Report this image
 `SafetyDenylist.DENYLIST_VERSION`, list it under *Changed* in the changelog without naming the picture, and close the
 issue with a thank-you. A picture that is fine: close the issue and say so.
 
+## Source drift
+
+Every Monday a scheduled workflow (`.github/workflows/source-drift.yml`) asks each online picture source one small question,
+downloads one small picture and checks the answers against the rules the app relies on (Article VI §4). When a source has
+changed (its JSON, licence data, hosts or image format) it keeps one open issue labelled `source-drift`, and closes it when a
+later run passes. Before a release: if that issue is open, fix the adapter or the register first; read the latest run's summary for
+warnings too (an empty answer, a picture that could not be fetched, a rate limit) and decide whether any is a real problem.
+Run it by hand from the Actions tab (*Run workflow*), or locally with
+`SUNLOOM_LIVE_CHECK=1 ./gradlew :app:testGithubDebugUnitTest --tests '*LiveSourceContractCheck*' --rerun`
+(it reads `app/build/reports/live-source-contract.md`). GitHub pauses scheduled workflows after 60 days with no activity in the
+repository; a manual run starts them again.
+
 ## Reading a crash trace from a release
 
 Release builds shrink and rename code (R8), so a trace from a user shows names like `q5.a`. Each release run keeps the

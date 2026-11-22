@@ -27,7 +27,7 @@ Sunloom sends no account, device identifier or personal information, and the dev
 
 | Source | Hosts contacted |
 |---|---|
-| Wikimedia Commons (Featured Pictures) | `commons.wikimedia.org`, `upload.wikimedia.org` |
+| Wikimedia Commons (Featured Pictures) | `commons.wikimedia.org`, `upload.wikimedia.org`, `thumb.wikimedia.org` |
 | NASA Image and Video Library (off until you switch it on) | `images-api.nasa.gov`, `images-assets.nasa.gov`, `images.nasa.gov` |
 | Art Institute of Chicago | `api.artic.edu`, `www.artic.edu` |
 | The Metropolitan Museum of Art | `collectionapi.metmuseum.org`, `images.metmuseum.org`, `www.metmuseum.org` |

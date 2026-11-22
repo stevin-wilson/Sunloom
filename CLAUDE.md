@@ -12,6 +12,7 @@ file is the part you cannot work out from the code.
 ./gradlew :app:minifyGithubReleaseWithR8 :app:minifyPlayReleaseWithR8                          # a bad keep rule fails here
 ./gradlew :app:coverageFloors      # CI's gate; local numbers are lower (see below)
 ./gradlew :app:mutationDomain      # mutation report for the domain layer (minutes; a report to read, not a gate)
+SUNLOOM_LIVE_CHECK=1 ./gradlew :app:testGithubDebugUnitTest --tests '*LiveSourceContractCheck*' --rerun   # real catalogs, polite; CI runs it weekly
 ```
 
 Run one class with `--tests 'com.sunloom.app.domain.safety.SafetyGateTest'`.
