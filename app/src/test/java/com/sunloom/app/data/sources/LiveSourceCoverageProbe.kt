@@ -28,14 +28,7 @@ import org.junit.Test
  */
 class LiveSourceCoverageProbe {
 
-    private val adapters: List<WallpaperSourceAdapter> = listOf(
-        WikimediaFeaturedSourceAdapter(),
-        NasaLibrarySourceAdapter(),
-        ArtInstituteCc0SourceAdapter(),
-        MetMuseumCc0SourceAdapter(),
-        ClevelandMuseumCc0SourceAdapter(),
-        SmkOpenSourceAdapter()
-    )
+    private val adapters: List<WallpaperSourceAdapter> = LiveSources.adapters()
 
     @Test
     fun `live catalogs yield usable candidates for common displays`() {

@@ -1,0 +1,79 @@
+name: Live source check
+
+# Once a week, asks each online picture source one small question and downloads one small picture, then holds the answers to the
+# rules the app relies on (Constitution Article XVI section 1 m, Article VI section 4). Recorded test fixtures cannot notice a
+# source changing its schema, licence data, hosts or image format; this can. It never blocks anything: a changed source opens one
+# `source-drift` issue, a later passing run closes it, and a bad day on the network is reported but never fails the run.
+#
+# Politeness (Article VI section 7): the app's own adapters, User-Agent, request caps and spacing, no retries, one category per
+# source per run. Run it by hand from the Actions tab with "Run workflow".
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: source-drift
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Live source check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Ask the live catalogs
+        id: check
+        # The report is written and the issue updated even when this step fails, so a failure here does not stop the job.
+        continue-on-error: true
+        env:
+          SUNLOOM_LIVE_CHECK: "1"
+        run: >
+          ./gradlew :app:testGithubDebugUnitTest --tests '*LiveSourceContractCheck*' --rerun --stacktrace
+          -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+          -Pkotlin.daemon.jvmargs="-Xmx3g"
+
+      - name: Show the report
+        if: always()
+        run: |
+          if [ -f app/build/reports/live-source-contract.md ]; then
+            cat app/build/reports/live-source-contract.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "The check wrote no report (it did not get as far as asking the catalogs)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Keep the source-drift issue in step
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          python3 scripts/source_drift_issue.py --report app/build/reports/live-source-contract.md
+          --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: live-source-report
+          path: app/build/reports/live-source-contract.md
+          if-no-files-found: ignore
+
+      # Last, so the issue and the report are in place first: a changed source turns the run red.
+      - name: Fail the run when a source has changed
+        if: steps.check.outcome == 'failure'
+        run: |
+          echo "A live source has changed; see the report above and the source-drift issue."
+          exit 1

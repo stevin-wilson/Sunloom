@@ -56,7 +56,8 @@ class ConstitutionTraceabilityTest {
             ),
         "XVI.1.f" to ("../.github/workflows/emulator.yml" to listOf("pull_request:", "tags: [\"v*\"]", "workflow_dispatch:", "arch: x86_64", "api-level: [30, 36]")),
         "XVI.1.g" to ("../.github/workflows/ci.yml" to listOf(":app:coverageFloors")),
-        "XVI.1.k" to ("../.github/workflows/ci.yml" to listOf("gitleaks/gitleaks-action", "fetch-depth: 0"))
+        "XVI.1.k" to ("../.github/workflows/ci.yml" to listOf("gitleaks/gitleaks-action", "fetch-depth: 0")),
+        "XVI.1.m" to ("../.github/workflows/source-drift.yml" to listOf("schedule:", "cron:", "SUNLOOM_LIVE_CHECK", "LiveSourceContractCheck", "issues: write", "source_drift_issue.py"))
     )
 
     /** Clauses nothing in the repository can check, with the reason. Keep this list short; a clause leaves it when it can be checked. */
