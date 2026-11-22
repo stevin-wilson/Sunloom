@@ -6,6 +6,8 @@ keyboard).
 
 ## First run
 
+![The first setup step, with Start with defaults](screenshots/setup.png)
+
 Setup is four short steps, and **Start with defaults** on the first one finishes everything:
 
 1. **Welcome**: what Sunloom does and where its pictures come from.
@@ -18,6 +20,8 @@ Setup is four short steps, and **Start with defaults** on the first one finishes
 You can run setup again any time from **Schedule → Setup Guide**. Nothing is saved until you finish it.
 
 ## Home
+
+![Home: the current wallpaper with Next, Previous, Keep and Dislike](screenshots/home.png)
 
 The picture on your wallpaper now. Under it:
 
@@ -34,9 +38,13 @@ The picture on your wallpaper now. Under it:
 - The bar at the top says what Sunloom just did, with **Pause / Resume** for the schedule. A long message opens when you
   tap it. If a fetch fails, **Try again** is there. After you add a photo, **Apply now** is.
 
+![About this image: the author, licence and source of a picture](screenshots/about-image.png)
+
 Ctrl+plus, Ctrl+minus and Ctrl+0 zoom the preview. F11 goes full screen.
 
 ## Reserve
+
+![Reserve shown as a grid](screenshots/reserve.png)
 
 Every picture Sunloom may use, light and dark. Choose **List** or **Grid**.
 
@@ -54,6 +62,8 @@ Sunloom filters it strictly. Under the sources are two switches: *Unmetered Wi-F
 downloads on Battery Saver*. **Sync Catalog Now** asks the sources for new pictures.
 
 ## Schedule
+
+![Schedule: the ways to choose when the wallpaper changes](screenshots/schedule.png)
 
 - **Automatic switching** turns the schedule on and off.
 - **Sunrise & sunset**: light by day, dark in the evening, for the city you pick (or type coordinates under *Custom
