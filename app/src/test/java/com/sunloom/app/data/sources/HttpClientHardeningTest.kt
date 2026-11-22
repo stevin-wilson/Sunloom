@@ -149,4 +149,13 @@ class HttpClientHardeningTest {
 
         assertEquals(0, client.cachedResponseCount())
     }
+
+    @Requirement("VI.7")
+    @Test
+    fun `the thumbnail host Wikimedia's own API returns is a host Wikimedia's source may use, and no other source may`() {
+        // The live catalog serves most thumbnails from thumb.wikimedia.org; refusing it sends every download to the full original.
+        assertTrue(SourceRegistry.isHostAllowed("thumb.wikimedia.org", "wikimedia_featured"))
+        assertTrue(!SourceRegistry.isHostAllowed("thumb.wikimedia.org", "met_museum_cc0"))
+        DefaultHttpsClient.validateHttpsAndHost("https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6a/A.jpg/3840px-A.jpg", "wikimedia_featured")
+    }
 }

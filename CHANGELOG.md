@@ -26,6 +26,9 @@ the release's version as its notes.
 - **A sunrise or sunset change could be missed.** If the app was opened (or the schedule re-armed) in the 30 seconds before
   sunrise or sunset, that change was skipped and the wallpaper kept its old look until the next one, up to a day later.
   It is now scheduled a minute out instead.
+- **Wikimedia pictures download at the size Sunloom asks for again.** Wikimedia now serves most thumbnails from its
+  `thumb.wikimedia.org` address, which Sunloom refused, so it fell back to the full-size original (often tens of megabytes)
+  or skipped the picture. That address is now allowed, and listed in the privacy policy.
 
 ## [2.0.0-rc.3] - 2026-11-20
 

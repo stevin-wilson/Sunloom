@@ -78,7 +78,7 @@ object SourceRegistry {
             reviewer = "Sunloom Maintainer",
             isAdmitted = true,
             supportsDarkPhotography = true,
-            allowedHosts = setOf("commons.wikimedia.org", "upload.wikimedia.org"),
+            allowedHosts = setOf("commons.wikimedia.org", "upload.wikimedia.org", "thumb.wikimedia.org"),
             maxRequestsPerSync = 6,
             minRequestSpacingMs = 150L,
             publishedRateLimitNote = "200 req/s anonymous limit; Sunloom <= 6 req/sync",
