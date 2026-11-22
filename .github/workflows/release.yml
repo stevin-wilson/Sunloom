@@ -1,6 +1,8 @@
 name: Release
 
-# Builds, signs and drafts a GitHub release for the github flavor (Constitution Article XVII).
+# Builds, signs and drafts a GitHub release (Constitution Article XVII): the APK of the github flavor and the Android App
+# Bundle of the play flavor, from one tag with one key. Nothing is sent to Google Play; the first upload is made by hand
+# in Play Console (docs/RELEASING.md).
 #
 #   * Push a tag such as v2.0.0 or v2.0.0-rc.1: runs in the protected `release` environment (manual approval,
 #     real signing key). Release candidates become pre-releases.
@@ -55,18 +57,18 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
           echo "SUNLOOM_UPLOAD_STORE_FILE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
 
-      - name: Build the signed APK
+      - name: Build the signed APK and the signed Play bundle
         env:
           SUNLOOM_UPLOAD_STORE_PASSWORD: ${{ secrets.SUNLOOM_UPLOAD_STORE_PASSWORD }}
           SUNLOOM_UPLOAD_KEY_ALIAS: ${{ secrets.SUNLOOM_UPLOAD_KEY_ALIAS }}
           SUNLOOM_UPLOAD_KEY_PASSWORD: ${{ secrets.SUNLOOM_UPLOAD_KEY_PASSWORD }}
         run: >
-          ./gradlew :app:assembleGithubRelease --stacktrace
+          ./gradlew :app:assembleGithubRelease :app:bundlePlayRelease --stacktrace
           -Psunloom.versionName="$versionName" -Psunloom.versionCode="$versionCode"
           -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
           -Pkotlin.daemon.jvmargs="-Xmx3g"
 
-      - name: Name, verify and checksum the APK
+      - name: Name, verify and checksum the APK and the bundle
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/github/release/Sunloom-github-release.apk "dist/Sunloom-${versionName}-github.apk"
@@ -76,7 +78,16 @@ jobs:
           "$APKSIGNER" verify --verbose --print-certs "dist/Sunloom-${versionName}-github.apk" | tee dist/signing-report.txt
           grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' dist/signing-report.txt
           grep -q 'Verified using v3 scheme (APK Signature Scheme v3): true' dist/signing-report.txt
-          (cd dist && sha256sum "Sunloom-${versionName}-github.apk" > SHA256SUMS && cat SHA256SUMS)
+          # The bundle is a jar: it must verify, and its certificate must be the very one the APK carries.
+          BUNDLE=app/build/outputs/bundle/playRelease/Sunloom-play-release.aab
+          cp "$BUNDLE" "dist/Sunloom-${versionName}-play.aab"
+          jarsigner -verify "dist/Sunloom-${versionName}-play.aab" | tee dist/bundle-signing-report.txt
+          grep -qx 'jar verified.' dist/bundle-signing-report.txt
+          apk_cert=$(grep -m1 'certificate SHA-256 digest' dist/signing-report.txt | sed 's/.*: //' | tr -d ':' | tr 'A-F' 'a-f')
+          aab_cert=$(keytool -printcert -jarfile "dist/Sunloom-${versionName}-play.aab" | grep -m1 'SHA256:' | sed 's/.*SHA256: *//' | tr -d ':' | tr 'A-F' 'a-f')
+          echo "APK certificate $apk_cert"; echo "AAB certificate $aab_cert"
+          test -n "$apk_cert" && test "$apk_cert" = "$aab_cert" || { echo "::error::the bundle and the APK are not signed by the same key"; exit 1; }
+          (cd dist && sha256sum "Sunloom-${versionName}-github.apk" "Sunloom-${versionName}-play.aab" > SHA256SUMS && cat SHA256SUMS)
           rm -f "$RUNNER_TEMP/upload.jks"
 
       # AGP 9 writes R8's mapping as partitions in mapping.prt (a zip), not a plain mapping.txt. Archive it untouched.
@@ -85,6 +96,13 @@ jobs:
         with:
           name: mapping-${{ env.versionName }}
           path: app/build/outputs/mapping/githubRelease/mapping.prt
+          if-no-files-found: error
+
+      - name: Keep the Play R8 mapping for reading crash traces
+        uses: actions/upload-artifact@v7
+        with:
+          name: mapping-play-${{ env.versionName }}
+          path: app/build/outputs/mapping/playRelease/mapping.prt
           if-no-files-found: error
 
       - name: Draft the release
@@ -101,4 +119,4 @@ jobs:
           else
             flags+=(--generate-notes)
           fi
-          gh release create "$TAG" "${flags[@]}" dist/Sunloom-*-github.apk dist/SHA256SUMS
+          gh release create "$TAG" "${flags[@]}" dist/Sunloom-*-github.apk dist/Sunloom-*-play.aab dist/SHA256SUMS

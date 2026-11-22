@@ -60,10 +60,13 @@ The release workflow reads four secrets: `SUNLOOM_UPLOAD_KEYSTORE_BASE64` (`base
 2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z]` (or `## [X.Y.Z-rc.N]`) with the date, and start a new
    empty `[Unreleased]`. The workflow uses that section as the release notes.
 3. Tag and push: `git tag vX.Y.Z-rc.1 && git push origin vX.Y.Z-rc.1`.
-4. Approve the run in the `release` environment. It builds `assembleGithubRelease`, checks the version, runs
-   `apksigner verify` (v2 and v3 signatures required), writes `SHA256SUMS`, keeps R8's mapping as an artifact, and
-   creates a **draft** release. Candidates are marked pre-release.
-5. Download the draft's APK, check `sha256sum -c`, install it, and work through the checklist below.
+4. Approve the run in the `release` environment. It builds `assembleGithubRelease` and `bundlePlayRelease` in one
+   Gradle call, checks the version, runs `apksigner verify` (v2 and v3 signatures required) on the APK, verifies the
+   Play bundle with `jarsigner` and checks that it carries the same certificate as the APK, writes `SHA256SUMS` for
+   both files, keeps R8's mapping for each flavor as an artifact, and creates a **draft** release holding the APK
+   and the `.aab`. Candidates are marked pre-release. Nothing is sent to Google Play.
+5. Download the draft's files, check `sha256sum -c`, install the APK, and work through the checklist below. The
+   `.aab` is for Play Console only: it cannot be installed directly.
 6. Add the certificate fingerprint to the release notes, then publish the draft. It is the latest release only once
    it is a final.
 
@@ -136,7 +139,9 @@ not restore the library across a key change.
 
 ## Google Play, later
 
-The Play flavor is the same app signed with the same key, built as a bundle, without the update check. Before the
-first Play upload: enrol the app in Play App Signing with your own key, fill in the Data safety form from the
-[privacy policy](PRIVACY_POLICY.md) (no data collected or shared), declare the permissions listed in the
-[README](../README.md), and host the policy at a stable address. No Play account or listing exists yet.
+The Play flavor is the same app signed with the same key, built as a bundle, without the update check. The release
+workflow already builds it and attaches `Sunloom-<version>-play.aab` to the draft; the first upload is made by hand in
+Play Console. Before the first Play upload: enrol the app in Play App Signing with your own key, fill in the Data
+safety form from the [privacy policy](PRIVACY_POLICY.md) (no data collected or shared), declare the permissions listed
+in the [README](../README.md), and host the policy at a stable address (GitHub Pages from this repository is enough;
+no separate website is needed). No Play account or listing exists yet.
