@@ -15,6 +15,17 @@ is checked for safety and fitted to your screen before it is used.
 
 > Sunloom is built for Googlebook. It needs Android 8.0 or newer and runs best in a resizable window.
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Sunloom's first-run setup: Start with defaults finishes in one click](docs/screenshots/setup.png) | ![Home: the current wallpaper with Next, Previous, Keep and Dislike](docs/screenshots/home.png) |
+| **Setup.** Four short steps, or *Start with defaults*. | **Home.** The picture on your wallpaper now, with Next, Previous and Dislike. |
+| ![Reserve: every picture Sunloom may use, shown as a grid](docs/screenshots/reserve.png) | ![Schedule: change at sunrise and sunset, at set hours, with the system theme, or only on demand](docs/screenshots/schedule.png) |
+| **Reserve.** Every picture Sunloom may use, light and dark. | **Schedule.** Sunrise and sunset, set hours, the system theme, or only when you tap Next. |
+| ![About this image: the author, licence and source of a picture](docs/screenshots/about-image.png) | |
+| **About this image.** Who made it, its licence and where it came from. | |
+
 ## Install
 
 1. Download `Sunloom-<version>-github.apk` and `SHA256SUMS` from the
